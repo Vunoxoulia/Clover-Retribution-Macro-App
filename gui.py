@@ -21,7 +21,7 @@ class MacroSelector:
         self.root.geometry("1100x550")
         
         
-        self.updater = SpatialUpdater(current_version, "Vunoxoulia", "CloverRetributionmacros")
+        self.updater = SpatialUpdater(current_version, "Vunoxoulia", "Clover-Retribution-Macro-App")
         
         self.setup_ui()
 
@@ -44,13 +44,13 @@ class MacroSelector:
         self.create_card("Library Macro", "Full automation for the\nSpatial Library.", "Launch", 
                          lambda: self.on_select("Library Macro", LibraryLogic, 
                                                 tabs=["Main", "Settings", "Areas", "Clover Clicker", "Hotkeys", "Statistics"],
-                                                tutorial_url="https://www.youtube.com/watch?v=LIBRARY_VIDEO_URL"), 0)
+                                                tutorial_url="https://youtu.be/iWiS-saldnA"), 0)
 
         
         self.create_card("Tundra Mining", "Automated mining in\nthe Tundra region.", "Launch", 
                          lambda: self.on_select("Tundra Mining", TundraLogic, 
                                                 tabs=["Main", "Hotkeys"],
-                                                tutorial_url="https://www.youtube.com/watch?v=TUNDRA_VIDEO_URL"), 1)
+                                                tutorial_url="https://youtu.be/MdLghExwFHo"), 1)
 
         
         self.create_card("Cave Mining", "Automated mining in\nthe Cave region.", "Coming Soon", None, 2)

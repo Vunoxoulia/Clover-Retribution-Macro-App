@@ -19,7 +19,9 @@ class SpatialUpdater:
             response = requests.get(self.api_url, timeout=10)
             if response.status_code == 200:
                 data = response.json()
-                latest_version = data.get("tag_name", "0.0.0").replace("v", "")
+                
+                raw_tag = data.get("tag_name", "0.0.0")
+                latest_version = raw_tag.lower().replace("v", "")
                 
                 if self.is_newer(latest_version, self.current_version):
                     if messagebox.askyesno("Update Available", 
@@ -40,8 +42,15 @@ class SpatialUpdater:
 
     def is_newer(self, latest, current):
         try:
+            
             l_parts = [int(p) for p in latest.split(".")]
             c_parts = [int(p) for p in current.split(".")]
+            
+            
+            max_len = max(len(l_parts), len(c_parts))
+            l_parts.extend([0] * (max_len - len(l_parts)))
+            c_parts.extend([0] * (max_len - len(c_parts)))
+            
             return l_parts > c_parts
         except:
             return latest != current
