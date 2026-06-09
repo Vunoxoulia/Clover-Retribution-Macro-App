@@ -2,5 +2,9 @@
 
 Hello everyone this is my open source macro app
 
-**#How To Download**
+**How To Download**
+
 Click the green "Code" button and extract as zip file
+
+**Requirements**
+Windows 10 and up
