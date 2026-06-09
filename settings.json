@@ -1,0 +1,133 @@
+{
+    "use_ocr": true,
+    "move_names": [
+        "Doorway",
+        "",
+        ""
+    ],
+    "clover_colors": {
+        "gold": [
+            251,
+            198,
+            108
+        ],
+        "silver": [
+            187,
+            197,
+            197
+        ],
+        "bronze": [
+            251,
+            197,
+            170
+        ]
+    },
+    "color_tolerance": 25,
+    "hotkeys": {
+        "start": "f6",
+        "stop": "f9",
+        "pause": "f8",
+        "refresh": "f7",
+        "test_btn": "f1",
+        "test_color": "f2",
+        "test_movement": "f2"
+    },
+    "positions": {
+        "clover_training": [
+            1388,
+            884
+        ],
+        "skip_button": [
+            949,
+            671
+        ],
+        "move_1": [
+            0,
+            0
+        ],
+        "move_2": [
+            0,
+            0
+        ],
+        "move_3": [
+            0,
+            0
+        ],
+        "anti_hotkey": [
+            0,
+            0
+        ],
+        "anti_menu": [
+            0,
+            0
+        ],
+        "anti_party": [
+            0,
+            0
+        ]
+    },
+    "regions": {
+        "score": [
+            0,
+            177,
+            1919,
+            931
+        ],
+        "gold_clover_1": [
+            733,
+            940,
+            747,
+            954
+        ],
+        "gold_clover_2": [
+            803,
+            940,
+            814,
+            958
+        ],
+        "gold_clover_3": [
+            871,
+            936,
+            883,
+            956
+        ],
+        "anti_hotkey": [
+            0,
+            0,
+            0,
+            0
+        ],
+        "anti_main": [
+            0,
+            0,
+            0,
+            0
+        ],
+        "anti_party": [
+            0,
+            0,
+            0,
+            0
+        ],
+        "move_menu": [
+            1226,
+            805,
+            1468,
+            1014
+        ],
+        "quest_region": [
+            391,
+            25,
+            529,
+            97
+        ]
+    },
+    "total_xp": 250,
+    "move_stats": [
+        250,
+        0,
+        0
+    ],
+    "selected_option": 1,
+    "ui_navigation_key": "]"
+}

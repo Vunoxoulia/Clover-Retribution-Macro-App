@@ -1,0 +1,9 @@
+customtkinter
+mss
+numpy
+opencv-python
+keyboard
+pywin32
+Pillow
+easyocr
+requests
