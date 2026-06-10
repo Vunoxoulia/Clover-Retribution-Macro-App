@@ -1,0 +1,12 @@
+WHAT'S NEW IN V5.2
+=================
+- Improved Startup: `run.bat` now automatically checks if Python is installed and provides help if it's missing.
+- Advanced OCR Matching: Enhanced detection for moves with Roman Numerals (e.g., Arcane Door I-V). It can now handle split text boxes and common OCR misreadings.
+- Visual Testing: The Move OCR Test now moves your mouse to the detected location to verify accuracy.
+- Documentation: Added clear guides for Prerequisites and Antivirus False Positives.
+- Remote Patch Notes: You can now view these notes directly from the Macro Hub!
+
+BUG FIXES:
+- Fixed a bug where 'Arcane Door II' would sometimes match 'III'.
+- Fixed OCR test logic to be 100% accurate to the main macro behavior.
+- Cleaned up internal dialogue handling code.

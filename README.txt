@@ -1,17 +1,45 @@
 HOW TO RUN SPATIAL MACRO
 ========================
 
-To run the application, you have two main options:
+WHAT'S NEW IN V5.2
+=================
+- Improved Startup: `run.bat` now automatically checks if Python is installed and provides help if it's missing.
+- Advanced OCR Matching: Enhanced detection for moves with Roman Numerals (e.g., Arcane Door I-V). It can now handle split text boxes and common OCR misreadings.
+- Visual Testing: The Move OCR Test now moves your mouse to the detected location to verify accuracy.
+- Documentation: Added clear guides for Prerequisites and Antivirus False Positives.
+
+PREREQUISITES
+=============
+To run this macro, you MUST have Python installed on your computer.
+
+1. Download Python: Go to https://www.python.org/downloads/
+2. Install Python: Run the installer. 
+   *** IMPORTANT ***: Check the box that says "Add Python to PATH" during installation.
+3. Verify Pip: Pip is usually installed with Python automatically.
+
+HOW TO RUN
+==========
 
 1. run.bat
 ----------
-Use this for daily use. It starts the macro directly using the Python environment. 
-Double-click this file to launch the application.
+Use this for daily use. It will automatically install required libraries and start the macro.
+Double-click this file to launch.
 
 2. MakeItExe.bat
 ---------------
-Use this only if you want to bundle the macro into a single executable (.exe) file. 
-This will create a standalone version that doesn't require a Python installation on other computers.
+Use this only if you want to bundle the macro into a single .exe file.
+Note: Executables created this way are MORE likely to trigger antivirus warnings.
+
+TROUBLESHOOTING: MALWARE WARNINGS
+=================================
+Some Antivirus software (including Windows Defender) may flag this project as "Malware", "Trojan", or "Keygen". These are **FALSE POSITIVES**.
+
+Why is this happening?
+1. Trojan/Keylogger: The macro uses libraries (keyboard, win32api) to simulate keystrokes and mouse clicks in Roblox. Since these libraries "hook" into your input, antivirus software flags them as potential keyloggers.
+2. Keygen/Downloader: The `updater.py` script is designed to download the latest version from GitHub and replace local files. This behavior (downloading and modifying its own files) is a common trigger for "Keygen" or "Downloader" heuristics.
+
+Is it safe?
+Yes. The code is open-source. You can inspect `utils.py` to see exactly how keyboard/mouse inputs are handled, and `updater.py` to see how updates are processed.
 
 USAGE
 =====

@@ -1,9 +1,9 @@
 {
     "use_ocr": true,
     "move_names": [
-        "Doorway",
-        "",
-        ""
+        "Arcane Door",
+        "Arcane Door II",
+        "Arcane Door III"
     ],
     "clover_colors": {
         "gold": [

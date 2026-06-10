@@ -232,20 +232,150 @@ class LibraryLogic(BaseLogic):
         
         move_clicked = False
         move_start_time = time.time()
+    def _is_move_match(self, target_name, ocr_text, all_detected=None, current_item=None):
+        target_name = target_name.lower()
+        ocr_text = ocr_text.lower()
+        
+        def normalize_romans(t):
+            return t.replace('1', 'i').replace('l', 'i').replace('|', 'i').replace('j', 'i').replace('!', 'i')
+
+        # 1. Exact or whole-substring match with word boundaries for numbers
+        norm_target = normalize_romans(target_name)
+        norm_ocr = normalize_romans(ocr_text)
+        
+        # Split into words to check Roman numerals specifically
+        target_words = norm_target.split()
+        ocr_words = norm_ocr.split()
+        
+        # Basic check: All target words must be in OCR words in order
+        # But for Roman numerals (i, ii, iii, iv, v), they must match EXACTLY as a word
+        roman_numerals = {'i', 'ii', 'iii', 'iv', 'v'}
+        
+        if norm_target in norm_ocr:
+            # If it's a substring, check if the Roman numeral part is isolated
+            for word in target_words:
+                if word in roman_numerals:
+                    # The Roman numeral in OCR must match exactly (not be a prefix/suffix of another word)
+                    if word not in ocr_words:
+                        return False
+            return True
+
+        # 2. Proximity check for split boxes (only if we have all detected items)
+        if all_detected and current_item and "arcane door" in norm_target:
+            if "arcane door" in norm_ocr or "arcane" in norm_ocr or "door" in norm_ocr:
+                num_part = ""
+                for word in target_words:
+                    if word in roman_numerals:
+                        num_part = word
+                        break
+                
+                if num_part:
+                    for other in all_detected:
+                        if other == current_item: continue
+                        norm_other = normalize_romans(other["text"])
+                        # If the other box contains the EXACT Roman numeral
+                        if num_part in norm_other.split() and abs(current_item["y"] - other["y"]) < 40:
+                            return True
+        return False
+
+    def handle_dialogue_sequence(self, target_idx):
+        settings = self.app.settings.settings
+        menu_region = settings["regions"].get("move_menu", [0, 0, 0, 0])
+        
+        if all(v == 0 for v in menu_region):
+            self.app.log("Automation Error: 'move_menu' region bounds are not calibrated.")
+            return False
+
+        self.app.log("[1/3] Waiting for Clover Training dialogue menu via OCR...")
+        clover_menu_clicked = False
+        dialogue_start_time = time.time()
+        
+        while time.time() - dialogue_start_time < 6.0:
+            if not self.running:
+                return False
+                
+            results = self.utils.get_text_from_region(menu_region)
+            combined_text = " ".join([res[1].lower() for res in results])
+            
+            if "research" in combined_text or "training" in combined_text:
+                for bbox, text, conf in results:
+                    if "research" in text.lower() or "training" in text.lower():
+                        click_x = menu_region[0] + int(np.mean([p[0] for p in bbox]))
+                        click_y = menu_region[1] + int(np.mean([p[1] for p in bbox]))
+                        
+                        self.app.log(f"-> Found dialogue option! Clicking at ({click_x}, {click_y})")
+                        self.human_click(click_x, click_y, duration=0.15)
+                        clover_menu_clicked = True
+                        break
+            if clover_menu_clicked:
+                break
+            time.sleep(0.15)
+
+        if not clover_menu_clicked:
+            self.app.log("-> ERROR: Failed to detect 'research' or 'training' option in time.")
+            return False
+        
+        time.sleep(1.0)
+
+        self.app.log("[2/3] Waiting specifically for 'Skip' option...")
+        skip_found = False
+        skip_start_time = time.time()
+        
+        while time.time() - skip_start_time < 4.0:
+            if not self.running:
+                return False
+                
+            skip_results = self.utils.get_text_from_region(menu_region)
+            for bbox, text, conf in skip_results:
+                if "skip" in text.lower():
+                    skip_x = int(np.mean([p[0] for p in bbox]))
+                    skip_y = int(np.mean([p[1] for p in bbox]))
+                    
+                    absolute_click_x = menu_region[0] + skip_x
+                    absolute_click_y = menu_region[1] + skip_y
+                    
+                    self.app.log(f"-> Found 'Skip'! Clicking at ({absolute_click_x}, {absolute_click_y})")
+                    self.human_click(absolute_click_x, absolute_click_y, duration=0.15)
+                    skip_found = True
+                    break
+                    
+            if skip_found:
+                break
+            time.sleep(0.15) 
+            
+        if not skip_found:
+            self.app.log("-> No 'Skip' button detected within timeout. Forcing transition check.")
+        
+        time.sleep(1.0)
+
+        move_name = settings.get("move_names")[target_idx]
+        if not move_name:
+            self.app.log("No move name specified in configurations.")
+            return False
+
+        self.app.log(f"[3/3] Searching menu layout for move: '{move_name}'")
+        
+        move_clicked = False
+        move_start_time = time.time()
         while time.time() - move_start_time < 3.0:
             if not self.running:
                 return False
                 
             results = self.utils.get_text_from_region(menu_region)
+            
+            all_detected = []
             for bbox, text, conf in results:
-                if move_name.lower() in text.lower():
-                    center_x = int(np.mean([p[0] for p in bbox]))
-                    center_y = int(np.mean([p[1] for p in bbox]))
-                    
-                    self.human_click(menu_region[0] + center_x, menu_region[1] + center_y, duration=0.2)
-                    self.app.log(f"-> Successfully selected and clicked move: {move_name}")
+                center_x = int(np.mean([p[0] for p in bbox]))
+                center_y = int(np.mean([p[1] for p in bbox]))
+                all_detected.append({"text": text, "x": center_x, "y": center_y, "bbox": bbox})
+
+            for item in all_detected:
+                if self._is_move_match(move_name, item["text"], all_detected, item):
+                    self.human_click(menu_region[0] + item["x"], menu_region[1] + item["y"], duration=0.2)
+                    self.app.log(f"-> Successfully selected move: {move_name} (Detected as '{item['text']}')")
                     move_clicked = True
                     break
+            
             if move_clicked:
                 break
             time.sleep(0.2)
@@ -298,10 +428,24 @@ class LibraryLogic(BaseLogic):
             
         self.app.log(f"Testing OCR for: {move_name}")
         results = self.utils.get_text_from_region(menu_region)
-        found = False
+        
+        all_detected = []
         for bbox, text, conf in results:
-            if move_name.lower() in text.lower():
-                self.app.log(f"Test: SUCCESS! Found '{text}' (Conf: {conf:.2f})")
+            center_x = int(np.mean([p[0] for p in bbox]))
+            center_y = int(np.mean([p[1] for p in bbox]))
+            all_detected.append({"text": text, "x": center_x, "y": center_y, "bbox": bbox})
+
+        found = False
+        for item in all_detected:
+            if self._is_move_match(move_name, item["text"], all_detected, item):
+                self.app.log(f"Test: SUCCESS! Found match: '{item['text']}'")
+                
+                # Move mouse to the detected center to provide visual feedback
+                abs_x = menu_region[0] + item["x"]
+                abs_y = menu_region[1] + item["y"]
+                self.utils.mouse_move(abs_x, abs_y)
+                self.app.log(f"-> Mouse moved to detected center: ({abs_x}, {abs_y})")
+                
                 found = True
                 break
         

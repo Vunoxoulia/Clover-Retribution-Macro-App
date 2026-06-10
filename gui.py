@@ -63,7 +63,10 @@ class MacroSelector:
         footer.pack(fill="x", side="bottom", pady=10, padx=20)
         
         update_btn = ctk.CTkButton(footer, text="Check for Updates", width=150, command=self.check_updates)
-        update_btn.pack(side="left", pady=10)
+        update_btn.pack(side="left", padx=(0, 10))
+
+        patch_notes_btn = ctk.CTkButton(footer, text="Patch Notes", width=120, command=self.show_patch_notes, fg_color="#333333", hover_color="#444444")
+        patch_notes_btn.pack(side="left")
 
         links_frame = ctk.CTkFrame(footer, fg_color="transparent")
         links_frame.pack(side="right", pady=10)
@@ -83,6 +86,33 @@ class MacroSelector:
         donate_link = ctk.CTkLabel(links_frame, text="Donate", font=("Arial", 12, "underline"), text_color="gold")
         donate_link.pack(side="left", padx=5)
         donate_link.bind("<Button-1>", lambda e: webbrowser.open("https://www.roblox.com/communities/34022778/The-Manga-Corner#!/store"))
+
+    def show_patch_notes(self):
+        import requests
+        from tkinter import messagebox
+        
+        # Raw GitHub URL for PATCH_NOTES.txt
+        notes_url = f"https://raw.githubusercontent.com/Vunoxoulia/Clover-Retribution-Macro-App/main/PATCH_NOTES.txt"
+        
+        try:
+            response = requests.get(notes_url, timeout=5)
+            if response.status_code == 200:
+                notes_text = response.text
+                
+                # Create a popup window for notes
+                notes_window = ctk.CTkToplevel(self.root)
+                notes_window.title("Latest Patch Notes")
+                notes_window.geometry("600x400")
+                notes_window.attributes("-topmost", True)
+                
+                textbox = ctk.CTkTextbox(notes_window, font=("Consolas", 14))
+                textbox.pack(expand=True, fill="both", padx=20, pady=20)
+                textbox.insert("0.0", notes_text)
+                textbox.configure(state="disabled")
+            else:
+                messagebox.showerror("Error", "Could not fetch patch notes from GitHub.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to connect to GitHub: {e}")
 
     def check_updates(self):
         url, version = self.updater.check_for_updates()
