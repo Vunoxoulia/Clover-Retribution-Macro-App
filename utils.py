@@ -14,12 +14,37 @@ class SpatialUtils:
 
     def _init_ocr(self):
         if self.ocr_reader is None:
-            import easyocr
-            self.ocr_reader = easyocr.Reader(['en'], gpu=False)
+            try:
+                import easyocr
+                self.ocr_reader = easyocr.Reader(['en'], gpu=False)
+            except (OSError, ImportError) as e:
+                error_msg = str(e)
+                if "WinError 126" in error_msg or "c10.dll" in error_msg or "Microsoft Visual C++ Redistributable" in error_msg:
+                    try:
+                        from tkinter import messagebox
+                        import webbrowser
+                        msg = ("OCR Error: Microsoft Visual C++ Redistributable is missing.\n\n"
+                               "This is required for the macro's OCR features (reading move names, etc).\n"
+                               "Click 'Yes' to open the download page (vc_redist.x64.exe).")
+                        if messagebox.askyesno("Dependency Missing", msg):
+                            webbrowser.open("https://aka.ms/vs/17/release/vc_redist.x64.exe")
+                    except:
+                        pass
+                    print(f"\n[!] OCR ERROR: Microsoft Visual C++ Redistributable is missing.\n[!] Download it here: https://aka.ms/vs/17/release/vc_redist.x64.exe\n")
+                    self.ocr_reader = False 
+                else:
+                    print(f"OCR Initialization error: {e}")
+                    self.ocr_reader = False
+            except Exception as e:
+                print(f"OCR Initialization error: {e}")
+                self.ocr_reader = False
 
     def get_text_from_region(self, region):
         
         self._init_ocr()
+        if not self.ocr_reader: # Returns False if failed
+            return []
+            
         img = self.capture_screen(region)
         results = self.ocr_reader.readtext(img, detail=1, paragraph=False)
         return results
@@ -30,6 +55,50 @@ class SpatialUtils:
             target_color = target_color.lstrip('#').replace('0x', '')
             return tuple(int(target_color[i:i+2], 16) for i in (0, 2, 4))
         return target_color
+
+    def pixel_search_hsv(self, region, target_color, tolerance=15, img=None):
+        
+        if img is None:
+            img = self.capture_screen(region)
+        
+        # Convert RGB image to HSV
+        img_hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+        
+        # Convert target RGB to HSV
+        r, g, b = self._parse_target_color(target_color)
+        target_hsv = cv2.cvtColor(np.uint8([[[r, g, b]]]), cv2.COLOR_RGB2HSV)[0][0]
+        
+        # Calculate bounds
+        # Hue is 0-179, Sat/Val are 0-255
+        h_tol = max(5, tolerance // 2)
+        s_tol = max(30, tolerance * 2)
+        v_tol = max(30, tolerance * 2)
+        
+        lower = np.array([
+            max(0, int(target_hsv[0]) - h_tol),
+            max(30, int(target_hsv[1]) - s_tol),
+            max(30, int(target_hsv[2]) - v_tol)
+        ])
+        upper = np.array([
+            min(179, int(target_hsv[0]) + h_tol),
+            min(255, int(target_hsv[1]) + s_tol),
+            min(255, int(target_hsv[2]) + v_tol)
+        ])
+        
+        mask = cv2.inRange(img_hsv, lower, upper)
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        centers = []
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            if area >= 2: 
+                cx, cy, w, h = cv2.boundingRect(contour)
+                centers.append((region[0] + cx + w // 2, region[1] + cy + h // 2))
+                
+        if centers:
+            centers.sort(key=lambda p: p[1])
+            return centers
+        return None
 
     def capture_screen(self, region=None):
         

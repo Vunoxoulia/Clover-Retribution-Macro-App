@@ -54,7 +54,7 @@ class LibraryLogic(BaseLogic):
                 self.app.log("Failed to talk to NPC, retrying...")
                 continue
 
-            time.sleep(1)
+            time.sleep(2)
 
             if not self.handle_dialogue_sequence(to_train[0]):
                 self.app.log("Dialogue sequence failed, restarting...")
@@ -492,7 +492,8 @@ class LibraryLogic(BaseLogic):
         found_any = False
         for clover_type in ["gold", "silver", "bronze"]:
             color = clover_colors.get(clover_type, self.DEFAULT_CLOVER_COLORS[clover_type])
-            targets = self.utils.pixel_search_region(region, color, tolerance=tolerance)
+            # Use HSV search for better robustness
+            targets = self.utils.pixel_search_hsv(region, color, tolerance=tolerance)
             if targets:
                 first_target = targets[0]
                 self.smooth_move(first_target[0], first_target[1], duration=0.15)
@@ -501,7 +502,7 @@ class LibraryLogic(BaseLogic):
                 break
         
         if not found_any:
-            self.app.log("Test: No clover colors found in clover region.")
+            self.app.log("Test: No clover colors found (HSV scan failed).")
 
     def perform_clover_scoring(self):
         settings = self.app.settings.settings
@@ -586,7 +587,8 @@ class LibraryLogic(BaseLogic):
 
                 for clover_type in ["gold", "silver", "bronze"]:
                     color = clover_colors.get(clover_type, self.DEFAULT_CLOVER_COLORS[clover_type])
-                    targets = self.utils.pixel_search_region(region, color, tolerance=tolerance, img=current_cycle_frame)
+                    # Use HSV search for much higher reliability with similar colors
+                    targets = self.utils.pixel_search_hsv(region, color, tolerance=tolerance, img=current_cycle_frame)
                     
                     if targets:
                         for t in targets:

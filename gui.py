@@ -50,7 +50,7 @@ class MacroSelector:
         self.create_card("Tundra Mining", "Automated mining in\nthe Tundra region.", "Launch", 
                          lambda: self.on_select("Tundra Mining", TundraLogic, 
                                                 tabs=["Main", "Hotkeys"],
-                                                tutorial_url="https://youtu.be/MdLghExwFHo"), 1)
+                                                tutorial_url="https://youtu.be/RMn0v5-SDq4"), 1)
 
         
         self.create_card("Cave Mining", "Automated mining in\nthe Cave region.", "Coming Soon", None, 2)

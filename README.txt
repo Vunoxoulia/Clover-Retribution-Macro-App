@@ -1,12 +1,14 @@
 HOW TO RUN SPATIAL MACRO
 ========================
 
-WHAT'S NEW IN V5.2
+WHAT'S NEW IN V5.3
 =================
-- Improved Startup: `run.bat` now automatically checks if Python is installed and provides help if it's missing.
-- Advanced OCR Matching: Enhanced detection for moves with Roman Numerals (e.g., Arcane Door I-V). It can now handle split text boxes and common OCR misreadings.
+- Improved Color Detection: Switched to HSV color space for clover detection. This significantly improves reliability for Bronze and Silver clovers.
+- Dependency Checker: `run.bat` now checks for the Microsoft Visual C++ Redistributable.
+- Robust OCR: Added error handling for OCR initialization to prevent crashes.
+- Improved Startup: `run.bat` now automatically checks if Python is installed and upgrades packages.
+- Advanced OCR Matching: Enhanced detection for moves with Roman Numerals (e.g., Arcane Door I-V).
 - Visual Testing: The Move OCR Test now moves your mouse to the detected location to verify accuracy.
-- Documentation: Added clear guides for Prerequisites and Antivirus False Positives.
 
 PREREQUISITES
 =============
@@ -22,13 +24,8 @@ HOW TO RUN
 
 1. run.bat
 ----------
-Use this for daily use. It will automatically install required libraries and start the macro.
+Use this for daily use. It will automatically install required libraries, check for system dependencies, and start the macro.
 Double-click this file to launch.
-
-2. MakeItExe.bat
----------------
-Use this only if you want to bundle the macro into a single .exe file.
-Note: Executables created this way are MORE likely to trigger antivirus warnings.
 
 TROUBLESHOOTING: MALWARE WARNINGS
 =================================

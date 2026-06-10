@@ -1,9 +1,9 @@
 {
     "use_ocr": true,
     "move_names": [
-        "Arcane Door",
-        "Arcane Door II",
-        "Arcane Door III"
+        "",
+        "thrust",
+        ""
     ],
     "clover_colors": {
         "gold": [
@@ -69,9 +69,9 @@
     "regions": {
         "score": [
             0,
-            177,
+            190,
             1919,
-            931
+            906
         ],
         "gold_clover_1": [
             733,
@@ -80,10 +80,10 @@
             954
         ],
         "gold_clover_2": [
-            803,
-            940,
-            814,
-            958
+            802,
+            916,
+            817,
+            927
         ],
         "gold_clover_3": [
             871,
@@ -124,8 +124,8 @@
     },
     "total_xp": 250,
     "move_stats": [
-        250,
         0,
+        250,
         0
     ],
     "selected_option": 1,

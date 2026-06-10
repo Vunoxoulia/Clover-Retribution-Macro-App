@@ -1,3 +1,13 @@
+WHAT'S NEW IN V5.3
+=================
+- Improved Color Detection: Switched to HSV color space for clover detection. This significantly improves reliability for Bronze and Silver clovers.
+- Interactive Launcher: `run.bat` can now AUTOMATICALLY download and launch installers for Python and Microsoft VC++ if they are missing.
+- Launcher Stability: Rewrote `run.bat` from scratch for maximum compatibility. No more instant-closing windows!
+- Robust OCR: Added DLL error handling. If dependencies are missing, a popup will guide you to the fix instead of the macro crashing.
+- Auto-Repair: `run.bat` automatically checks and upgrades all Python libraries on launch.
+- Expanded Dependencies: Added explicit support for Torch and Torchvision to ensure OCR works out of the box.
+- Streamlined Project: Removed `MakeItExe.bat`. To prevent Antivirus false positives and ensure the macro remains lightweight and transparent, we now only support running via `run.bat`.
+
 WHAT'S NEW IN V5.2
 =================
 - Improved Startup: `run.bat` now automatically checks if Python is installed and provides help if it's missing.
@@ -10,3 +20,4 @@ BUG FIXES:
 - Fixed a bug where 'Arcane Door II' would sometimes match 'III'.
 - Fixed OCR test logic to be 100% accurate to the main macro behavior.
 - Cleaned up internal dialogue handling code.
+- Fixed a crash (OSError 126) when OCR dependencies were missing.

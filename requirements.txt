@@ -6,4 +6,6 @@ keyboard
 pywin32
 Pillow
 easyocr
+torch
+torchvision
 requests
