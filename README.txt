@@ -61,5 +61,3 @@ USAGE
 - Configure your settings in the 'Settings' tab if needed.
 - Click 'Start' to begin the sequence.
 - Focus the Roblox window immediately after starting.
-
-[Explanations for each macro to be added by user]
