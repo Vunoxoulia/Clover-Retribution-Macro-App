@@ -12,8 +12,6 @@ REREQUISITES & SYSTEM REQUIREMENTS
 SOFTWARE REQUIREMENTS:
 - Operating System: Windows 10 or Windows 11 (64-bit).
 - Python: Version 3.10 to 3.13 (3.12.3 is recommended).
-- Microsoft Visual C++ Redistributable (x64): Required for OCR features.
-  (run.bat will check for this and provide a download link if missing).
 
 HARDWARE REQUIREMENTS:
 - CPU: Intel Core i3 / AMD Ryzen 3 or better.
@@ -34,7 +32,10 @@ INSTALLING PYTHON:
 HOW TO RUN
 ==========
 
-1. run.bat
+double click or open Windows_Launcher.bat for windows users
+
+double click or open Linux_Mac_Launcher.sh for Linux and Mac users this is however experimental im not sure if its going to work.
+
 ----------
 Use this for daily use. It will automatically install required libraries, check for system dependencies, and start the macro.
 Double-click this file to launch.
@@ -56,5 +57,3 @@ USAGE
 - Configure your settings in the 'Settings' tab if needed.
 - Click 'Start' to begin the sequence.
 - Focus the Roblox window immediately after starting.
-
-[Explanations for each macro to be added by user]
