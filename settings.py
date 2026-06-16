@@ -35,11 +35,15 @@ class SpatialSettings:
             "regions": {
                 "score": [0, 0, 0, 0],
                 "move_menu": [0, 0, 0, 0],
+                "quest_region": [0, 0, 0, 0],
                 "gold_clover_1": [0, 0, 0, 0],
                 "gold_clover_2": [0, 0, 0, 0],
-                "gold_clover_3": [0, 0, 0, 0]
+                "gold_clover_3": [0, 0, 0, 0],
+                "minigame_bar": [0, 0, 0, 0]
             },
-            "total_xp": 0,
+            "bar_color": [95, 153, 98],
+            "fish_color": [188, 187, 144],
+            "total_gold": 0,
             "move_stats": [0, 0, 0]
         }
         self.load()

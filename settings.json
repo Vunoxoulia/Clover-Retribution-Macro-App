@@ -1,8 +1,8 @@
 {
     "use_ocr": true,
     "move_names": [
-        "",
-        "thrust",
+        "Rain",
+        "Rain",
         ""
     ],
     "clover_colors": {
@@ -17,12 +17,12 @@
             197
         ],
         "bronze": [
-            251,
-            197,
-            170
+            219,
+            151,
+            139
         ]
     },
-    "color_tolerance": 25,
+    "color_tolerance": 20,
     "hotkeys": {
         "start": "f6",
         "stop": "f9",
@@ -69,27 +69,27 @@
     "regions": {
         "score": [
             0,
-            190,
+            173,
             1919,
-            906
+            932
         ],
         "gold_clover_1": [
-            733,
-            940,
-            747,
-            954
+            736,
+            948,
+            742,
+            959
         ],
         "gold_clover_2": [
-            802,
-            916,
-            817,
-            927
+            804,
+            943,
+            813,
+            955
         ],
         "gold_clover_3": [
             871,
-            936,
-            883,
-            956
+            948,
+            880,
+            959
         ],
         "anti_hotkey": [
             0,
@@ -110,24 +110,50 @@
             0
         ],
         "move_menu": [
-            1226,
-            805,
-            1468,
-            1014
+            1189,
+            788,
+            1565,
+            1035
         ],
         "quest_region": [
-            391,
-            25,
-            529,
-            97
+            374,
+            24,
+            546,
+            94
+        ],
+        "minigame_bar": [
+            609,
+            737,
+            1307,
+            787
+        ],
+        "fishing_click_pos": [
+            1199,
+            565
         ]
     },
-    "total_xp": 250,
+    "bar_color": [
+        95,
+        153,
+        98
+    ],
+    "fish_color": [
+        188,
+        187,
+        144
+    ],
+    "total_gold": 250,
     "move_stats": [
-        0,
         250,
+        0,
         0
     ],
+    "clover_tolerances": {
+        "gold": 20,
+        "silver": 17,
+        "bronze": 32
+    },
+    "total_xp": 0,
     "selected_option": 1,
     "ui_navigation_key": "]"
 }

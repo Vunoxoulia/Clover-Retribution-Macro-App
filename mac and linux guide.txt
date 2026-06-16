@@ -1,0 +1,44 @@
+1. Installation on Linux (Ubuntu/Debian-based)
+Linux handles the Python side easily, but OpenCV (which EasyOCR relies on) requires a couple of fundamental system graphics libraries that are often missing on barebones or headless Linux installations.
+
+Step 1: Install System Dependencies
+Open your terminal and run this command to ensure OpenCV doesn't crash on launch:
+
+Bash
+sudo apt update && sudo apt install libgl1-mesa-glx libglib2.0-0 -y
+Step 2: Install EasyOCR
+If you are running on a regular CPU, simply install it via pip:
+
+Bash
+pip install easyocr
+💡 Using an NVIDIA GPU on Linux? > If you want lightning-fast OCR using CUDA, install the GPU version of PyTorch first, then install EasyOCR:
+
+Bash
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+pip install easyocr
+2. Installation on macOS (Intel & Apple Silicon M1/M2/M3/M4)
+Mac installations are incredibly stable. Because Apple Silicon (M-series chips) uses a unique architecture, ensuring your terminal has access to Apple's command-line developer utilities guarantees a flawless installation.
+
+Step 1: Install Xcode Command Line Tools
+Open your terminal and run this command. A pop-up window will appear asking for permission; click "Install" and let it finish (it takes about 2 minutes):
+
+Bash
+xcode-select --install
+Note: If it says error: command line tools are already installed, you are good to move to the next step.
+
+Step 2: Install EasyOCR
+Run the standard pip installation:
+
+Bash
+pip install easyocr
+🍏 Apple Silicon Note:
+PyTorch (which runs inside EasyOCR) natively supports Apple's Metal Performance Shaders (MPS) for hardware acceleration. When initializing your reader in your Python code, you can use gpu=True, and modern versions of PyTorch/EasyOCR will automatically leverage your Mac's onboard GPU cores for faster processing.
+
+Verifying the Installation
+To make sure everything is completely healthy on either platform, open your terminal, type python (or python3), and try importing it:
+
+Python
+import easyocr
+reader = easyocr.Reader(['en'])
+print("EasyOCR is ready to go!")
+The very first time you run that script, you will see a progress bar in the terminal downloading the English text-recognition model files (craft_net.pth and english_g2.pth). Once finished, it saves them permanently to your machine and will run completely offline from that point forward.

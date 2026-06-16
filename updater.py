@@ -14,6 +14,23 @@ class SpatialUpdater:
         self.repo_name = repo_name
         self.api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases/latest"
         
+    def download_icon_from_github(self):
+        """Downloads the application icon from GitHub if missing locally."""
+        icon_path = os.path.join(os.path.abspath("."), "Vunoxoulia.ico")
+        if os.path.exists(icon_path):
+            return icon_path
+
+        try:
+            icon_url = f"https://raw.githubusercontent.com/{self.repo_owner}/{self.repo_name}/main/spatial-macro/Vunoxoulia.ico"
+            response = requests.get(icon_url, timeout=5)
+            if response.status_code == 200:
+                with open(icon_path, 'wb') as f:
+                    f.write(response.content)
+                return icon_path
+        except:
+            pass
+        return None
+
     def check_for_updates(self, silent=False):
         try:
             response = requests.get(self.api_url, timeout=10)

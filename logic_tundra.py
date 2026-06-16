@@ -37,6 +37,8 @@ class TundraLogic(BaseLogic):
             time.sleep(0.15)
             keyboard.release('a')
             time.sleep(0.5)
+
+            self.handle_ok_popup()
         
             self.app.log("Travelling pathway (Forward)")
             keyboard.press('d')
@@ -281,6 +283,8 @@ class TundraLogic(BaseLogic):
             time.sleep(0.15)
             keyboard.release('a')
             time.sleep(0.5)
+
+            self.handle_ok_popup()
             
             if not self.running: return
 

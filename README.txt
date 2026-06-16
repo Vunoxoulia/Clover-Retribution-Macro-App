@@ -1,19 +1,36 @@
 HOW TO RUN SPATIAL MACRO
 ========================
 
-WHAT'S NEW IN V5.3
+WHAT'S NEW IN V5.4
 =================
-- Improved Color Detection: Switched to HSV color space for clover detection. This significantly improves reliability for Bronze and Silver clovers.
-- Dependency Checker: `run.bat` now checks for the Microsoft Visual C++ Redistributable.
-- Robust OCR: Added error handling for OCR initialization to prevent crashes.
-- Improved Startup: `run.bat` now automatically checks if Python is installed and upgrades packages.
-- Advanced OCR Matching: Enhanced detection for moves with Roman Numerals (e.g., Arcane Door I-V).
-- Visual Testing: The Move OCR Test now moves your mouse to the detected location to verify accuracy.
+- New OCR Engine: Switched from EasyOCR to RapidOCR (PaddleOCR).
+- Added Fishing Macro: Full automation for the fishing minigame.
+- Experimental Linux & Mac Support: New launcher for non-Windows platforms (Untested).
+- Launcher Fix: Resolved redundant Python installation attempts.
+- UI Overhaul: New card-based Macro Hub layout with easy navigation.
+- Platform Optimization: CoreML/CUDA support for near-instant OCR.
+- Stability Improvements: Refined logic handling and better error reporting.
 
-PREREQUISITES
-=============
-To run this macro, you MUST have Python installed on your computer.
+PREREQUISITES & SYSTEM REQUIREMENTS
+==================================
 
+SOFTWARE REQUIREMENTS:
+- Operating System: Windows 10 or Windows 11 (64-bit).
+- Python: Version 3.10 to 3.13 (3.12.3 is recommended).
+- Microsoft Visual C++ Redistributable (x64): Required for OCR features.
+  (run.bat will check for this and provide a download link if missing).
+
+HARDWARE REQUIREMENTS:
+- CPU: Intel Core i3 / AMD Ryzen 3 or better.
+- RAM: 4GB Minimum (8GB+ recommended for OCR stability).
+- GPU: Any modern GPU. (NVIDIA GPUs with CUDA support will make OCR significantly faster).
+
+DISPLAY SETTINGS:
+- Resolution: Optimized for 1920x1080.
+- Windows Scaling: 100% is strongly recommended.
+- Game Mode: Windowed or Borderless Windowed mode is required for screen capture.
+
+INSTALLING PYTHON:
 1. Download Python: Go to https://www.python.org/downloads/
 2. Install Python: Run the installer. 
    *** IMPORTANT ***: Check the box that says "Add Python to PATH" during installation.

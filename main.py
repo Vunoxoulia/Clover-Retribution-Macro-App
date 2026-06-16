@@ -4,7 +4,7 @@ import sys
 import ctypes
 import os
 
-VERSION = "5.3"
+VERSION = "5.4"
 
 def get_resource_path(relative_path):
     
@@ -34,7 +34,6 @@ class SpatialApp:
         self.app = SpatialGUI(self.root, title=title, logic_class=logic_class, on_back=self.show_selector, tabs=tabs, tutorial_url=tutorial_url)
 
 def main():
-    
     try:
         ctypes.windll.shcore.SetProcessDpiAwareness(1)
     except:
@@ -42,9 +41,14 @@ def main():
 
     root = ctk.CTk()
     
+    from updater import SpatialUpdater
+    updater = SpatialUpdater(VERSION, "Vunoxoulia", "Clover-Retribution-Macro-App")
+    icon_path = updater.download_icon_from_github()
     
-    icon_path = get_resource_path("Vunoxoulia.ico")
-    if os.path.exists(icon_path):
+    if not icon_path:
+        icon_path = get_resource_path("Vunoxoulia.ico")
+        
+    if icon_path and os.path.exists(icon_path):
         try:
             root.iconbitmap(icon_path)
         except Exception as e:

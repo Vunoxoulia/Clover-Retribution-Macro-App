@@ -4,25 +4,30 @@ import numpy as np
 import math
 import keyboard
 import threading
+import cv2
+import re
 from logic_base import BaseLogic, RobloxInputDriver
 
 class LibraryLogic(BaseLogic):
     def __init__(self, app):
         super().__init__(app)
         
-        
         self.current_move_idx = 0
         self.click_history = [] 
         
-        
         self.SCORE_COLOR = (0, 0, 0)             
         self.GOLD_CLOVER_COLOR = (250, 171, 33)  
-        
         
         self.DEFAULT_CLOVER_COLORS = {
             "gold": (251, 198, 108),
             "silver": (187, 197, 197),
             "bronze": (251, 197, 170)
+        }
+        
+        self.DEFAULT_CLOVER_TOLERANCES = {
+            "gold": 17,
+            "silver": 17,
+            "bronze": 30
         }
 
     def main_loop(self):
@@ -64,6 +69,7 @@ class LibraryLogic(BaseLogic):
             self.perform_clover_scoring()
 
             self.app.log("Cycle Complete")
+            self.handle_ok_popup() 
             time.sleep(1.0)
 
     def check_trained_status(self):
@@ -110,7 +116,7 @@ class LibraryLogic(BaseLogic):
         self.app.log("Approaching NPC area (Holding W)...")
         keyboard.press('w')
         start_hold = time.time()
-        while self.running and (time.time() - start_hold < 4.0):
+        while self.running and (time.time() - start_hold < 3.0):
             if not self.check_focus():
                 keyboard.release('w')
                 self.wait_for_roblox_focus()
@@ -125,7 +131,6 @@ class LibraryLogic(BaseLogic):
         
         start_time = time.time()
         move_menu_region = self.app.settings.get("regions").get("move_menu")
-        first_move_name = self.app.settings.get("move_names")[0].lower()
         
         while self.running:
             if not self.wait_for_roblox_focus():
@@ -143,7 +148,7 @@ class LibraryLogic(BaseLogic):
             ocr_results = self.utils.get_text_from_region(move_menu_region)
             for bounding_box, text, confidence in ocr_results:
                 text_lower = text.lower()
-                if (first_move_name and first_move_name in text_lower) or "research" in text_lower or "training" in text_lower:
+                if "research" in text_lower or "training" in text_lower:
                     self.app.log("Dialogue menu detected successfully via OCR!")
                     return True
             
@@ -153,129 +158,77 @@ class LibraryLogic(BaseLogic):
                 
         return False
 
-    def handle_dialogue_sequence(self, target_idx):
-        settings = self.app.settings.settings
-        menu_region = settings["regions"].get("move_menu", [0, 0, 0, 0])
+    def _normalize_ocr_text(self, text):
+        """Normalizes OCR text specifically for Roman numeral misreadings."""
+        text = text.lower().strip()
         
-        if all(v == 0 for v in menu_region):
-            self.app.log("Automation Error: 'move_menu' region bounds are not calibrated.")
-            return False
+        text = text.replace('1', 'i').replace('l', 'i').replace('|', 'i').replace('!', 'i').replace('j', 'i')
+        return text
 
-        self.app.log("[1/3] Waiting for Clover Training dialogue menu via OCR...")
-        clover_menu_clicked = False
-        dialogue_start_time = time.time()
-        
-        while time.time() - dialogue_start_time < 6.0:
-            if not self.running:
-                return False
-                
-            results = self.utils.get_text_from_region(menu_region)
-            combined_text = " ".join([res[1].lower() for res in results])
-            
-            if "research" in combined_text or "training" in combined_text:
-                for bbox, text, conf in results:
-                    if "research" in text.lower() or "training" in text.lower():
-                        click_x = menu_region[0] + int(np.mean([p[0] for p in bbox]))
-                        click_y = menu_region[1] + int(np.mean([p[1] for p in bbox]))
-                        
-                        self.app.log(f"-> Found dialogue option! Clicking at ({click_x}, {click_y})")
-                        self.human_click(click_x, click_y, duration=0.15)
-                        clover_menu_clicked = True
-                        break
-            if clover_menu_clicked:
-                break
-            time.sleep(0.15)
-
-        if not clover_menu_clicked:
-            self.app.log("-> ERROR: Failed to detect 'research' or 'training' option in time.")
-            return False
-        
-        time.sleep(1.0)
-
-        self.app.log("[2/3] Waiting specifically for 'Skip' option...")
-        skip_found = False
-        skip_start_time = time.time()
-        
-        while time.time() - skip_start_time < 4.0:
-            if not self.running:
-                return False
-                
-            skip_results = self.utils.get_text_from_region(menu_region)
-            for bbox, text, conf in skip_results:
-                if "skip" in text.lower():
-                    skip_x = int(np.mean([p[0] for p in bbox]))
-                    skip_y = int(np.mean([p[1] for p in bbox]))
-                    
-                    absolute_click_x = menu_region[0] + skip_x
-                    absolute_click_y = menu_region[1] + skip_y
-                    
-                    self.app.log(f"-> Found 'Skip'! Clicking at ({absolute_click_x}, {absolute_click_y})")
-                    self.human_click(absolute_click_x, absolute_click_y, duration=0.15)
-                    skip_found = True
-                    break
-                    
-            if skip_found:
-                break
-            time.sleep(0.15) 
-            
-        if not skip_found:
-            self.app.log("-> No 'Skip' button detected within timeout. Forcing transition check.")
-        
-        time.sleep(1.0)
-
-        move_name = settings.get("move_names")[target_idx]
-        if not move_name:
-            self.app.log("No move name specified in configurations.")
-            return False
-
-        self.app.log(f"[3/3] Searching menu layout for move: '{move_name}'")
-        
-        move_clicked = False
-        move_start_time = time.time()
     def _is_move_match(self, target_name, ocr_text, all_detected=None, current_item=None):
-        target_name = target_name.lower()
-        ocr_text = ocr_text.lower()
         
-        def normalize_romans(t):
-            return t.replace('1', 'i').replace('l', 'i').replace('|', 'i').replace('j', 'i').replace('!', 'i')
+        target_name = self._normalize_ocr_text(target_name)
+        romans = {'i': 1, 'ii': 2, 'iii': 3, 'iv': 4, 'v': 5}
+        
+        target_words = target_name.split()
+        if not target_words:
+            return False
+            
+        target_tier = romans.get(target_words[-1], 0)
+        base_target = " ".join(target_words[:-1]) if target_tier > 0 else target_name
+        base_words = base_target.split()
 
-        # 1. Exact or whole-substring match with word boundaries for numbers
-        norm_target = normalize_romans(target_name)
-        norm_ocr = normalize_romans(ocr_text)
         
-        # Split into words to check Roman numerals specifically
-        target_words = norm_target.split()
-        ocr_words = norm_ocr.split()
-        
-        # Basic check: All target words must be in OCR words in order
-        # But for Roman numerals (i, ii, iii, iv, v), they must match EXACTLY as a word
-        roman_numerals = {'i', 'ii', 'iii', 'iv', 'v'}
-        
-        if norm_target in norm_ocr:
-            # If it's a substring, check if the Roman numeral part is isolated
-            for word in target_words:
-                if word in roman_numerals:
-                    # The Roman numeral in OCR must match exactly (not be a prefix/suffix of another word)
-                    if word not in ocr_words:
-                        return False
-            return True
-
-        # 2. Proximity check for split boxes (only if we have all detected items)
-        if all_detected and current_item and "arcane door" in norm_target:
-            if "arcane door" in norm_ocr or "arcane" in norm_ocr or "door" in norm_ocr:
-                num_part = ""
-                for word in target_words:
-                    if word in roman_numerals:
-                        num_part = word
-                        break
+        pool_text = self._normalize_ocr_text(ocr_text)
+        if all_detected and current_item:
+            for other in all_detected:
+                if other == current_item: continue
                 
-                if num_part:
-                    for other in all_detected:
-                        if other == current_item: continue
-                        norm_other = normalize_romans(other["text"])
-                        # If the other box contains the EXACT Roman numeral
-                        if num_part in norm_other.split() and abs(current_item["y"] - other["y"]) < 40:
-                            return True
+                if abs(current_item["y"] - other["y"]) < 25 and abs(current_item["x"] - other["x"]) < 50:
+                    pool_text += " " + self._normalize_ocr_text(other["text"])
+
+        
+        if base_target and base_target not in pool_text:
+            return False
+
+        
+        
+        
+        current_normalized = self._normalize_ocr_text(ocr_text)
+        is_anchor = False
+        if not base_words: 
+            is_anchor = target_words[-1] in current_normalized
+        else:
+            
+            is_anchor = base_words[-1] in current_normalized
+
+        if not is_anchor:
+            return False
+
+        
+        if target_tier == 0:
+            return True 
+
+        
+        x_coords = [p[0] for p in current_item["bbox"]]
+        y_coords = [p[1] for p in current_item["bbox"]]
+        
+        
+        expansion = 85 if target_tier >= 4 else 65
+        region = [int(min(x_coords)), int(min(y_coords)), int(max(x_coords) + expansion), int(max(y_coords))]
+        
+        actual_sticks = self.utils.count_vertical_sticks(region)
+        
+        
+        target_roman_str = target_words[-1]
+        ocr_has_exact_roman = re.search(r'\b' + re.escape(target_roman_str) + r'\b', pool_text)
+
+        if target_tier <= 3 and actual_sticks == target_tier:
+            return True
+        elif ocr_has_exact_roman:
+            
+            return True
+            
         return False
 
     def handle_dialogue_sequence(self, target_idx):
@@ -315,7 +268,7 @@ class LibraryLogic(BaseLogic):
             self.app.log("-> ERROR: Failed to detect 'research' or 'training' option in time.")
             return False
         
-        time.sleep(1.0)
+        time.sleep(0.3)
 
         self.app.log("[2/3] Waiting specifically for 'Skip' option...")
         skip_found = False
@@ -346,7 +299,7 @@ class LibraryLogic(BaseLogic):
         if not skip_found:
             self.app.log("-> No 'Skip' button detected within timeout. Forcing transition check.")
         
-        time.sleep(1.0)
+        time.sleep(0.3)
 
         move_name = settings.get("move_names")[target_idx]
         if not move_name:
@@ -357,27 +310,36 @@ class LibraryLogic(BaseLogic):
         
         move_clicked = False
         move_start_time = time.time()
-        while time.time() - move_start_time < 3.0:
+        while time.time() - move_start_time < 4.0:
             if not self.running:
                 return False
                 
             results = self.utils.get_text_from_region(menu_region)
-            
             all_detected = []
             for bbox, text, conf in results:
-                center_x = int(np.mean([p[0] for p in bbox]))
-                center_y = int(np.mean([p[1] for p in bbox]))
-                all_detected.append({"text": text, "x": center_x, "y": center_y, "bbox": bbox})
+                cx = int(np.mean([p[0] for p in bbox]))
+                cy = int(np.mean([p[1] for p in bbox]))
+                all_detected.append({"text": text, "x": cx, "y": cy, "bbox": bbox})
 
             for item in all_detected:
                 if self._is_move_match(move_name, item["text"], all_detected, item):
-                    self.human_click(menu_region[0] + item["x"], menu_region[1] + item["y"], duration=0.2)
+                    
+                    x_coords = [p[0] for p in item["bbox"]]
+                    y_coords = [p[1] for p in item["bbox"]]
+                    
+                    
+                    center_local_x = int(np.mean(x_coords))
+                    center_local_y = int(np.mean(y_coords))
+                    
+                    absolute_x = menu_region[0] + center_local_x
+                    absolute_y = menu_region[1] + center_local_y
+                    
+                    self.human_click(absolute_x, absolute_y, duration=0.2)
                     self.app.log(f"-> Successfully selected move: {move_name} (Detected as '{item['text']}')")
                     move_clicked = True
                     break
             
-            if move_clicked:
-                break
+            if move_clicked: break
             time.sleep(0.2)
                     
         if not move_clicked:
@@ -431,21 +393,18 @@ class LibraryLogic(BaseLogic):
         
         all_detected = []
         for bbox, text, conf in results:
-            center_x = int(np.mean([p[0] for p in bbox]))
-            center_y = int(np.mean([p[1] for p in bbox]))
-            all_detected.append({"text": text, "x": center_x, "y": center_y, "bbox": bbox})
+            cx = int(np.mean([p[0] for p in bbox]))
+            cy = int(np.mean([p[1] for p in bbox]))
+            all_detected.append({"text": text, "x": cx, "y": cy, "bbox": bbox})
+            self.app.log(f"Detected item: '{text}' at {cx}, {cy}")
 
         found = False
         for item in all_detected:
             if self._is_move_match(move_name, item["text"], all_detected, item):
                 self.app.log(f"Test: SUCCESS! Found match: '{item['text']}'")
-                
-                # Move mouse to the detected center to provide visual feedback
                 abs_x = menu_region[0] + item["x"]
                 abs_y = menu_region[1] + item["y"]
                 self.utils.mouse_move(abs_x, abs_y)
-                self.app.log(f"-> Mouse moved to detected center: ({abs_x}, {abs_y})")
-                
                 found = True
                 break
         
@@ -483,17 +442,29 @@ class LibraryLogic(BaseLogic):
         settings = self.app.settings.settings
         region = settings["regions"]["score"]
         clover_colors = settings.get("clover_colors", self.DEFAULT_CLOVER_COLORS)
-        tolerance = settings.get("color_tolerance", 15)
+        global_tolerance = settings.get("color_tolerance", 15)
+        clover_tols = settings.get("clover_tolerances", {})
         
         if all(v == 0 for v in region):
             self.app.log("Test: Clover region not set!")
             return
 
+        self.app.log(f"Testing color detection in region: {region}")
+        img = self.utils.capture_screen(region)
+        
         found_any = False
         for clover_type in ["gold", "silver", "bronze"]:
             color = clover_colors.get(clover_type, self.DEFAULT_CLOVER_COLORS[clover_type])
-            # Use HSV search for better robustness
-            targets = self.utils.pixel_search_hsv(region, color, tolerance=tolerance)
+            tol = clover_tols.get(clover_type, self.DEFAULT_CLOVER_TOLERANCES.get(clover_type, global_tolerance))
+            
+            target_img = np.uint8([[list(color)]])
+            hsv = cv2.cvtColor(target_img, cv2.COLOR_RGB2HSV)[0][0]
+            h, s, v = hsv
+            lower = [max(0, int(h)-tol), max(30, int(s)-60), max(30, int(v)-80)]
+            upper = [min(179, int(h)+tol), 255, 255]
+            self.app.log(f"[{clover_type.upper()}] Tol:{tol} | HSV Target:{hsv} | Range:{lower} to {upper}")
+
+            targets = self.utils.pixel_search_region(region, color, tolerance=tol, img=img)
             if targets:
                 first_target = targets[0]
                 self.smooth_move(first_target[0], first_target[1], duration=0.15)
@@ -502,160 +473,131 @@ class LibraryLogic(BaseLogic):
                 break
         
         if not found_any:
-            self.app.log("Test: No clover colors found (HSV scan failed).")
+            self.app.log("Test: No clover colors found.")
 
     def perform_clover_scoring(self):
         settings = self.app.settings.settings
         region = settings["regions"]["score"]  
         quest_region = settings["regions"].get("quest_region", [0, 0, 0, 0])
         clover_colors = settings.get("clover_colors", self.DEFAULT_CLOVER_COLORS)
-        tolerance = settings.get("color_tolerance", 15)
+        global_tolerance = settings.get("color_tolerance", 15)
+        clover_tols = settings.get("clover_tolerances", {})
 
         session_stats = {"gold": 0, "silver": 0, "bronze": 0, "total_clicks": 0}
-        minigame_start_time = 0
-
+        self.minigame_running = True
+        
         if all(v == 0 for v in quest_region):
             import win32api, win32con
             screen_w = win32api.GetSystemMetrics(win32con.SM_CXSCREEN)
             screen_h = win32api.GetSystemMetrics(win32con.SM_CYSCREEN)
             quest_region = [0, 0, screen_w, screen_h]
             self.app.log("Quest region not set, defaulting to full screen OCR.")
-        else:
-            self.app.log(f"Monitoring Quest/Guide text in calibrated region: {quest_region}")
 
         self.app.log("Waiting for 'Quest' or 'Guide' text to vanish...")
         
-        start_time = time.time()
+        start_wait = time.time()
         while self.running:
             if not self.wait_for_roblox_focus(): return
-            
-            try:
-                ocr_text = self.utils.get_text_from_region(quest_region) 
-                if not any(word in item[1].lower() for item in ocr_text for word in ["quest", "guide"]):
-                    self.app.log("Quest/Guide text vanished! Minigame started.")
-                    minigame_start_time = time.time()
-                    break
-            except Exception as e:
-                self.app.log(f"OCR Error during transition: {e}")
-                
-            if time.time() - start_time > 12:
-                self.app.log("Timeout waiting for minigame initialization.")
+            ocr_text = self.utils.get_text_from_region(quest_region) 
+            if not any(word in item[1].lower() for item in ocr_text for word in ["quest", "guide"]):
+                self.app.log("Minigame started (Quest UI vanished).")
+                break
+            if time.time() - start_wait > 15:
+                self.app.log("Timeout waiting for minigame start.")
                 return
             time.sleep(0.1)
 
-        x1, y1, x2, y2 = region
-        self.jiggle_center_x = x1 + ((x2 - x1) // 2)
-        self.jiggle_center_y = y1 + ((y2 - y1) // 2)
-        
-        self.scoring_sweep_active = True
-        self.clover_lock_active = False  
-        
-        jiggle_thread = threading.Thread(
-            target=self.execute_smooth_horizontal_jiggle,
-            kwargs={"span": 35, "speed_delay": 0.01, "region": region},
-            daemon=True
-        )
-        jiggle_thread.start()
-
-        last_ocr_check = time.time()
-        
-        try:
-            while self.running:
-                if not self.wait_for_roblox_focus(): break
-                    
-                if time.time() - last_ocr_check > 0.3:
-                    last_ocr_check = time.time()
+        def end_detector():
+            while self.running and self.minigame_running:
+                time.sleep(0.5)
+                try:
                     current_text = self.utils.get_text_from_region(quest_region)
                     if any(word in item[1].lower() for item in current_text for word in ["quest", "guide"]):
-                        duration = time.time() - minigame_start_time
-                        self.app.log(f"Detected 'Quest' or 'Guide' reappearing! Ending minigame.")
-                        
-                        new_xp = self.app.settings.get("total_xp", 0) + 250
-                        self.app.settings.set("total_xp", new_xp)
-                        
-                        move_stats = self.app.settings.get("move_stats", [0, 0, 0])
-                        if hasattr(self, 'current_move_idx'):
-                            move_stats[self.current_move_idx] += 250
-                            self.app.settings.set("move_stats", move_stats)
-
-                        self.app.update_xp_display()
-                        self.app.log(f"Session Summary: {duration:.1f}s | G:{session_stats['gold']} S:{session_stats['silver']} B:{session_stats['bronze']} | Total:{session_stats['total_clicks']}")
+                        self.app.log("End detected via OCR.")
+                        self.minigame_running = False
                         break
+                except: pass
 
-                current_cycle_frame = self.utils.capture_screen(region)
-                found_targets = [] 
+        threading.Thread(target=end_detector, daemon=True).start()
 
-                for clover_type in ["gold", "silver", "bronze"]:
-                    color = clover_colors.get(clover_type, self.DEFAULT_CLOVER_COLORS[clover_type])
-                    # Use HSV search for much higher reliability with similar colors
-                    targets = self.utils.pixel_search_hsv(region, color, tolerance=tolerance, img=current_cycle_frame)
-                    
-                    if targets:
-                        for t in targets:
-                            found_targets.append((t, clover_type))
+        bgr_targets = {}
+        for ctype in ["gold", "silver", "bronze"]:
+            rgb = clover_colors.get(ctype, self.DEFAULT_CLOVER_COLORS[ctype])
+            tol = clover_tols.get(ctype, self.DEFAULT_CLOVER_TOLERANCES.get(ctype, global_tolerance))
+            r, g, b = rgb
+            lower = np.array([max(0, b - tol), max(0, g - tol), max(0, r - tol)], dtype=np.uint8)
+            upper = np.array([min(255, b + tol), min(255, g + tol), min(255, r + tol)], dtype=np.uint8)
+            bgr_targets[ctype] = (lower, upper)
 
-                if found_targets:
-                    current_time = time.time()
-                    self.click_history = [c for c in self.click_history if current_time - c['t'] < 1.2]
-                    
-                    for target, clover_type in found_targets:
-                        if not self.running: break
-                        
-                        is_too_close = False
-                        for prev_click in self.click_history:
-                            dist = math.hypot(target[0] - prev_click['x'], target[1] - prev_click['y'])
-                            if dist < 80:
-                                is_too_close = True
-                                break
-                        
-                        if is_too_close:
-                            continue
-
-                        self.clover_lock_active = True 
-                        time.sleep(0.005) 
-                        RobloxInputDriver.click_at(target[0], target[1], duration=0.03)
-                        self.click_history.append({'x': target[0], 'y': target[1], 't': time.time()})
-                        session_stats[clover_type] += 1
-                        session_stats["total_clicks"] += 1
-                        self.jiggle_center_x, self.jiggle_center_y = target[0], target[1]
-                        self.clover_lock_active = False 
-                        time.sleep(0.01)
+        minigame_start_time = time.time()
+        
+        try:
+            while self.running and self.minigame_running:
+                if not self.wait_for_roblox_focus(): break
                 
-                time.sleep(0.002)
+                current_frame_bgr = self.utils.capture_screen_bgr(region)
+                
+                found_target = None
+                found_type = None
+
+                for clover_type, (lower, upper) in bgr_targets.items():
+                    mask = cv2.inRange(current_frame_bgr, lower, upper)
+                    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                    
+                    if contours:
+                        best_cnt = max(contours, key=cv2.contourArea)
+                        if cv2.contourArea(best_cnt) >= 2:
+                            cx_local, cy_local, w, h_ = cv2.boundingRect(best_cnt)
+                            tx = region[0] + cx_local + w // 2
+                            ty = region[1] + cy_local + h_ // 2
+                            
+                            current_time = time.time()
+                            self.click_history = [c for c in self.click_history if current_time - c['t'] < 1.0]
+                            is_too_close = any(math.hypot(tx - p['x'], ty - p['y']) < 70 for p in self.click_history)
+                            
+                            if not is_too_close:
+                                found_target = (tx, ty)
+                                found_type = clover_type
+                                break
+
+                if found_target:
+                    tx, ty = found_target
+                    RobloxInputDriver.click_at(tx, ty, duration=0.035)
+                    RobloxInputDriver.click_at(tx + 5, ty, duration=0.035)
+                    RobloxInputDriver.click_at(tx - 5, ty, duration=0.035)
+                    
+                    self.click_history.append({'x': tx, 'y': ty, 't': time.time()})
+                    session_stats[found_type] += 1
+                    session_stats["total_clicks"] += 1
+                    self.app.log(f"-> Clicked {found_type.capitalize()} Clover!")
+                
+                time.sleep(0.001)
+
         except Exception as e:
-            self.app.log(f"CRITICAL ERROR in minigame loop: {e}")
+            self.app.log(f"Minigame error: {e}")
         
-        self.scoring_sweep_active = False
-        self.app.log("Minigame Completed. Returning to movement state.")
-
-    def execute_smooth_horizontal_jiggle(self, span, speed_delay, region):
-        x1, y1, x2, y2 = region
-        direction = 1 
-        offset = 0
-        last_periodic_click = time.time()
+        self.minigame_running = False
+        duration = time.time() - minigame_start_time
+        self.app.log(f"Summary: {duration:.1f}s | G:{session_stats['gold']} S:{session_stats['silver']} B:{session_stats['bronze']} | Total:{session_stats['total_clicks']}")
         
-        while self.running and self.scoring_sweep_active:
-            if self.clover_lock_active:
-                time.sleep(0.01)
-                continue
+        new_gold = self.app.settings.get("total_gold", 0) + 250
+        self.app.settings.set("total_gold", new_gold)
+        
+        move_stats = self.app.settings.get("move_stats", [0, 0, 0])
+        if hasattr(self, 'current_move_idx'):
+            move_stats[self.current_move_idx] += 250
+            self.app.settings.set("move_stats", move_stats)
 
-            if time.time() - last_periodic_click > 0.2:
-                RobloxInputDriver.click_at(int(self.jiggle_center_x + offset), int(self.jiggle_center_y), duration=0.01)
-                last_periodic_click = time.time()
+        self.app.update_gold_display()
 
-            if direction == 1:
-                offset += 0.5
-                if offset >= span:
-                    direction = -1
-            else:
-                offset -= 0.5
-                if offset <= -span:
-                    direction = 1
-            
-            pixel_x = int(self.jiggle_center_x + offset)
-            pixel_y = int(self.jiggle_center_y)
-            pixel_x = max(x1, min(pixel_x, x2))
-            pixel_y = max(y1, min(pixel_y, y2))
-            
-            RobloxInputDriver.move_to(pixel_x, pixel_y)
-            time.sleep(speed_delay)
+    def test_active_movement(self):
+        """Tests the 5-pixel toggle movement"""
+        region = self.app.settings.get("regions")["score"]
+        if all(v == 0 for v in region): return
+        cx = region[0] + (region[2] - region[0]) // 2
+        cy = region[1] + (region[3] - region[1]) // 2
+        for _ in range(10):
+            RobloxInputDriver.move_to(cx + 5, cy)
+            time.sleep(0.1)
+            RobloxInputDriver.move_to(cx - 5, cy)
+            time.sleep(0.1)

@@ -3,9 +3,10 @@ mss
 numpy
 opencv-python
 keyboard
-pywin32
+rapidocr_onnxruntime
+onnxruntime
+pynput
+pywinctl
+screeninfo
 Pillow
-easyocr
-torch
-torchvision
 requests

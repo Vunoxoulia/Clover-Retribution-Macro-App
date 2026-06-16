@@ -1,123 +1,148 @@
 import mss
 import numpy as np
 import cv2
-import win32api
-import win32con
 import keyboard
 import time
+import threading
+import pywinctl
 from PIL import Image
 
 class SpatialUtils:
     def __init__(self):
-        self.sct = mss.mss()
+        self._thread_local = threading.local()
         self.ocr_reader = None
+
+    @property
+    def sct(self):
+        if not hasattr(self._thread_local, 'sct'):
+            self._thread_local.sct = mss.mss()
+        return self._thread_local.sct
 
     def _init_ocr(self):
         if self.ocr_reader is None:
             try:
-                import easyocr
-                self.ocr_reader = easyocr.Reader(['en'], gpu=False)
-            except (OSError, ImportError) as e:
-                error_msg = str(e)
-                if "WinError 126" in error_msg or "c10.dll" in error_msg or "Microsoft Visual C++ Redistributable" in error_msg:
-                    try:
-                        from tkinter import messagebox
-                        import webbrowser
-                        msg = ("OCR Error: Microsoft Visual C++ Redistributable is missing.\n\n"
-                               "This is required for the macro's OCR features (reading move names, etc).\n"
-                               "Click 'Yes' to open the download page (vc_redist.x64.exe).")
-                        if messagebox.askyesno("Dependency Missing", msg):
-                            webbrowser.open("https://aka.ms/vs/17/release/vc_redist.x64.exe")
-                    except:
-                        pass
-                    print(f"\n[!] OCR ERROR: Microsoft Visual C++ Redistributable is missing.\n[!] Download it here: https://aka.ms/vs/17/release/vc_redist.x64.exe\n")
-                    self.ocr_reader = False 
-                else:
-                    print(f"OCR Initialization error: {e}")
-                    self.ocr_reader = False
+                from rapidocr_onnxruntime import RapidOCR
+                import platform
+                
+                
+                providers = ['CPUExecutionProvider']
+                system = platform.system()
+                
+                if system == 'Darwin': 
+                    providers = ['CoreMLExecutionProvider', 'CPUExecutionProvider']
+                elif system == 'Linux':
+                    
+                    providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+                
+                self.ocr_reader = RapidOCR(providers=providers)
+                print(f"✅ RapidOCR initialized on {system}")
             except Exception as e:
-                print(f"OCR Initialization error: {e}")
+                print(f"OCR (RapidOCR) Initialization error: {e}")
                 self.ocr_reader = False
 
-    def get_text_from_region(self, region):
-        
+    def get_text_from_region(self, region, upscale=2):
         self._init_ocr()
-        if not self.ocr_reader: # Returns False if failed
+        if not self.ocr_reader:
             return []
             
         img = self.capture_screen(region)
-        results = self.ocr_reader.readtext(img, detail=1, paragraph=False)
-        return results
-
-    def _parse_target_color(self, target_color):
         
-        if isinstance(target_color, str):
-            target_color = target_color.lstrip('#').replace('0x', '')
-            return tuple(int(target_color[i:i+2], 16) for i in (0, 2, 4))
-        return target_color
-
-    def pixel_search_hsv(self, region, target_color, tolerance=15, img=None):
         
-        if img is None:
-            img = self.capture_screen(region)
+        if upscale > 1:
+            h, w = img.shape[:2]
+            img = cv2.resize(img, (w * upscale, h * upscale), interpolation=cv2.INTER_CUBIC)
         
-        # Convert RGB image to HSV
-        img_hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
-        
-        # Convert target RGB to HSV
-        r, g, b = self._parse_target_color(target_color)
-        target_hsv = cv2.cvtColor(np.uint8([[[r, g, b]]]), cv2.COLOR_RGB2HSV)[0][0]
-        
-        # Calculate bounds
-        # Hue is 0-179, Sat/Val are 0-255
-        h_tol = max(5, tolerance // 2)
-        s_tol = max(30, tolerance * 2)
-        v_tol = max(30, tolerance * 2)
-        
-        lower = np.array([
-            max(0, int(target_hsv[0]) - h_tol),
-            max(30, int(target_hsv[1]) - s_tol),
-            max(30, int(target_hsv[2]) - v_tol)
-        ])
-        upper = np.array([
-            min(179, int(target_hsv[0]) + h_tol),
-            min(255, int(target_hsv[1]) + s_tol),
-            min(255, int(target_hsv[2]) + v_tol)
-        ])
-        
-        mask = cv2.inRange(img_hsv, lower, upper)
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        centers = []
-        for contour in contours:
-            area = cv2.contourArea(contour)
-            if area >= 2: 
-                cx, cy, w, h = cv2.boundingRect(contour)
-                centers.append((region[0] + cx + w // 2, region[1] + cy + h // 2))
-                
-        if centers:
-            centers.sort(key=lambda p: p[1])
-            return centers
-        return None
+        try:
+            
+            results, elapse = self.ocr_reader(img)
+            
+            final_results = []
+            if results:
+                for res in results:
+                    bbox, text, conf = res
+                    
+                    if upscale > 1:
+                        bbox = [[p[0] / upscale, p[1] / upscale] for p in bbox]
+                    final_results.append((bbox, text, float(conf)))
+            
+            return final_results
+        except Exception as e:
+            print(f"RapidOCR Error: {e}")
+            return []
 
     def capture_screen(self, region=None):
-        
         if region:
-            monitor = {"top": region[1], "left": region[0], "width": region[2] - region[0], "height": region[3] - region[1]}
+            
+            monitor = {
+                "top": int(region[1]), 
+                "left": int(region[0]), 
+                "width": int(region[2] - region[0]), 
+                "height": int(region[3] - region[1])
+            }
         else:
-            monitor = self.sct.monitors[1]
+            try:
+                
+                windows = pywinctl.getWindowsWithTitle("Roblox")
+                if windows:
+                    
+                    active = pywinctl.getActiveWindow()
+                    target = active if active and "Roblox" in active.title else windows[0]
+                    
+                    monitor = {
+                        "top": target.top,
+                        "left": target.left,
+                        "width": target.width,
+                        "height": target.height
+                    }
+                else:
+                    monitor = self.sct.monitors[1]
+            except Exception:
+                monitor = self.sct.monitors[1]
         
         screenshot = self.sct.grab(monitor)
         img = np.array(screenshot)
         
         return cv2.cvtColor(img, cv2.COLOR_BGRA2RGB)
 
-    def pixel_search_region(self, region, target_color, tolerance=10, img=None):
+    def capture_screen_bgr(self, region=None):
+        if region:
+            monitor = {
+                "top": int(region[1]), 
+                "left": int(region[0]), 
+                "width": int(region[2] - region[0]), 
+                "height": int(region[3] - region[1])
+            }
+        else:
+            try:
+                windows = pywinctl.getWindowsWithTitle("Roblox")
+                if windows:
+                    active = pywinctl.getActiveWindow()
+                    target = active if active and "Roblox" in active.title else windows[0]
+                    monitor = {
+                        "top": target.top,
+                        "left": target.left,
+                        "width": target.width,
+                        "height": target.height
+                    }
+                else:
+                    monitor = self.sct.monitors[1]
+            except Exception:
+                monitor = self.sct.monitors[1]
         
+        screenshot = self.sct.grab(monitor)
+        img = np.array(screenshot)
+        
+        return cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+
+    def pixel_search_region(self, region, target_color, tolerance=10, img=None, is_bgr=False):
         if img is None:
             img = self.capture_screen(region)
-            
-        img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+            img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+        else:
+            if is_bgr:
+                img_bgr = img
+            else:
+                img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
         
         r, g, b = self._parse_target_color(target_color)
         lower = np.array([max(0, b - tolerance), max(0, g - tolerance), max(0, r - tolerance)])
@@ -125,7 +150,6 @@ class SpatialUtils:
         
         mask = cv2.inRange(img_bgr, lower, upper)
         
-        
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
         centers = []
@@ -135,14 +159,12 @@ class SpatialUtils:
                 cx, cy, w, h = cv2.boundingRect(contour)
                 centers.append((region[0] + cx + w // 2, region[1] + cy + h // 2))
                 
-        
         if centers:
             centers.sort(key=lambda p: p[1])
             return centers
         return None
 
     def check_pixel_area(self, region, target_color, tolerance=10):
-        
         img = self.capture_screen(region)
         img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
         
@@ -154,7 +176,6 @@ class SpatialUtils:
         return np.any(mask > 0)
 
     def pixel_search(self, region, target_color, tolerance=10):
-        
         img = self.capture_screen(region)
         img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
         
@@ -166,12 +187,10 @@ class SpatialUtils:
         coords = np.column_stack(np.where(mask > 0))
         
         if len(coords) > 0:
-            
             return (region[0] + coords[0][1], region[1] + coords[0][0])
         return None
 
     def pixel_search_existing_frame(self, img_rgb, region, target_color, tolerance=15):
-        
         img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
         
         r, g, b = self._parse_target_color(target_color)
@@ -191,7 +210,6 @@ class SpatialUtils:
         return None
 
     def image_search(self, image_path, region=None, threshold=0.8):
-        
         try:
             template = cv2.imread(image_path)
             if template is None:
@@ -216,23 +234,227 @@ class SpatialUtils:
         return None
 
     def mouse_click(self, x, y, button='left'):
-        
-        win32api.SetCursorPos((int(x), int(y)))
-        if button == 'left':
-            win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+        import sys
+        if sys.platform.startswith('win'):
+            import ctypes
+            import time
+
+            PUL = ctypes.POINTER(ctypes.c_ulong)
+            class MouseInput(ctypes.Structure):
+                _fields_ = [("dx", ctypes.c_long),
+                            ("dy", ctypes.c_long),
+                            ("mouseData", ctypes.c_ulong),
+                            ("dwFlags", ctypes.c_ulong),
+                            ("time", ctypes.c_ulong),
+                            ("dwExtraInfo", PUL)]
+            class KeyBdInput(ctypes.Structure):
+                _fields_ = [("wVk", ctypes.c_ushort),
+                            ("wScan", ctypes.c_ushort),
+                            ("dwFlags", ctypes.c_ulong),
+                            ("time", ctypes.c_ulong),
+                            ("dwExtraInfo", PUL)]
+            class HardwareInput(ctypes.Structure):
+                _fields_ = [("uMsg", ctypes.c_ulong),
+                            ("wParamL", ctypes.c_short),
+                            ("wParamH", ctypes.c_ushort)]
+            class Input_I(ctypes.Union):
+                _fields_ = [("mi", MouseInput),
+                            ("ki", KeyBdInput),
+                            ("hi", HardwareInput)]
+            class Input(ctypes.Structure):
+                _fields_ = [("type", ctypes.c_ulong),
+                            ("ii", Input_I)]
+
+            INPUT_MOUSE = 0
+            MOUSEEVENTF_MOVE = 0x0001
+            MOUSEEVENTF_ABSOLUTE = 0x8000
+            MOUSEEVENTF_LEFTDOWN = 0x0002
+            MOUSEEVENTF_LEFTUP = 0x0004
+            MOUSEEVENTF_RIGHTDOWN = 0x0008
+            MOUSEEVENTF_RIGHTUP = 0x0010
+
+            self.mouse_move(x, y)
+            time.sleep(0.015)
+
+            extra = ctypes.c_ulong(0)
+            if button == 'left':
+                flags_down = MOUSEEVENTF_LEFTDOWN
+                flags_up = MOUSEEVENTF_LEFTUP
+            else:
+                flags_down = MOUSEEVENTF_RIGHTDOWN
+                flags_up = MOUSEEVENTF_RIGHTUP
+
+            ii_down = Input_I()
+            ii_down.mi = MouseInput(0, 0, 0, flags_down, 0, ctypes.pointer(extra))
+            input_down = Input(ctypes.c_ulong(INPUT_MOUSE), ii_down)
+            ctypes.windll.user32.SendInput(1, ctypes.pointer(input_down), ctypes.sizeof(input_down))
             time.sleep(0.05)
-            win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-        elif button == 'right':
-            win32api.mouse_event(win32con.MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, 0)
-            time.sleep(0.05)
-            win32api.mouse_event(win32con.MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0)
+
+            ii_up = Input_I()
+            ii_up.mi = MouseInput(0, 0, 0, flags_up, 0, ctypes.pointer(extra))
+            input_up = Input(ctypes.c_ulong(INPUT_MOUSE), ii_up)
+            ctypes.windll.user32.SendInput(1, ctypes.pointer(input_up), ctypes.sizeof(input_up))
+        else:
+            from pynput.mouse import Button, Controller
+            import time
+            mouse = Controller()
+            mouse.position = (int(x), int(y))
+            if button == 'left':
+                mouse.press(Button.left)
+                time.sleep(0.05)
+                mouse.release(Button.left)
+            elif button == 'right':
+                mouse.press(Button.right)
+                time.sleep(0.05)
+                mouse.release(Button.right)
 
     def mouse_move(self, x, y):
-        
-        win32api.SetCursorPos((int(x), int(y)))
+        import sys
+        if sys.platform.startswith('win'):
+            import ctypes
+
+            PUL = ctypes.POINTER(ctypes.c_ulong)
+            class MouseInput(ctypes.Structure):
+                _fields_ = [("dx", ctypes.c_long),
+                            ("dy", ctypes.c_long),
+                            ("mouseData", ctypes.c_ulong),
+                            ("dwFlags", ctypes.c_ulong),
+                            ("time", ctypes.c_ulong),
+                            ("dwExtraInfo", PUL)]
+            class KeyBdInput(ctypes.Structure):
+                _fields_ = [("wVk", ctypes.c_ushort),
+                            ("wScan", ctypes.c_ushort),
+                            ("dwFlags", ctypes.c_ulong),
+                            ("time", ctypes.c_ulong),
+                            ("dwExtraInfo", PUL)]
+            class HardwareInput(ctypes.Structure):
+                _fields_ = [("uMsg", ctypes.c_ulong),
+                            ("wParamL", ctypes.c_short),
+                            ("wParamH", ctypes.c_ushort)]
+            class Input_I(ctypes.Union):
+                _fields_ = [("mi", MouseInput),
+                            ("ki", KeyBdInput),
+                            ("hi", HardwareInput)]
+            class Input(ctypes.Structure):
+                _fields_ = [("type", ctypes.c_ulong),
+                            ("ii", Input_I)]
+
+            INPUT_MOUSE = 0
+            MOUSEEVENTF_MOVE = 0x0001
+            MOUSEEVENTF_ABSOLUTE = 0x8000
+
+            width = ctypes.windll.user32.GetSystemMetrics(0)
+            height = ctypes.windll.user32.GetSystemMetrics(1)
+            nx = int(x * 65535 / (width - 1))
+            ny = int(y * 65535 / (height - 1))
+
+            extra = ctypes.c_ulong(0)
+            ii_ = Input_I()
+            ii_.mi = MouseInput(nx, ny, 0, MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE, 0, ctypes.pointer(extra))
+            move_input = Input(ctypes.c_ulong(INPUT_MOUSE), ii_)
+            ctypes.windll.user32.SendInput(1, ctypes.pointer(move_input), ctypes.sizeof(move_input))
+        else:
+            from pynput.mouse import Controller
+            mouse = Controller()
+            mouse.position = (int(x), int(y))
 
     def send_key(self, key, duration=0.05):
-        
         keyboard.press(key)
         time.sleep(duration)
         keyboard.release(key)
+
+    def find_color_x(self, region, target_color, tolerance=25, min_area=0):
+        """Finds the average X coordinate of a color within a region, with optional size filtering."""
+        img = self.capture_screen(region)
+        img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+        
+        r, g, b = self._parse_target_color(target_color)
+        lower = np.array([max(0, b - tolerance), max(0, g - tolerance), max(0, r - tolerance)], dtype="uint8")
+        upper = np.array([min(255, b + tolerance), min(255, g + tolerance), min(255, r + tolerance)], dtype="uint8")
+        
+        mask = cv2.inRange(img_bgr, lower, upper)
+        
+        if min_area > 0:
+            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            valid_mask = np.zeros_like(mask)
+            for cnt in contours:
+                if cv2.contourArea(cnt) >= min_area:
+                    cv2.drawContours(valid_mask, [cnt], -1, 255, -1)
+            mask = valid_mask
+
+        coords = np.column_stack(np.where(mask > 0))
+        if len(coords) > 0:
+            avg_x = np.mean(coords[:, 1])
+            return region[0] + int(avg_x)
+        return None
+
+    def find_color_hsv_x(self, region, target_rgb, hue_tol=10, sat_min=50, val_min=50, min_area=0):
+        """
+        Brightness-robust detection using HSV. 
+        Focuses on Hue (color) while being flexible with Value (brightness).
+        """
+        img_rgb = self.capture_screen(region)
+        img_hsv = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2HSV)
+        
+        
+        target_img = np.uint8([[list(target_rgb)]])
+        target_hsv = cv2.cvtColor(target_img, cv2.COLOR_RGB2HSV)[0][0]
+        
+        target_hue = target_hsv[0]
+        
+        
+        lower = np.array([max(0, target_hue - hue_tol), sat_min, val_min])
+        upper = np.array([min(179, target_hue + hue_tol), 255, 255])
+        
+        mask = cv2.inRange(img_hsv, lower, upper)
+        
+        if min_area > 0:
+            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            valid_mask = np.zeros_like(mask)
+            for cnt in contours:
+                if cv2.contourArea(cnt) >= min_area:
+                    cv2.drawContours(valid_mask, [cnt], -1, 255, -1)
+            mask = valid_mask
+
+        coords = np.column_stack(np.where(mask > 0))
+        if len(coords) > 0:
+            avg_x = np.mean(coords[:, 1])
+            return region[0] + int(avg_x)
+        return None
+
+    def count_vertical_sticks(self, region, img_rgb=None):
+        """Counts the number of vertical 'sticks' (like I, II, III) in a region."""
+        if img_rgb is None:
+            img_rgb = self.capture_screen(region)
+        
+        
+        gray = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
+        _, thresh = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
+        
+        
+        projection = np.sum(thresh, axis=0)
+        
+        
+        sticks = 0
+        in_stick = False
+        current_width = 0
+        min_width = 2 
+        
+        for val in projection:
+            if val > 0: 
+                current_width += 1
+                if not in_stick and current_width >= min_width:
+                    sticks += 1
+                    in_stick = True
+            else:
+                in_stick = False
+                current_width = 0
+        
+        return sticks
+
+    def _parse_target_color(self, target_color):
+        if isinstance(target_color, str):
+            target_color = target_color.lstrip('#')
+            if len(target_color) == 6:
+                return tuple(int(target_color[i:i+2], 16) for i in (0, 2, 4))
+        return target_color

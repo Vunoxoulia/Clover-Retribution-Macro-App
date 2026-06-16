@@ -4,7 +4,7 @@ class Overlay:
     def __init__(self, callback):
         self.callback = callback
         self.root = tk.Toplevel()
-        self.root.attributes('-alpha', 0.3)
+        self.root.attributes('-alpha', 0.5)
         self.root.attributes('-topmost', True)
         self.root.attributes('-fullscreen', True)
         self.root.config(cursor="cross")
@@ -45,7 +45,7 @@ class PersistentOverlay:
     def __init__(self, x1, y1, x2, y2, color="red"):
         self.root = tk.Toplevel()
         self.root.overrideredirect(True)
-        self.root.attributes('-alpha', 0.25)
+        self.root.attributes('-alpha', 0.5)
         self.root.attributes('-topmost', True)
         
         width = max(1, x2 - x1)
@@ -81,7 +81,7 @@ class PointSelector:
     def __init__(self, callback):
         self.callback = callback
         self.root = tk.Toplevel()
-        self.root.attributes('-alpha', 0.3)
+        self.root.attributes('-alpha', 0.5)
         self.root.attributes('-topmost', True)
         self.root.attributes('-fullscreen', True)
         self.root.config(cursor="cross")
@@ -98,7 +98,7 @@ class ColorPicker:
     def __init__(self, callback):
         self.callback = callback
         self.root = tk.Toplevel()
-        self.root.attributes('-alpha', 0.3)
+        self.root.attributes('-alpha', 0.5)
         self.root.attributes('-topmost', True)
         self.root.attributes('-fullscreen', True)
         self.root.config(cursor="crosshair")

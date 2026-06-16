@@ -17,6 +17,7 @@ class CaveLogic(BaseLogic):
             
             
             self.app.log("Scanning for 'Interact'...")
+            self.handle_ok_popup()
             time.sleep(2.0)
             
             if not self.running:
