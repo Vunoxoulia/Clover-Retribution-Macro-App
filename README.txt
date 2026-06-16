@@ -1,6 +1,3 @@
-HOW TO RUN SPATIAL MACRO
-========================
-
 WHAT'S NEW IN V5.4
 =================
 - New OCR Engine: Switched from EasyOCR to RapidOCR (PaddleOCR).
@@ -39,7 +36,9 @@ INSTALLING PYTHON:
 HOW TO RUN
 ==========
 
-1. run.bat
+double click or open Windows_Launcher.bat for windows users
+
+double click or open Linux_Mac_Launcher.sh for Linux and Mac users this is however experimental im not sure if its going to work.
 ----------
 Use this for daily use. It will automatically install required libraries, check for system dependencies, and start the macro.
 Double-click this file to launch.
