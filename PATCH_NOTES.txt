@@ -7,7 +7,6 @@ WHAT'S NEW IN V5.4
 - Improved Compatibility: Replaced legacy Windows-only input methods with a cross-platform input engine (`pynput`) for better support on Linux and Mac.
 - Smarter Screen Capture: Added automatic window detection using `pywinctl`, allowing the macro to focus on the Roblox window even when it's moved or resized.
 - Intelligent Execution: Added platform-specific execution providers (CoreML for Mac, CUDA for Linux) for near-instant OCR results.
-- UI Overhaul: Updated the Macro Hub with a modern card-based layout and direct YouTube tutorial links for each macro.
 - Core Stability: Refactored base logic classes to prevent crashes during long sessions and improve input handling reliability.
 
 WHAT'S NEW IN V5.3
