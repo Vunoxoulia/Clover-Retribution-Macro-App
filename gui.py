@@ -237,6 +237,7 @@ class SpatialGUI:
             entry.insert(0, self.settings.get("move_names")[i])
             entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
             entry.bind("<FocusOut>", lambda e, idx=i: self.update_move_name(idx))
+            entry.bind("<KeyRelease>", lambda e, idx=i: self.update_move_name(idx))
             self.move_entries.append(entry)
             ctk.CTkButton(frame, text="Test", width=50, command=lambda idx=i: self._run_test(lambda: self.logic.test_move_ocr(idx))).pack(side="right")
 

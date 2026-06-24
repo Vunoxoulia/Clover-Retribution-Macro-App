@@ -1,9 +1,9 @@
 {
     "use_ocr": true,
     "move_names": [
-        "eeee",
-        "eeee",
-        "eeee"
+        "Striking",
+        "Sky",
+        "Cagc"
     ],
     "clover_colors": {
         "gold": [
@@ -148,25 +148,34 @@
         187,
         144
     ],
-    "total_gold": 338250,
+    "total_gold": 250,
     "move_stats": [
-        338250,
+        250,
         0,
         0
     ],
     "resolved_move_names": [
-        "",
-        "",
-        ""
+        "Sovercign Magic: Striking",
+        "Sovercign Magic: Sky Gates",
+        "Sovercign Magic: Cagc Gates"
     ],
     "resolved_move_positions": [
-        null,
-        null,
-        null
+        [
+            1345,
+            833
+        ],
+        [
+            1345,
+            888
+        ],
+        [
+            1345,
+            937
+        ]
     ],
     "speed_multiplier": 1.0,
     "clover_tolerances": {
-        "gold": 33,
+        "gold": 35,
         "silver": 30,
         "bronze": 40
     },

@@ -614,6 +614,15 @@ class LibraryLogic(BaseLogic):
 
         except Exception as e:
             self.app.log(f"Minigame error: {e}")
+
+        self.minigame_running = False
+        new_gold = self.app.settings.get("total_gold", 0) + 250
+        self.app.settings.set("total_gold", new_gold)
+        move_stats = self.app.settings.get("move_stats", [0, 0, 0])
+        if hasattr(self, "current_move_idx"):
+            move_stats[self.current_move_idx] += 250
+            self.app.settings.set("move_stats", move_stats)
+        self.app.root.after(0, self.app.update_gold_display)
         
     def prompt_user_for_move(self):
         """Show a customtkinter popup for the user to pick among multiple move candidates.

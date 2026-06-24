@@ -1,3 +1,9 @@
+WHAT'S NEW IN V5.5.1
+=================
+- Statistics Fix: Training statistics (total gold and per-move counts) were not updating after each cycle. The update block is now correctly placed at the end of the scoring phase and always runs regardless of how the minigame ends.
+- Input Box Live Save: Move name entries now save on every keystroke instead of only on focus loss. Clicking Test or starting the macro immediately after typing will always use the latest value.
+- Test Interruptibility: All test functions (Test White, Test Movement, Test Color, etc.) now run in daemon threads and respect a stop flag. Pressing F7 (Reload) during any test immediately cancels it and releases any held keys.
+
 WHAT'S NEW IN V5.5
 =================
 - Move Lock System: Move slots now save both the detected name and exact screen coordinates. At runtime the macro waits for OCR to confirm the raw input name is visible, then clicks the saved position directly — bypassing ambiguous OCR matches entirely.

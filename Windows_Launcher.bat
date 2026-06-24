@@ -1,6 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
-title VunVun's Macro Loader - V5.5
+title VunVun's Macro Loader - V5.5.1
 echo ========================================
 echo   Spatial Macro Launcher - Initializing
 echo ========================================
@@ -124,7 +124,7 @@ echo [INFO] Using: !PY_EXE! (Python %PY_VER%)
 
 
 echo.
-echo [INFO] Performing V5.5 Cleanup...
+echo [INFO] Performing V5.5.1 Cleanup...
 
 
 if exist "%LocalAppData%\Python\pythoncore-3.14-64\python.exe" (
@@ -160,7 +160,7 @@ if !errorlevel! neq 0 (
 
 echo.
 echo [2/2] Starting Spatial Macro...
-echo [NOTICE] If this is your first time using V5.5, it may take a 
+echo [NOTICE] If this is your first time using V5.5.1, it may take a 
 echo moment to initialize the RapidOCR engine. Please wait!
 echo.
 "!PY_EXE!" main.py
