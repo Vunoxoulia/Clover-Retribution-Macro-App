@@ -3,8 +3,8 @@ mss
 numpy
 opencv-python
 keyboard
-rapidocr_onnxruntime
-onnxruntime
+rapidocr_onnxruntime==1.2.3
+onnxruntime==1.27.0
 pynput
 pywinctl
 screeninfo

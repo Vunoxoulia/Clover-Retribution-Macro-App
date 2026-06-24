@@ -7,95 +7,7 @@ import keyboard
 import pywinctl
 from pynput.mouse import Button, Controller as MouseController
 from screeninfo import get_monitors
-from utils import SpatialUtils
-
-import sys
-IS_WINDOWS = sys.platform.startswith('win')
-
-if IS_WINDOWS:
-    import ctypes
-
-    PUL = ctypes.POINTER(ctypes.c_ulong)
-
-    class MouseInput(ctypes.Structure):
-        _fields_ = [("dx", ctypes.c_long),
-                    ("dy", ctypes.c_long),
-                    ("mouseData", ctypes.c_ulong),
-                    ("dwFlags", ctypes.c_ulong),
-                    ("time", ctypes.c_ulong),
-                    ("dwExtraInfo", PUL)]
-
-    class KeyBdInput(ctypes.Structure):
-        _fields_ = [("wVk", ctypes.c_ushort),
-                    ("wScan", ctypes.c_ushort),
-                    ("dwFlags", ctypes.c_ulong),
-                    ("time", ctypes.c_ulong),
-                    ("dwExtraInfo", PUL)]
-
-    class HardwareInput(ctypes.Structure):
-        _fields_ = [("uMsg", ctypes.c_ulong),
-                    ("wParamL", ctypes.c_short),
-                    ("wParamH", ctypes.c_ushort)]
-
-    class Input_I(ctypes.Union):
-        _fields_ = [("mi", MouseInput),
-                    ("ki", KeyBdInput),
-                    ("hi", HardwareInput)]
-
-    class Input(ctypes.Structure):
-        _fields_ = [("type", ctypes.c_ulong),
-                    ("ii", Input_I)]
-
-    INPUT_MOUSE = 0
-    MOUSEEVENTF_MOVE = 0x0001
-    MOUSEEVENTF_ABSOLUTE = 0x8000
-    MOUSEEVENTF_LEFTDOWN = 0x0002
-    MOUSEEVENTF_LEFTUP = 0x0004
-
-class RobloxInputDriver:
-    _mouse = MouseController()
-
-    @classmethod
-    def move_to(cls, x, y):
-        if IS_WINDOWS:
-            width = ctypes.windll.user32.GetSystemMetrics(0)
-            height = ctypes.windll.user32.GetSystemMetrics(1)
-            
-            nx = int(x * 65535 / (width - 1))
-            ny = int(y * 65535 / (height - 1))
-            
-            extra = ctypes.c_ulong(0)
-            ii_ = Input_I()
-            ii_.mi = MouseInput(nx, ny, 0, MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE, 0, ctypes.pointer(extra))
-            move_input = Input(ctypes.c_ulong(INPUT_MOUSE), ii_)
-            ctypes.windll.user32.SendInput(1, ctypes.pointer(move_input), ctypes.sizeof(move_input))
-        else:
-            cls._mouse.position = (int(x), int(y))
-
-    @classmethod
-    def click_at(cls, x, y, duration=0.03):
-        if IS_WINDOWS:
-            cls.move_to(x, y)
-            time.sleep(0.02)
-            
-            extra = ctypes.c_ulong(0)
-            ii_down = Input_I()
-            ii_down.mi = MouseInput(0, 0, 0, MOUSEEVENTF_LEFTDOWN, 0, ctypes.pointer(extra))
-            input_down = Input(ctypes.c_ulong(INPUT_MOUSE), ii_down)
-            ctypes.windll.user32.SendInput(1, ctypes.pointer(input_down), ctypes.sizeof(input_down))
-            
-            time.sleep(duration + random.uniform(0.005, 0.015))
-            
-            ii_up = Input_I()
-            ii_up.mi = MouseInput(0, 0, 0, MOUSEEVENTF_LEFTUP, 0, ctypes.pointer(extra))
-            input_up = Input(ctypes.c_ulong(INPUT_MOUSE), ii_up)
-            ctypes.windll.user32.SendInput(1, ctypes.pointer(input_up), ctypes.sizeof(input_up))
-        else:
-            cls.move_to(x, y)
-            time.sleep(0.015) 
-            cls._mouse.press(Button.left)
-            time.sleep(duration)
-            cls._mouse.release(Button.left)
+from utils import SpatialUtils, RobloxInputDriver
 
 class BaseLogic:
     def __init__(self, app):
@@ -104,25 +16,59 @@ class BaseLogic:
         self.running = False
         self.paused = False
         self.thread = None
+        self.ok_scanner_thread = None
+        self.ok_scanner_running = False
+        self._ok_scanner_lock = threading.Lock()
         self._mouse = MouseController()
+        self.input_lock = RobloxInputDriver._lock
+        self.test_running = False
+
+    def _sleep(self, seconds, granularity=0.05):
+        end = time.time() + seconds
+        while time.time() < end:
+            if not self.test_running:
+                return False
+            time.sleep(min(granularity, end - time.time()))
+        return True
 
     def start(self):
         if not self.running:
             self.running = True
             self.paused = False
+            self.ok_scanner_running = True
+            self.ok_scanner_thread = threading.Thread(target=self._ok_scanner_loop, daemon=True)
+            self.ok_scanner_thread.start()
             self.thread = threading.Thread(target=self.main_loop, daemon=True)
             self.thread.start()
             self.app.log("Macro thread started")
 
     def stop(self):
+        self.test_running = False
         if not self.running:
             return
-            
         self.running = False
+        self.ok_scanner_running = False
         self.app.log("Stopping macro...")
+        if self.ok_scanner_thread:
+            self.ok_scanner_thread.join(timeout=1.0)
         if self.thread:
             self.thread.join(timeout=1.0)
         self.app.log("Macro stopped")
+
+    def _ok_scanner_loop(self):
+        while self.running and self.ok_scanner_running:
+            if self._ok_scanner_lock.acquire(blocking=False):
+                try:
+                    self.handle_ok_popup()
+                finally:
+                    self._ok_scanner_lock.release()
+            else:
+                self.app.log("OK scanner busy; skipping this scan cycle.")
+
+            for _ in range(40):
+                if not self.running or not self.ok_scanner_running:
+                    return
+                time.sleep(0.25)
 
     def wait_for_roblox_focus(self):
         if self.check_focus():
@@ -150,59 +96,75 @@ class BaseLogic:
         return self._mouse.position
 
     def smooth_move(self, target_x, target_y, duration=0.15):
-        try:
-            start_x, start_y = self.get_cursor_pos()
-        except Exception:
-            return  
+        with self.input_lock:
+            try:
+                start_x, start_y = self.get_cursor_pos()
+            except Exception:
+                return  
+                
+            dx = target_x - start_x
+            dy = target_y - start_y
+            distance = np.hypot(dx, dy)
             
-        dx = target_x - start_x
-        dy = target_y - start_y
-        distance = np.hypot(dx, dy)
-        
-        if distance == 0:
-            return
-        
-        steps = max(6, int(distance / random.randint(15, 30)))
-        sleep_per_step = duration / steps
+            if distance == 0:
+                return
+            
+            steps = max(6, int(distance / random.randint(15, 30)))
+            sleep_per_step = duration / steps
 
-        for i in range(1, steps + 1):
-            if not self.running:
-                break
-            t = i / steps
-            t = t * (2 - t)  
-            
-            current_x = int(start_x + dx * t)
-            current_y = int(start_y + dy * t)
-            
-            RobloxInputDriver.move_to(current_x, current_y)
-            time.sleep(sleep_per_step)
-            
-        RobloxInputDriver.move_to(target_x, target_y)
-        time.sleep(0.015)
+            for i in range(1, steps + 1):
+                if not self.running:
+                    break
+                t = i / steps
+                t = t * (2 - t)  
+                
+                current_x = int(start_x + dx * t)
+                current_y = int(start_y + dy * t)
+                
+                RobloxInputDriver.move_to(current_x, current_y)
+                time.sleep(sleep_per_step)
+                
+            RobloxInputDriver.move_to(target_x, target_y)
+            time.sleep(0.015)
 
     def human_click(self, x, y, duration=0.15):
-        self.smooth_move(x, y, duration=duration)
-        RobloxInputDriver.click_at(x, y, duration=random.uniform(0.02, 0.04))
+        with self.input_lock:
+            self.smooth_move(x, y, duration=duration)
+            RobloxInputDriver.click_at(x, y, duration=random.uniform(0.02, 0.04))
+
+    def get_screen_size(self):
+        """Returns the screen width and height using screeninfo."""
+        try:
+            for m in get_monitors():
+                if m.is_primary:
+                    return m.width, m.height
+        except Exception:
+            pass
+        return 1920, 1080           
 
     def handle_ok_popup(self):
         """Scans the screen for an 'Ok' button and clicks it if found."""
         try:
-            import win32api, win32con
-            screen_w = win32api.GetSystemMetrics(win32con.SM_CXSCREEN)
-            screen_h = win32api.GetSystemMetrics(win32con.SM_CYSCREEN)
-            full_screen = [0, 0, screen_w, screen_h]
+            screen_w, screen_h = self.get_screen_size()
+                                                                                  
+            left = int(screen_w * 0.3)
+            top = int(screen_h * 0.3)
+            right = int(screen_w * 0.7)
+            bottom = int(screen_h * 0.7)
+            center_region = [left, top, right, bottom]
             
-            results = self.utils.get_text_from_region(full_screen)
+            results = self.utils.get_text_from_region(center_region, upscale=1)
             for bbox, text, conf in results:
                 if text.strip() == "Ok":
-                    cx = int(np.mean([p[0] for p in bbox]))
-                    cy = int(np.mean([p[1] for p in bbox]))
+                    cx = center_region[0] + int(np.mean([p[0] for p in bbox]))
+                    cy = center_region[1] + int(np.mean([p[1] for p in bbox]))
                     self.app.log(f"Detected 'Ok' popup at ({cx}, {cy}). Clicking...")
                     
-                    old_x, old_y = self.get_cursor_pos()
-                    RobloxInputDriver.click_at(cx, cy, duration=0.05)
-                    time.sleep(0.1)
-                    RobloxInputDriver.move_to(old_x, old_y)
+                    with self.input_lock:
+                        old_x, old_y = self.get_cursor_pos()
+                        self.human_click(cx, cy, duration=0.08)
+                        time.sleep(0.1)
+                        RobloxInputDriver.move_to(old_x, old_y)
                     return True
         except Exception as e:
             self.app.log(f"Error checking for 'Ok' popup: {e}")

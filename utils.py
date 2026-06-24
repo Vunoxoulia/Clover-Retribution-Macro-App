@@ -6,10 +6,121 @@ import time
 import threading
 import pywinctl
 from PIL import Image
+import sys
+import ctypes
+import random
+from pynput.mouse import Button, Controller as MouseController
+
+IS_WINDOWS = sys.platform.startswith('win')
+
+if IS_WINDOWS:
+    PUL = ctypes.POINTER(ctypes.c_ulong)
+
+    class MouseInput(ctypes.Structure):
+        _fields_ = [("dx", ctypes.c_long),
+                    ("dy", ctypes.c_long),
+                    ("mouseData", ctypes.c_ulong),
+                    ("dwFlags", ctypes.c_ulong),
+                    ("time", ctypes.c_ulong),
+                    ("dwExtraInfo", PUL)]
+
+    class KeyBdInput(ctypes.Structure):
+        _fields_ = [("wVk", ctypes.c_ushort),
+                    ("wScan", ctypes.c_ushort),
+                    ("dwFlags", ctypes.c_ulong),
+                    ("time", ctypes.c_ulong),
+                    ("dwExtraInfo", PUL)]
+
+    class HardwareInput(ctypes.Structure):
+        _fields_ = [("uMsg", ctypes.c_ulong),
+                    ("wParamL", ctypes.c_short),
+                    ("wParamH", ctypes.c_ushort)]
+
+    class Input_I(ctypes.Union):
+        _fields_ = [("mi", MouseInput),
+                    ("ki", KeyBdInput),
+                    ("hi", HardwareInput)]
+
+    class Input(ctypes.Structure):
+        _fields_ = [("type", ctypes.c_ulong),
+                    ("ii", Input_I)]
+
+    INPUT_MOUSE = 0
+    MOUSEEVENTF_MOVE = 0x0001
+    MOUSEEVENTF_ABSOLUTE = 0x8000
+    MOUSEEVENTF_LEFTDOWN = 0x0002
+    MOUSEEVENTF_LEFTUP = 0x0004
+    MOUSEEVENTF_RIGHTDOWN = 0x0008
+    MOUSEEVENTF_RIGHTUP = 0x0010
+    MOUSEEVENTF_VIRTUALDESK = 0x4000
+
+class RobloxInputDriver:
+    _mouse = MouseController()
+    _lock = threading.RLock()
+
+    @classmethod
+    def move_to(cls, x, y):
+        with cls._lock:
+            if IS_WINDOWS:
+                left = ctypes.windll.user32.GetSystemMetrics(76)                      
+                top = ctypes.windll.user32.GetSystemMetrics(77)                       
+                width = ctypes.windll.user32.GetSystemMetrics(78)                      
+                height = ctypes.windll.user32.GetSystemMetrics(79)                     
+                
+                if width <= 0:
+                    width = ctypes.windll.user32.GetSystemMetrics(0)                            
+                if height <= 0:
+                    height = ctypes.windll.user32.GetSystemMetrics(1)                             
+                
+                nx = int((x - left) * 65535 / (width - 1)) if width > 1 else 0
+                ny = int((y - top) * 65535 / (height - 1)) if height > 1 else 0
+                
+                extra = ctypes.c_ulong(0)
+                ii_ = Input_I()
+                ii_.mi = MouseInput(nx, ny, 0, MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK, 0, ctypes.pointer(extra))
+                move_input = Input(ctypes.c_ulong(INPUT_MOUSE), ii_)
+                ctypes.windll.user32.SendInput(1, ctypes.pointer(move_input), ctypes.sizeof(move_input))
+            else:
+                cls._mouse.position = (int(x), int(y))
+
+    @classmethod
+    def click_at(cls, x, y, duration=0.03, button='left'):
+        with cls._lock:
+            if IS_WINDOWS:
+                cls.move_to(x, y)
+                time.sleep(0.02)
+                
+                extra = ctypes.c_ulong(0)
+                if button == 'left':
+                    flags_down = MOUSEEVENTF_LEFTDOWN
+                    flags_up = MOUSEEVENTF_LEFTUP
+                else:
+                    flags_down = MOUSEEVENTF_RIGHTDOWN
+                    flags_up = MOUSEEVENTF_RIGHTUP
+
+                ii_down = Input_I()
+                ii_down.mi = MouseInput(0, 0, 0, flags_down, 0, ctypes.pointer(extra))
+                input_down = Input(ctypes.c_ulong(INPUT_MOUSE), ii_down)
+                ctypes.windll.user32.SendInput(1, ctypes.pointer(input_down), ctypes.sizeof(input_down))
+                
+                time.sleep(duration + random.uniform(0.005, 0.015))
+                
+                ii_up = Input_I()
+                ii_up.mi = MouseInput(0, 0, 0, flags_up, 0, ctypes.pointer(extra))
+                input_up = Input(ctypes.c_ulong(INPUT_MOUSE), ii_up)
+                ctypes.windll.user32.SendInput(1, ctypes.pointer(input_up), ctypes.sizeof(input_up))
+            else:
+                cls.move_to(x, y)
+                time.sleep(0.015) 
+                pynput_button = Button.left if button == 'left' else Button.right
+                cls._mouse.press(pynput_button)
+                time.sleep(duration)
+                cls._mouse.release(pynput_button)
 
 class SpatialUtils:
     def __init__(self):
         self._thread_local = threading.local()
+        self._key_lock = threading.RLock()
         self.ocr_reader = None
 
     @property
@@ -23,7 +134,6 @@ class SpatialUtils:
             try:
                 from rapidocr_onnxruntime import RapidOCR
                 import platform
-                
                 
                 providers = ['CPUExecutionProvider']
                 system = platform.system()
@@ -46,7 +156,6 @@ class SpatialUtils:
             return []
             
         img = self.capture_screen(region)
-        
         
         if upscale > 1:
             h, w = img.shape[:2]
@@ -234,134 +343,17 @@ class SpatialUtils:
         return None
 
     def mouse_click(self, x, y, button='left'):
-        import sys
-        if sys.platform.startswith('win'):
-            import ctypes
-            import time
-
-            PUL = ctypes.POINTER(ctypes.c_ulong)
-            class MouseInput(ctypes.Structure):
-                _fields_ = [("dx", ctypes.c_long),
-                            ("dy", ctypes.c_long),
-                            ("mouseData", ctypes.c_ulong),
-                            ("dwFlags", ctypes.c_ulong),
-                            ("time", ctypes.c_ulong),
-                            ("dwExtraInfo", PUL)]
-            class KeyBdInput(ctypes.Structure):
-                _fields_ = [("wVk", ctypes.c_ushort),
-                            ("wScan", ctypes.c_ushort),
-                            ("dwFlags", ctypes.c_ulong),
-                            ("time", ctypes.c_ulong),
-                            ("dwExtraInfo", PUL)]
-            class HardwareInput(ctypes.Structure):
-                _fields_ = [("uMsg", ctypes.c_ulong),
-                            ("wParamL", ctypes.c_short),
-                            ("wParamH", ctypes.c_ushort)]
-            class Input_I(ctypes.Union):
-                _fields_ = [("mi", MouseInput),
-                            ("ki", KeyBdInput),
-                            ("hi", HardwareInput)]
-            class Input(ctypes.Structure):
-                _fields_ = [("type", ctypes.c_ulong),
-                            ("ii", Input_I)]
-
-            INPUT_MOUSE = 0
-            MOUSEEVENTF_MOVE = 0x0001
-            MOUSEEVENTF_ABSOLUTE = 0x8000
-            MOUSEEVENTF_LEFTDOWN = 0x0002
-            MOUSEEVENTF_LEFTUP = 0x0004
-            MOUSEEVENTF_RIGHTDOWN = 0x0008
-            MOUSEEVENTF_RIGHTUP = 0x0010
-
-            self.mouse_move(x, y)
-            time.sleep(0.015)
-
-            extra = ctypes.c_ulong(0)
-            if button == 'left':
-                flags_down = MOUSEEVENTF_LEFTDOWN
-                flags_up = MOUSEEVENTF_LEFTUP
-            else:
-                flags_down = MOUSEEVENTF_RIGHTDOWN
-                flags_up = MOUSEEVENTF_RIGHTUP
-
-            ii_down = Input_I()
-            ii_down.mi = MouseInput(0, 0, 0, flags_down, 0, ctypes.pointer(extra))
-            input_down = Input(ctypes.c_ulong(INPUT_MOUSE), ii_down)
-            ctypes.windll.user32.SendInput(1, ctypes.pointer(input_down), ctypes.sizeof(input_down))
-            time.sleep(0.05)
-
-            ii_up = Input_I()
-            ii_up.mi = MouseInput(0, 0, 0, flags_up, 0, ctypes.pointer(extra))
-            input_up = Input(ctypes.c_ulong(INPUT_MOUSE), ii_up)
-            ctypes.windll.user32.SendInput(1, ctypes.pointer(input_up), ctypes.sizeof(input_up))
-        else:
-            from pynput.mouse import Button, Controller
-            import time
-            mouse = Controller()
-            mouse.position = (int(x), int(y))
-            if button == 'left':
-                mouse.press(Button.left)
-                time.sleep(0.05)
-                mouse.release(Button.left)
-            elif button == 'right':
-                mouse.press(Button.right)
-                time.sleep(0.05)
-                mouse.release(Button.right)
+        RobloxInputDriver.click_at(x, y, duration=0.05, button=button)
 
     def mouse_move(self, x, y):
-        import sys
-        if sys.platform.startswith('win'):
-            import ctypes
-
-            PUL = ctypes.POINTER(ctypes.c_ulong)
-            class MouseInput(ctypes.Structure):
-                _fields_ = [("dx", ctypes.c_long),
-                            ("dy", ctypes.c_long),
-                            ("mouseData", ctypes.c_ulong),
-                            ("dwFlags", ctypes.c_ulong),
-                            ("time", ctypes.c_ulong),
-                            ("dwExtraInfo", PUL)]
-            class KeyBdInput(ctypes.Structure):
-                _fields_ = [("wVk", ctypes.c_ushort),
-                            ("wScan", ctypes.c_ushort),
-                            ("dwFlags", ctypes.c_ulong),
-                            ("time", ctypes.c_ulong),
-                            ("dwExtraInfo", PUL)]
-            class HardwareInput(ctypes.Structure):
-                _fields_ = [("uMsg", ctypes.c_ulong),
-                            ("wParamL", ctypes.c_short),
-                            ("wParamH", ctypes.c_ushort)]
-            class Input_I(ctypes.Union):
-                _fields_ = [("mi", MouseInput),
-                            ("ki", KeyBdInput),
-                            ("hi", HardwareInput)]
-            class Input(ctypes.Structure):
-                _fields_ = [("type", ctypes.c_ulong),
-                            ("ii", Input_I)]
-
-            INPUT_MOUSE = 0
-            MOUSEEVENTF_MOVE = 0x0001
-            MOUSEEVENTF_ABSOLUTE = 0x8000
-
-            width = ctypes.windll.user32.GetSystemMetrics(0)
-            height = ctypes.windll.user32.GetSystemMetrics(1)
-            nx = int(x * 65535 / (width - 1))
-            ny = int(y * 65535 / (height - 1))
-
-            extra = ctypes.c_ulong(0)
-            ii_ = Input_I()
-            ii_.mi = MouseInput(nx, ny, 0, MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE, 0, ctypes.pointer(extra))
-            move_input = Input(ctypes.c_ulong(INPUT_MOUSE), ii_)
-            ctypes.windll.user32.SendInput(1, ctypes.pointer(move_input), ctypes.sizeof(move_input))
-        else:
-            from pynput.mouse import Controller
-            mouse = Controller()
-            mouse.position = (int(x), int(y))
+        RobloxInputDriver.move_to(x, y)
 
     def send_key(self, key, duration=0.05):
-        keyboard.press(key)
-        time.sleep(duration)
-        keyboard.release(key)
+        """Send a keyboard key press with optional duration, thread‑safe."""
+        with self._key_lock:
+            keyboard.press(key)
+            time.sleep(duration)
+            keyboard.release(key)
 
     def find_color_x(self, region, target_color, tolerance=25, min_area=0):
         """Finds the average X coordinate of a color within a region, with optional size filtering."""
@@ -396,12 +388,10 @@ class SpatialUtils:
         img_rgb = self.capture_screen(region)
         img_hsv = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2HSV)
         
-        
         target_img = np.uint8([[list(target_rgb)]])
         target_hsv = cv2.cvtColor(target_img, cv2.COLOR_RGB2HSV)[0][0]
         
         target_hue = target_hsv[0]
-        
         
         lower = np.array([max(0, target_hue - hue_tol), sat_min, val_min])
         upper = np.array([min(179, target_hue + hue_tol), 255, 255])
@@ -427,13 +417,10 @@ class SpatialUtils:
         if img_rgb is None:
             img_rgb = self.capture_screen(region)
         
-        
         gray = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
         _, thresh = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
         
-        
         projection = np.sum(thresh, axis=0)
-        
         
         sticks = 0
         in_stick = False

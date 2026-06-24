@@ -58,16 +58,19 @@ class PersistentOverlay:
         
         
         try:
+            import sys
             import ctypes
             
-            hwnd = ctypes.windll.user32.GetParent(self.root.winfo_id())
-            if hwnd == 0: 
-                hwnd = self.root.winfo_id()
+            # Only apply Windows-specific overlay settings on Windows
+            if sys.platform.startswith('win'):
+                hwnd = ctypes.windll.user32.GetParent(self.root.winfo_id())
+                if hwnd == 0: 
+                    hwnd = self.root.winfo_id()
+                    
                 
-            
-            style = ctypes.windll.user32.GetWindowLongW(hwnd, -20)
-            
-            ctypes.windll.user32.SetWindowLongW(hwnd, -20, style | 0x80000 | 0x20)
+                style = ctypes.windll.user32.GetWindowLongW(hwnd, -20)
+                
+                ctypes.windll.user32.SetWindowLongW(hwnd, -20, style | 0x80000 | 0x20)
         except Exception as e:
             print(f"Overlay click-through error: {e}")
 

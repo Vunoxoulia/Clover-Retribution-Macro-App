@@ -36,28 +36,23 @@ class MacroSelector:
         self.cards_frame = ctk.CTkFrame(self.root, fg_color="transparent")
         self.cards_frame.pack(expand=True, fill="both", padx=20, pady=20)
 
-        # Library Macro
         self.create_card("Library Macro", "Full automation for the\nSpatial Library.", "Launch", 
                          lambda: self.on_select("Library Macro", LibraryLogic, 
                                                 tabs=["Main", "Settings", "Areas", "Clover Clicker", "Hotkeys", "Statistics"],
-                                                tutorial_url="https://youtu.be/n_mOJheDHiM"), 0)
+                                                tutorial_url="https://youtu.be/96WNiCHcvW0"), 0)
 
-        # Tundra Mining
         self.create_card("Tundra Mining", "Automated mining in\nthe Tundra region.", "Launch", 
                          lambda: self.on_select("Tundra Mining", TundraLogic, 
-                                                tabs=["Main", "Hotkeys"],
-                                                tutorial_url="https://youtu.be/RMn0v5-SDq4"), 1)
+                                                tabs=["Main", "Settings", "Hotkeys"],
+                                                tutorial_url="https://youtu.be/dOCZW46MCp8"), 1)
 
-        # Cave Mining
         self.create_card("Cave Mining", "Automated mining in\nthe Cave region.", "Coming Soon", None, 2)
 
-        # Fishing Macro
         self.create_card("Fishing Macro", "Automated fishing for\nvarious rewards.", "Launch", 
                          lambda: self.on_select("Fishing Macro", FishingLogic, 
                                                 tabs=["Main", "Fishing Settings", "Hotkeys"],
-                                                tutorial_url="https://youtu.be/16VCZrRWV7U"), 3)
+                                                tutorial_url="https://youtu.be/nIvzTzCzbFE"), 3)
 
-        # Devil Union
         self.create_card("Devil Union", "Automated training for\nDevil Union abilities.", "Coming Soon", None, 4)
 
         footer = ctk.CTkFrame(self.root, fg_color="transparent")
@@ -184,6 +179,8 @@ class SpatialGUI:
         regions = self.settings.get("regions", {})
         if "Fishing" in self.root.title():
             essential = ["minigame_bar", "fishing_click_pos"]
+        elif "Tundra" in self.root.title():
+            essential = ["tundra_detection_region"]
         else:
             essential = ["score", "move_menu", "quest_region"]
             
@@ -198,9 +195,41 @@ class SpatialGUI:
 
     def setup_settings_tab(self):
         tab = self.tabview.tab("Settings")
+        if "Tundra" in self.root.title():
+            ctk.CTkLabel(tab, text="Tundra Detection Settings", font=("Arial", 16, "bold")).pack(pady=10)
+            ctk.CTkLabel(tab, text="Set the region used to detect white text/color for Tundra mining.", wraplength=380, justify="left").pack(pady=(0, 10), padx=20)
+
+            ctk.CTkButton(tab, text="Set Detection Region", command=lambda: self.pick_region("tundra_detection_region")).pack(pady=5)
+            ctk.CTkButton(tab, text="Test White (F1)", fg_color="#445566", width=120, command=lambda: self._run_test(self.logic.test_detection)).pack(pady=(0, 5))
+            ctk.CTkButton(tab, text="Test Movement (F2)", fg_color="#445566", width=120, command=lambda: self._run_test(self.logic.test_movement)).pack(pady=(0, 10))
+
+            ctk.CTkLabel(tab, text="Detection Tolerance (Variance):", font=("Arial", 14, "bold")).pack(pady=(10, 0))
+            ctk.CTkLabel(tab, text="(Lower = More Strict | Higher = Less Lenient)", font=("Arial", 10, "italic"), text_color="gray").pack()
+            self.fishing_tolerance_slider = ctk.CTkSlider(tab, from_=1, to=100, number_of_steps=99, command=self.update_tolerance)
+            self.fishing_tolerance_slider.set(self.settings.get("color_tolerance", 25)); self.fishing_tolerance_slider.pack(pady=5)
+            self.fishing_tolerance_val_label = ctk.CTkLabel(tab, text=f"Value: {int(self.fishing_tolerance_slider.get())}"); self.fishing_tolerance_val_label.pack()
+
+            ctk.CTkLabel(tab, text="Speed Multiplier:", font=("Arial", 14, "bold")).pack(pady=(15, 0))
+            ctk.CTkLabel(tab, text="1.0 = default  |  higher = faster movement (less sleep time)", font=("Arial", 10, "italic"), text_color="gray").pack()
+            self.speed_slider = ctk.CTkSlider(tab, from_=0.5, to=3.0, number_of_steps=50, command=self.update_speed_multiplier)
+            self.speed_slider.set(self.settings.get("speed_multiplier", 1.0))
+            self.speed_slider.pack(pady=5)
+            self.speed_val_label = ctk.CTkLabel(tab, text=f"Value: {self.settings.get('speed_multiplier', 1.0):.2f}x")
+            self.speed_val_label.pack()
+
+            self.overlay_switch = ctk.CTkSwitch(tab, text="Show Scan Areas", command=self.toggle_overlays)
+            self.overlay_switch.pack(pady=10)
+
+            btn_row = ctk.CTkFrame(tab, fg_color="transparent")
+            btn_row.pack(pady=(0, 10), fill="x", padx=40)
+            ctk.CTkButton(btn_row, text="Reset to Defaults", fg_color="#A13333",
+                          command=self.reset_tundra_defaults).pack(fill="x")
+            return
+
         ctk.CTkButton(tab, text="Move Selection Area (OCR)", command=lambda: self.pick_region("move_menu")).pack(pady=10)
         ctk.CTkLabel(tab, text="Move Names (for OCR):").pack(pady=5)
         self.move_entries = []
+        self.resolved_labels = []
         for i in range(3):
             frame = ctk.CTkFrame(tab, fg_color="transparent")
             frame.pack(pady=2, fill="x", padx=40)
@@ -209,10 +238,39 @@ class SpatialGUI:
             entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
             entry.bind("<FocusOut>", lambda e, idx=i: self.update_move_name(idx))
             self.move_entries.append(entry)
-            ctk.CTkButton(frame, text="Test", width=50, command=lambda idx=i: self.logic.test_move_ocr(idx)).pack(side="right")
+            ctk.CTkButton(frame, text="Test", width=50, command=lambda idx=i: self._run_test(lambda: self.logic.test_move_ocr(idx))).pack(side="right")
+
+            lock_frame = ctk.CTkFrame(tab, fg_color="transparent")
+            lock_frame.pack(fill="x", padx=40, pady=(0, 4))
+            resolved = self.settings.get("resolved_move_names", ["", "", ""])[i]
+            pos = self.settings.get("resolved_move_positions", [None, None, None])[i]
+            if resolved and pos:
+                lock_text = f"🔒 {resolved}  ({pos[0]}, {pos[1]})"
+            elif resolved:
+                lock_text = f"🔒 {resolved}"
+            else:
+                lock_text = "unlocked"
+            lock_color = "#4CAF50" if resolved else "gray55"
+            lbl = ctk.CTkLabel(lock_frame, text=lock_text, font=("Arial", 11),
+                               text_color=lock_color, anchor="w")
+            lbl.pack(side="left", fill="x", expand=True)
+            ctk.CTkButton(lock_frame, text="✕", width=28, height=20,
+                          fg_color="gray30", hover_color="#A13333",
+                          command=lambda idx=i: self.clear_resolved_name(idx)).pack(side="right")
+            self.resolved_labels.append(lbl)
 
     def setup_areas_tab(self):
         tab = self.tabview.tab("Areas")
+        if "Tundra" in self.root.title():
+            ctk.CTkLabel(tab, text="Tundra Detection Area", font=("Arial", 14, "bold")).pack(pady=5)
+            f = ctk.CTkFrame(tab, fg_color="transparent")
+            f.pack(pady=2, fill="x", padx=40)
+            ctk.CTkButton(f, text="Set Detection Region", command=lambda: self.pick_region("quest_region")).pack(side="left", fill="x", expand=True)
+            ctk.CTkButton(f, text="Test", width=50, command=lambda: self._run_test(self.logic.test_detection)).pack(side="right")
+            self.overlay_switch = ctk.CTkSwitch(tab, text="Show Scan Areas", command=self.toggle_overlays)
+            self.overlay_switch.pack(pady=10)
+            return
+
         ctk.CTkLabel(tab, text="Gold Clover Move Status Areas", font=("Arial", 14, "bold")).pack(pady=5)
         for i in range(1, 4): ctk.CTkButton(tab, text=f"Gold Clover {i}", command=lambda idx=i: self.pick_region(f"gold_clover_{idx}")).pack(pady=2)
         ctk.CTkLabel(tab, text="\nMinigame UI Regions", font=("Arial", 14, "bold")).pack(pady=5)
@@ -220,7 +278,7 @@ class SpatialGUI:
         f = ctk.CTkFrame(tab, fg_color="transparent")
         f.pack(pady=2, fill="x", padx=40)
         ctk.CTkButton(f, text="Quest/Guide Region", command=lambda: self.pick_region("quest_region")).pack(side="left", fill="x", expand=True)
-        ctk.CTkButton(f, text="Test", width=50, command=self.logic.test_quest_ocr).pack(side="right")
+        ctk.CTkButton(f, text="Test", width=50, command=lambda: self._run_test(self.logic.test_quest_ocr)).pack(side="right")
         self.overlay_switch = ctk.CTkSwitch(tab, text="Show Scan Areas", command=self.toggle_overlays)
         self.overlay_switch.pack(pady=10)
 
@@ -236,7 +294,7 @@ class SpatialGUI:
         clover_tols = self.settings.get("clover_tolerances", {})
         
         for c in ["bronze", "silver", "gold"]:
-            # Color row
+                       
             f_color = ctk.CTkFrame(tab)
             f_color.pack(pady=(10, 2), fill="x", padx=20)
             
@@ -253,7 +311,6 @@ class SpatialGUI:
             
             ctk.CTkButton(f_color, text="Pick", width=50, command=lambda cl=c: self.pick_color(cl)).pack(side="right", padx=5)
             
-            # Tolerance row
             f_tol = ctk.CTkFrame(tab, fg_color="transparent")
             f_tol.pack(pady=(0, 10), fill="x", padx=20)
             
@@ -291,24 +348,22 @@ class SpatialGUI:
         ctk.CTkButton(tab, text="Set Fishing Click Position", command=lambda: self.pick_point("fishing_click_pos")).pack(pady=5)
         ctk.CTkButton(tab, text="Set Minigame Bar Area", command=lambda: self.pick_region("minigame_bar")).pack(pady=5)
         
-        # Bar Color (Green)
         f1 = ctk.CTkFrame(tab); f1.pack(pady=5, fill="x", padx=40)
         ctk.CTkLabel(f1, text="Bar Color:").pack(side="left", padx=5)
         c1 = self.settings.get("bar_color", (0, 255, 0))
         self.bar_preview = ctk.CTkFrame(f1, width=20, height=20, fg_color='#%02x%02x%02x' % tuple(c1))
         self.bar_preview.pack(side="left", padx=5)
         self.bar_color_lbl = ctk.CTkLabel(f1, text=str(c1)); self.bar_color_lbl.pack(side="left")
-        ctk.CTkButton(f1, text="Test (F1)", width=50, fg_color="#445566", command=self.logic.test_bar_detection).pack(side="right", padx=2)
+        ctk.CTkButton(f1, text="Test (F1)", width=50, fg_color="#445566", command=lambda: self._run_test(self.logic.test_bar_detection)).pack(side="right", padx=2)
         ctk.CTkButton(f1, text="Pick", width=50, command=lambda: self.pick_color("bar_color")).pack(side="right", padx=2)
 
-        # Fish Color (White)
         f2 = ctk.CTkFrame(tab); f2.pack(pady=5, fill="x", padx=40)
         ctk.CTkLabel(f2, text="Fish Color:").pack(side="left", padx=5)
         c2 = self.settings.get("fish_color", (255, 255, 255))
         self.fish_preview = ctk.CTkFrame(f2, width=20, height=20, fg_color='#%02x%02x%02x' % tuple(c2))
         self.fish_preview.pack(side="left", padx=5)
         self.fish_color_lbl = ctk.CTkLabel(f2, text=str(c2)); self.fish_color_lbl.pack(side="left")
-        ctk.CTkButton(f2, text="Test (F2)", width=50, fg_color="#445566", command=self.logic.test_fish_detection).pack(side="right", padx=2)
+        ctk.CTkButton(f2, text="Test (F2)", width=50, fg_color="#445566", command=lambda: self._run_test(self.logic.test_fish_detection)).pack(side="right", padx=2)
         ctk.CTkButton(f2, text="Pick", width=50, command=lambda: self.pick_color("fish_color")).pack(side="right", padx=2)
 
         ctk.CTkLabel(tab, text="\nDetection Tolerance (Variance):", font=("Arial", 14, "bold")).pack(pady=(10, 0))
@@ -323,16 +378,16 @@ class SpatialGUI:
         ctk.CTkButton(tab, text="Reset Fishing Defaults", fg_color="#A13333", 
                       command=self.reset_fishing_defaults).pack(pady=5)
 
-        ctk.CTkButton(tab, text="Test Full Tracking", fg_color="#334455", command=self.logic.test_detection).pack(pady=20)
+        ctk.CTkButton(tab, text="Test Full Tracking", fg_color="#334455", command=lambda: self._run_test(self.logic.test_detection)).pack(pady=20)
 
     def reset_fishing_defaults(self):
         self.settings.set("bar_color", [95, 153, 98])
         self.settings.set("fish_color", [188, 187, 144])
         self.settings.set("color_tolerance", 25)
-        # Update UI previews
-        self.bar_preview.configure(fg_color='#5f9962') # 95, 153, 98
+                            
+        self.bar_preview.configure(fg_color='#5f9962')              
         self.bar_color_lbl.configure(text="[95, 153, 98]")
-        self.fish_preview.configure(fg_color='#bcbb90') # 188, 187, 144
+        self.fish_preview.configure(fg_color='#bcbb90')                
         self.fish_color_lbl.configure(text="[188, 187, 144]")
         if hasattr(self, 'fishing_tolerance_slider'):
             self.fishing_tolerance_slider.set(25)
@@ -345,10 +400,27 @@ class SpatialGUI:
         ctk.CTkLabel(tab, text="Custom Hotkeys", font=("Arial", 16, "bold")).pack(pady=10)
         self.hotkey_entries = {}
         hotkeys = self.settings.get("hotkeys")
-        actions = ["start", "refresh", "test_btn", "test_color"]
+        actions = ["start", "refresh"]
+
+        if "Fishing" in self.root.title():
+            if hasattr(self.logic, 'test_bar_detection'):
+                actions.append('test_btn')
+            if hasattr(self.logic, 'test_fish_detection'):
+                actions.append('test_color')
+        else:
+            if hasattr(self.logic, 'test_detection'):
+                actions.append('test_btn')
+            if hasattr(self.logic, 'test_color_detection'):
+                actions.append('test_color')
+
+        if hasattr(self.logic, 'test_movement'):
+            actions.append('test_movement')
+
         for a in actions:
             f = ctk.CTkFrame(tab); f.pack(pady=2, fill="x", padx=20)
-            ctk.CTkLabel(f, text=a.replace("_", " ").capitalize(), width=100).pack(side="left", padx=5)
+            display_names = {"test_btn": "Test White", "test_color": "Test Color", "test_movement": "Test Movement"}
+            label_text = display_names.get(a, a.replace("_", " ").capitalize())
+            ctk.CTkLabel(f, text=label_text, width=100).pack(side="left", padx=5)
             e = ctk.CTkEntry(f, width=80); e.insert(0, hotkeys.get(a, "")); e.pack(side="right", padx=5)
             e.bind("<FocusOut>", lambda ev, ac=a: self.update_hotkey(ac)); self.hotkey_entries[a] = e
         ctk.CTkButton(tab, text="Apply Hotkeys", command=self.register_hotkeys).pack(pady=20)
@@ -356,36 +428,85 @@ class SpatialGUI:
     def register_hotkeys(self):
         keyboard.unhook_all()
         hk = self.settings.get("hotkeys")
-        try:
-            # Universal keys
-            keyboard.add_hotkey(hk['start'], self.logic.start)
-            keyboard.add_hotkey(hk['refresh'], self.refresh_macro)
 
-            # Context-specific keys
-            if "Fishing" in self.root.title():
-                if hasattr(self.logic, 'test_bar_detection'): 
-                    keyboard.add_hotkey(hk['test_btn'], self.logic.test_bar_detection)
-                if hasattr(self.logic, 'test_fish_detection'): 
-                    keyboard.add_hotkey(hk['test_color'], self.logic.test_fish_detection)
-            else:
-                if hasattr(self.logic, 'test_detection'): 
-                    keyboard.add_hotkey(hk['test_btn'], self.logic.test_detection)
-                if hasattr(self.logic, 'test_color_detection'): 
-                    keyboard.add_hotkey(hk['test_color'], self.logic.test_color_detection)
-            
-            self.log("Hotkeys registered")
-        except Exception as e: self.log(f"Hotkey Error: {e}")
+        def try_add(key_name, callback):
+            try:
+                key_val = hk.get(key_name)
+                if key_val:
+                    keyboard.add_hotkey(key_val, callback)
+            except Exception as e:
+                self.log(f"Hotkey Error ({key_name}): {e}")
+
+        try_add('start', self.logic.start)
+        try_add('refresh', self.refresh_macro)
+
+        if "Fishing" in self.root.title():
+            if hasattr(self.logic, 'test_bar_detection'):
+                try_add('test_btn', lambda: self._run_test(self.logic.test_bar_detection))
+            if hasattr(self.logic, 'test_fish_detection'):
+                try_add('test_color', lambda: self._run_test(self.logic.test_fish_detection))
+        else:
+            if hasattr(self.logic, 'test_detection'):
+                try_add('test_btn', lambda: self._run_test(self.logic.test_detection))
+            if hasattr(self.logic, 'test_color_detection'):
+                try_add('test_color', lambda: self._run_test(self.logic.test_color_detection))
+            if hasattr(self.logic, 'test_movement'):
+                try_add('test_movement', lambda: self._run_test(self.logic.test_movement))
+
+        self.log("Hotkeys registered")
 
     def refresh_macro(self):
         self.logic.stop(); self.settings.load(); self.register_hotkeys(); self.log("Macro Refreshed")
+
+    def _run_test(self, fn):
+        import threading
+        def wrapper():
+            self.logic.test_running = True
+            try:
+                fn()
+            finally:
+                self.logic.test_running = False
+        threading.Thread(target=wrapper, daemon=True).start()
 
     def update_hotkey(self, a):
         key = self.hotkey_entries[a].get().lower()
         hk = self.settings.get("hotkeys"); hk[a] = key; self.settings.set("hotkeys", hk); self.register_hotkeys()
 
     def update_move_name(self, idx):
-        names = self.settings.get("move_names"); names[idx] = self.move_entries[idx].get(); self.settings.set("move_names", names)
+        names = self.settings.get("move_names")
+        new_name = self.move_entries[idx].get()
+                                                              
+        if new_name != names[idx]:
+            names[idx] = new_name
+            self.settings.set("move_names", names)
+            self.clear_resolved_name(idx)
         self.update_gold_display()
+
+    def refresh_resolved_label(self, idx):
+        """Update the lock label for slot idx after a resolved name is saved."""
+        if not hasattr(self, "resolved_labels") or idx >= len(self.resolved_labels):
+            return
+        resolved = self.settings.get("resolved_move_names", ["", "", ""])[idx]
+        pos = self.settings.get("resolved_move_positions", [None, None, None])[idx]
+        if resolved and pos:
+            self.resolved_labels[idx].configure(
+                text=f"🔒 {resolved}  ({pos[0]}, {pos[1]})", text_color="#4CAF50"
+            )
+        elif resolved:
+            self.resolved_labels[idx].configure(text=f"🔒 {resolved}", text_color="#4CAF50")
+        else:
+            self.resolved_labels[idx].configure(text="unlocked", text_color="gray55")
+
+    def clear_resolved_name(self, idx):
+        """Clear the saved resolved name and position for slot idx."""
+        resolved = list(self.settings.get("resolved_move_names", ["", "", ""]))
+        resolved[idx] = ""
+        self.settings.set("resolved_move_names", resolved)
+        positions = list(self.settings.get("resolved_move_positions", [None, None, None]))
+        positions[idx] = None
+        self.settings.set("resolved_move_positions", positions)
+        self.refresh_resolved_label(idx)
+        self.log(f"Move {idx+1} lock cleared.")
 
     def update_tolerance(self, val):
         self.settings.set("color_tolerance", int(val))
@@ -393,10 +514,33 @@ class SpatialGUI:
             self.clover_tolerance_val_label.configure(text=f"Value: {int(val)}")
         if hasattr(self, 'fishing_tolerance_val_label'):
             self.fishing_tolerance_val_label.configure(text=f"Value: {int(val)}")
+        if hasattr(self, 'tundra_tolerance_val_label'):
+            self.tundra_tolerance_val_label.configure(text=f"Value: {int(val)}")
         if hasattr(self, 'clover_tolerance_slider'):
             self.clover_tolerance_slider.set(int(val))
         if hasattr(self, 'fishing_tolerance_slider'):
             self.fishing_tolerance_slider.set(int(val))
+        if hasattr(self, 'tundra_tolerance_slider'):
+            self.tundra_tolerance_slider.set(int(val))
+
+    def update_speed_multiplier(self, val):
+        rounded = round(float(val), 2)
+        self.settings.set("speed_multiplier", rounded)
+        if hasattr(self, 'speed_val_label'):
+            self.speed_val_label.configure(text=f"Value: {rounded:.2f}x")
+
+    def reset_tundra_defaults(self):
+        self.settings.set("speed_multiplier", 1.0)
+        self.settings.set("color_tolerance", 25)
+        if hasattr(self, 'speed_slider'):
+            self.speed_slider.set(1.0)
+        if hasattr(self, 'speed_val_label'):
+            self.speed_val_label.configure(text="Value: 1.00x")
+        if hasattr(self, 'fishing_tolerance_slider'):
+            self.fishing_tolerance_slider.set(25)
+        if hasattr(self, 'fishing_tolerance_val_label'):
+            self.fishing_tolerance_val_label.configure(text="Value: 25")
+        self.log("Tundra Defaults Restored")
 
     def update_clover_tolerance(self, color_type, val):
         tols = self.settings.get("clover_tolerances", {})
@@ -453,7 +597,6 @@ class SpatialGUI:
         self.settings.set("clover_tolerances", {"gold": 25, "silver": 25, "bronze": 25})
         self.settings.set("color_tolerance", 25)
         
-        # Update color preview frames and labels
         for c in ["bronze", "silver", "gold"]:
             color = self.DEFAULT_CLOVER_COLORS[c]
             hex_color = '#%02x%02x%02x' % tuple(color)
@@ -462,13 +605,11 @@ class SpatialGUI:
             if c in self.color_labels:
                 self.color_labels[c].configure(text=str(list(color)))
             
-            # Update individual tolerance sliders and labels
             if c in self.clover_tol_sliders:
                 self.clover_tol_sliders[c].set(25)
             if c in self.clover_tol_labels:
                 self.clover_tol_labels[c].configure(text="25")
                 
-        # Update global tolerance slider and label if they exist
         if hasattr(self, 'clover_tolerance_slider'):
             self.clover_tolerance_slider.set(25)
         if hasattr(self, 'clover_tolerance_val_label'):
@@ -525,12 +666,11 @@ class SpatialGUI:
         self.hide_overlays()
         regions = self.settings.get("regions")
         
-        # Define which regions belong to which macro
         if "Fishing" in self.root.title():
             relevant_keys = ["minigame_bar"]
         elif "Tundra" in self.root.title():
-            relevant_keys = [] # Tundra might not have specific scan regions yet
-        else: # Default/Library
+            relevant_keys = ["tundra_detection_region"]
+        else:                  
             relevant_keys = ["score", "move_menu", "quest_region", "gold_clover_1", "gold_clover_2", "gold_clover_3"]
 
         colors = ["red", "green", "blue", "yellow", "cyan", "magenta"]

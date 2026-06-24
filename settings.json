@@ -1,9 +1,9 @@
 {
     "use_ocr": true,
     "move_names": [
-        "Rain",
-        "Rain",
-        ""
+        "eeee",
+        "eeee",
+        "eeee"
     ],
     "clover_colors": {
         "gold": [
@@ -22,7 +22,7 @@
             139
         ]
     },
-    "color_tolerance": 20,
+    "color_tolerance": 25,
     "hotkeys": {
         "start": "f6",
         "stop": "f9",
@@ -68,16 +68,28 @@
     },
     "regions": {
         "score": [
-            0,
-            173,
-            1919,
-            932
+            46,
+            213,
+            1916,
+            904
+        ],
+        "quest_region": [
+            410,
+            48,
+            507,
+            64
+        ],
+        "tundra_detection_region": [
+            833,
+            504,
+            1106,
+            724
         ],
         "gold_clover_1": [
-            736,
-            948,
-            742,
-            959
+            735,
+            938,
+            747,
+            952
         ],
         "gold_clover_2": [
             804,
@@ -86,10 +98,10 @@
             955
         ],
         "gold_clover_3": [
-            871,
-            948,
-            880,
-            959
+            985,
+            965,
+            1008,
+            984
         ],
         "anti_hotkey": [
             0,
@@ -110,26 +122,20 @@
             0
         ],
         "move_menu": [
-            1189,
-            788,
-            1565,
-            1035
-        ],
-        "quest_region": [
-            374,
-            24,
-            546,
-            94
+            1235,
+            810,
+            1459,
+            1011
         ],
         "minigame_bar": [
-            609,
-            737,
-            1307,
-            787
+            615,
+            741,
+            1306,
+            785
         ],
         "fishing_click_pos": [
-            1199,
-            565
+            1246,
+            551
         ]
     },
     "bar_color": [
@@ -142,16 +148,27 @@
         187,
         144
     ],
-    "total_gold": 250,
+    "total_gold": 338250,
     "move_stats": [
-        250,
+        338250,
         0,
         0
     ],
+    "resolved_move_names": [
+        "",
+        "",
+        ""
+    ],
+    "resolved_move_positions": [
+        null,
+        null,
+        null
+    ],
+    "speed_multiplier": 1.0,
     "clover_tolerances": {
-        "gold": 20,
-        "silver": 17,
-        "bronze": 32
+        "gold": 33,
+        "silver": 30,
+        "bronze": 40
     },
     "total_xp": 0,
     "selected_option": 1,

@@ -36,6 +36,7 @@ class SpatialSettings:
                 "score": [0, 0, 0, 0],
                 "move_menu": [0, 0, 0, 0],
                 "quest_region": [0, 0, 0, 0],
+                "tundra_detection_region": [0, 0, 0, 0],
                 "gold_clover_1": [0, 0, 0, 0],
                 "gold_clover_2": [0, 0, 0, 0],
                 "gold_clover_3": [0, 0, 0, 0],
@@ -44,7 +45,10 @@ class SpatialSettings:
             "bar_color": [95, 153, 98],
             "fish_color": [188, 187, 144],
             "total_gold": 0,
-            "move_stats": [0, 0, 0]
+            "move_stats": [0, 0, 0],
+            "resolved_move_names": ["", "", ""],
+            "resolved_move_positions": [None, None, None],
+            "speed_multiplier": 1.0
         }
         self.load()
 

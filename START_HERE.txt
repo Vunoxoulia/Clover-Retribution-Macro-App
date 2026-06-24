@@ -1,0 +1,74 @@
+╔════════════════════════════════════════════════════════════════╗
+║                   SPATIAL MACRO - START HERE                   ║
+║              Cross-Platform Roblox Automation Tool              ║
+╚════════════════════════════════════════════════════════════════╝
+
+🚀 QUICK START (Choose your OS)
+═════════════════════════════════════════════════════════════════
+
+📌 WINDOWS:
+   1. Double-click: Windows_Launcher.bat
+   2. Wait for Python detection/installation
+   3. Wait for dependencies to install
+   4. Macro launches! 🎮
+
+📌 MACOS / LINUX:
+   1. Open Terminal in this folder
+   2. Run: bash Linux_Mac_Launcher.sh
+   3. Wait for dependencies to install
+   4. Macro launches! 🎮
+
+═════════════════════════════════════════════════════════════════
+
+📋 WHAT'S INCLUDED
+═════════════════════════════════════════════════════════════════
+
+✅ Windows launcher (auto-detects Python)
+✅ macOS/Linux launcher
+✅ Automatic dependency installation
+✅ Cross-platform support
+✅ Modern GUI with multiple macros
+✅ OCR-based automation
+✅ Hotkey customization
+
+═════════════════════════════════════════════════════════════════
+
+📚 DOCUMENTATION
+═════════════════════════════════════════════════════════════════
+
+SETUP.md              ← Installation instructions
+TROUBLESHOOTING.md    ← Common issues and solutions
+README.txt            ← Original documentation
+
+═════════════════════════════════════════════════════════════════
+
+✨ SYSTEM REQUIREMENTS
+═════════════════════════════════════════════════════════════════
+
+Minimum:
+  • Windows 10 / macOS 10.14 / Ubuntu 18.04+
+  • 4GB RAM
+  • Python 3.10+ (auto-detected/downloaded on Windows)
+
+Recommended:
+  • Windows 11 / macOS 12+ / Ubuntu 20.04+
+  • 8GB+ RAM
+  • Display: 1920x1080 at 100% scaling
+
+═════════════════════════════════════════════════════════════════
+
+❓ NEED HELP?
+═════════════════════════════════════════════════════════════════
+
+1. Check TROUBLESHOOTING.md for common issues
+2. Read SETUP.md for detailed setup steps
+3. Check README.txt for features and usage
+
+═════════════════════════════════════════════════════════════════
+
+🎮 YOU'RE ALL SET!
+
+Just run the launcher for your OS.
+No prior Python knowledge needed!
+
+═════════════════════════════════════════════════════════════════

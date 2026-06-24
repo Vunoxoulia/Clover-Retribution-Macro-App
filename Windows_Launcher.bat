@@ -1,6 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
-title VunVun's Macro Loader - V5.4
+title VunVun's Macro Loader - V5.5
 echo ========================================
 echo   Spatial Macro Launcher - Initializing
 echo ========================================
@@ -101,11 +101,30 @@ pause
 exit
 
 :python_ok
-echo [INFO] Using: !PY_EXE!
+for /f "tokens=2 delims= " %%V in ('"!PY_EXE!" --version 2^>^&1') do set "PY_VER=%%V"
+for /f "tokens=1,2 delims=." %%A in ("%PY_VER%") do (
+    set "PY_MAJOR=%%A"
+    set "PY_MINOR=%%B"
+)
+if "%PY_MAJOR%" neq "3" (
+    echo.
+    echo [ERROR] Unsupported Python version: %PY_VER%
+    echo This project requires Python 3.10 or newer.
+    pause
+    exit /b 1
+)
+if %PY_MINOR% lss 10 (
+    echo.
+    echo [ERROR] Unsupported Python version: %PY_VER%
+    echo This project requires Python 3.10 or newer.
+    pause
+    exit /b 1
+)
+echo [INFO] Using: !PY_EXE! (Python %PY_VER%)
 
 
 echo.
-echo [INFO] Performing V5.4 Cleanup...
+echo [INFO] Performing V5.5 Cleanup...
 
 
 if exist "%LocalAppData%\Python\pythoncore-3.14-64\python.exe" (
@@ -141,7 +160,7 @@ if !errorlevel! neq 0 (
 
 echo.
 echo [2/2] Starting Spatial Macro...
-echo [NOTICE] If this is your first time using V5.4, it may take a 
+echo [NOTICE] If this is your first time using V5.5, it may take a 
 echo moment to initialize the RapidOCR engine. Please wait!
 echo.
 "!PY_EXE!" main.py

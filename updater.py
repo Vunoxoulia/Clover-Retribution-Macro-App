@@ -63,7 +63,6 @@ class SpatialUpdater:
             l_parts = [int(p) for p in latest.split(".")]
             c_parts = [int(p) for p in current.split(".")]
             
-            
             max_len = max(len(l_parts), len(c_parts))
             l_parts.extend([0] * (max_len - len(l_parts)))
             c_parts.extend([0] * (max_len - len(c_parts)))
@@ -74,7 +73,6 @@ class SpatialUpdater:
 
     def install_update(self, download_url):
         try:
-            
             response = requests.get(download_url, stream=True)
             if response.status_code != 200:
                 messagebox.showerror("Error", "Failed to download update.")
@@ -85,32 +83,44 @@ class SpatialUpdater:
                 with open(zip_path, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         f.write(chunk)
-                
-                
+
                 with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                     zip_ref.extractall(temp_dir)
-                
-                
+
                 extracted_folder = None
                 for item in os.listdir(temp_dir):
                     item_path = os.path.join(temp_dir, item)
                     if os.path.isdir(item_path) and item != "__MACOSX":
                         extracted_folder = item_path
                         break
-                
+
                 if not extracted_folder:
                     messagebox.showerror("Error", "Update extraction failed.")
                     return
 
-                
-                
-                
                 dest_dir = os.path.abspath(".")
-                
-                for item in os.listdir(extracted_folder):
+
+                PRESERVE = {"settings.json", "Vunoxoulia.ico", "__pycache__"}
+
+                incoming_names = set(os.listdir(extracted_folder))
+
+                for existing in os.listdir(dest_dir):
+                    if existing in PRESERVE:
+                        continue
+                    if existing not in incoming_names:
+                        existing_path = os.path.join(dest_dir, existing)
+                        try:
+                            if os.path.isdir(existing_path):
+                                shutil.rmtree(existing_path)
+                            else:
+                                os.remove(existing_path)
+                        except Exception:
+                            pass                                             
+
+                for item in incoming_names:
                     src_path = os.path.join(extracted_folder, item)
                     dest_path = os.path.join(dest_dir, item)
-                    
+
                     if os.path.isdir(src_path):
                         if os.path.exists(dest_path):
                             shutil.rmtree(dest_path)

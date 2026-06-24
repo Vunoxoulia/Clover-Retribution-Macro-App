@@ -4,7 +4,7 @@ import sys
 import ctypes
 import os
 
-VERSION = "5.4"
+VERSION = "5.5"
 
 def get_resource_path(relative_path):
     
@@ -34,10 +34,12 @@ class SpatialApp:
         self.app = SpatialGUI(self.root, title=title, logic_class=logic_class, on_back=self.show_selector, tabs=tabs, tutorial_url=tutorial_url)
 
 def main():
-    try:
-        ctypes.windll.shcore.SetProcessDpiAwareness(1)
-    except:
-        pass
+    if sys.platform.startswith('win'):
+        try:
+            import ctypes
+            ctypes.windll.shcore.SetProcessDpiAwareness(1)
+        except:
+            pass
 
     root = ctk.CTk()
     
@@ -50,7 +52,13 @@ def main():
         
     if icon_path and os.path.exists(icon_path):
         try:
-            root.iconbitmap(icon_path)
+            if sys.platform.startswith('win'):
+                root.iconbitmap(icon_path)
+            else:
+                from PIL import Image, ImageTk
+                img = Image.open(icon_path)
+                photo = ImageTk.PhotoImage(img)
+                root.wm_iconphoto(True, photo)
         except Exception as e:
             print(f"Could not load icon: {e}")
 

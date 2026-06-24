@@ -1,3 +1,6 @@
+HOW TO RUN SPATIAL MACRO
+========================
+
 WHAT'S NEW IN V5.4
 =================
 - New OCR Engine: Switched from EasyOCR to RapidOCR (PaddleOCR).
@@ -13,7 +16,7 @@ PREREQUISITES & SYSTEM REQUIREMENTS
 
 SOFTWARE REQUIREMENTS:
 - Operating System: Windows 10 or Windows 11 (64-bit).
-- Python: Version 3.10 to 3.13 (3.12.3 is recommended).
+- Python: Version 3.10 or newer (3.12.3 is recommended).
 - Microsoft Visual C++ Redistributable (x64): Required for OCR features.
   (run.bat will check for this and provide a download link if missing).
 
@@ -36,9 +39,7 @@ INSTALLING PYTHON:
 HOW TO RUN
 ==========
 
-double click or open Windows_Launcher.bat for windows users
-
-double click or open Linux_Mac_Launcher.sh for Linux and Mac users this is however experimental im not sure if its going to work.
+1. run.bat
 ----------
 Use this for daily use. It will automatically install required libraries, check for system dependencies, and start the macro.
 Double-click this file to launch.

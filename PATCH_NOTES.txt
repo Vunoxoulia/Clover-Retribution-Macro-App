@@ -1,3 +1,16 @@
+WHAT'S NEW IN V5.5
+=================
+- Move Lock System: Move slots now save both the detected name and exact screen coordinates. At runtime the macro waits for OCR to confirm the raw input name is visible, then clicks the saved position directly — bypassing ambiguous OCR matches entirely.
+- Exact vs Partial Matching: Locked slots use exact string matching; unlocked slots use substring matching. This fixes false positives where "Arcane Door I" would match "Arcane Door II" or "III".
+- Auto-Lock on Single Match: If OCR finds exactly one match for an unlocked slot at runtime, it clicks and saves the coordinates automatically without user input.
+- Multi-Match Guard: If an unlocked slot matches multiple items at runtime, the macro stops that cycle and logs a clear error telling the user to run the Test button first to lock the correct move.
+- Quest Region White Detection Fix: Switched from contour-based pixel search (which filtered out thin text strokes) to a raw pixel presence check, fixing false negatives where the region clearly contained white text but was reported as empty.
+- Thread-Safe Key Input: Fixed AttributeError where _key_lock was incorrectly defined inside mouse_move instead of __init__, causing crashes on any send_key call from a background thread.
+- Stale Snapshot Fix: Runtime dialogue handler now reads resolved_move_names and resolved_move_positions fresh from the live settings dict rather than a snapshot taken at method entry.
+- Tundra Speed Multiplier: All travel sleep durations in the Tundra macro are now divided by a configurable speed multiplier. Default 1.0 preserves existing timings; values above 1.0 shorten travel holds proportionally for faster races.
+- Tundra Test Movement Cleanup: Removed all ore mining (e key) interactions from the movement test — it now traces the full path without triggering any game actions.
+- Update Cleanup: The auto-updater now deletes local files that are not present in the new release zip before copying new files in, removing stale launchers and scripts automatically on update. User data (settings.json, icon) is always preserved.
+
 WHAT'S NEW IN V5.4
 =================
 - New OCR Engine: Switched from EasyOCR to RapidOCR (PaddleOCR models). This significantly reduces CPU/RAM usage and improves text detection speed.
@@ -7,6 +20,7 @@ WHAT'S NEW IN V5.4
 - Improved Compatibility: Replaced legacy Windows-only input methods with a cross-platform input engine (`pynput`) for better support on Linux and Mac.
 - Smarter Screen Capture: Added automatic window detection using `pywinctl`, allowing the macro to focus on the Roblox window even when it's moved or resized.
 - Intelligent Execution: Added platform-specific execution providers (CoreML for Mac, CUDA for Linux) for near-instant OCR results.
+- UI Overhaul: Updated the Macro Hub with a modern card-based layout and direct YouTube tutorial links for each macro.
 - Core Stability: Refactored base logic classes to prevent crashes during long sessions and improve input handling reliability.
 
 WHAT'S NEW IN V5.3
