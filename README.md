@@ -6,6 +6,11 @@ Hello everyone this is my open source macro app
 
 Click the green "Code" button and extract as zip file
 
+After Download
+
+Click the folder.zip
+Right click and Extract all
+
 REREQUISITES & SYSTEM REQUIREMENTS
 ==================================
 
