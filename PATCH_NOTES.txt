@@ -1,3 +1,9 @@
+WHAT'S NEW IN V5.5.2
+=================
+- Reset to Defaults Fix: Clover color reset now saves colors as lists instead of tuples, preventing JSON round-trip mismatches that caused the reset to silently fail for some users.
+- Unified Color Defaults: Bronze clover default color was mismatched between the GUI and the detection logic. Both now use the same value so reset produces colors that actually work.
+- Correct Tolerance Defaults: Reset now restores tolerances to the values the detection logic is tuned for (Gold: 33, Silver: 30, Bronze: 40) instead of the incorrect flat 25 across all types.
+
 WHAT'S NEW IN V5.5.1
 =================
 - Statistics Fix: Training statistics (total gold and per-move counts) were not updating after each cycle. The update block is now correctly placed at the end of the scoring phase and always runs regardless of how the minigame ends.

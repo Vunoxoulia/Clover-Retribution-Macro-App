@@ -17,9 +17,9 @@
             197
         ],
         "bronze": [
-            219,
-            151,
-            139
+            251,
+            197,
+            170
         ]
     },
     "color_tolerance": 25,
@@ -148,10 +148,10 @@
         187,
         144
     ],
-    "total_gold": 250,
+    "total_gold": 27250,
     "move_stats": [
+        27000,
         250,
-        0,
         0
     ],
     "resolved_move_names": [
@@ -175,8 +175,8 @@
     ],
     "speed_multiplier": 1.0,
     "clover_tolerances": {
-        "gold": 35,
-        "silver": 30,
+        "gold": 25,
+        "silver": 25,
         "bronze": 40
     },
     "total_xp": 0,

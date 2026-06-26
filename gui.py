@@ -39,7 +39,7 @@ class MacroSelector:
         self.create_card("Library Macro", "Full automation for the\nSpatial Library.", "Launch", 
                          lambda: self.on_select("Library Macro", LibraryLogic, 
                                                 tabs=["Main", "Settings", "Areas", "Clover Clicker", "Hotkeys", "Statistics"],
-                                                tutorial_url="https://youtu.be/96WNiCHcvW0"), 0)
+                                                tutorial_url="https://youtu.be/Nb1vjq6DC4I"), 0)
 
         self.create_card("Tundra Mining", "Automated mining in\nthe Tundra region.", "Launch", 
                          lambda: self.on_select("Tundra Mining", TundraLogic, 
@@ -125,7 +125,8 @@ class SpatialGUI:
         self.logic = logic_class(self)
         self.overlays = {} 
         self.tabs_to_show = tabs if tabs else ["Main", "Settings", "Areas", "Clover Clicker", "Hotkeys", "Statistics"]
-        self.DEFAULT_CLOVER_COLORS = {"gold": (251, 198, 108), "silver": (187, 197, 197), "bronze": (251, 197, 170)}
+        self.DEFAULT_CLOVER_COLORS = {"gold": (251, 198, 108), "silver": (187, 197, 197), "bronze": (219, 151, 139)}
+        self.DEFAULT_CLOVER_TOLERANCES = {"gold": 33, "silver": 30, "bronze": 40}
         self.root.protocol("WM_DELETE_WINDOW", self.exit_app)
         self.setup_ui()
         self.register_hotkeys()
@@ -594,23 +595,24 @@ class SpatialGUI:
             self.color_labels[key].configure(text=str(list(color)))
 
     def reset_clover_colors(self):
-        self.settings.set("clover_colors", self.DEFAULT_CLOVER_COLORS)
-        self.settings.set("clover_tolerances", {"gold": 25, "silver": 25, "bronze": 25})
+        default_colors = {k: list(v) for k, v in self.DEFAULT_CLOVER_COLORS.items()}
+        default_tols = {"gold": 33, "silver": 30, "bronze": 40}
+        self.settings.set("clover_colors", default_colors)
+        self.settings.set("clover_tolerances", default_tols)
         self.settings.set("color_tolerance", 25)
-        
+
         for c in ["bronze", "silver", "gold"]:
-            color = self.DEFAULT_CLOVER_COLORS[c]
+            color = list(self.DEFAULT_CLOVER_COLORS[c])
             hex_color = '#%02x%02x%02x' % tuple(color)
             if c in self.color_previews:
                 self.color_previews[c].configure(fg_color=hex_color)
             if c in self.color_labels:
-                self.color_labels[c].configure(text=str(list(color)))
-            
+                self.color_labels[c].configure(text=str(color))
             if c in self.clover_tol_sliders:
-                self.clover_tol_sliders[c].set(25)
+                self.clover_tol_sliders[c].set(default_tols[c])
             if c in self.clover_tol_labels:
-                self.clover_tol_labels[c].configure(text="25")
-                
+                self.clover_tol_labels[c].configure(text=str(default_tols[c]))
+
         if hasattr(self, 'clover_tolerance_slider'):
             self.clover_tolerance_slider.set(25)
         if hasattr(self, 'clover_tolerance_val_label'):
@@ -619,8 +621,8 @@ class SpatialGUI:
             self.fishing_tolerance_slider.set(25)
         if hasattr(self, 'fishing_tolerance_val_label'):
             self.fishing_tolerance_val_label.configure(text="Value: 25")
-            
-        self.log("Clover Defaults Restored (Tol: 25)")
+
+        self.log("Clover Defaults Restored")
 
     def exit_app(self):
         self.logic.stop(); self.root.destroy(); os._exit(0)
