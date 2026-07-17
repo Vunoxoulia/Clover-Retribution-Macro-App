@@ -228,6 +228,8 @@ class SpatialGUI:
             return
 
         ctk.CTkButton(tab, text="Move Selection Area (OCR)", command=lambda: self.pick_region("move_menu")).pack(pady=10)
+        ctk.CTkButton(tab, text="Test Ok Popup (F1)", fg_color="#445566", width=160,
+                      command=lambda: self._run_test(self.logic.test_detection)).pack(pady=(0, 10))
         ctk.CTkLabel(tab, text="Move Names (for OCR):").pack(pady=5)
         self.move_entries = []
         self.resolved_labels = []
@@ -420,7 +422,7 @@ class SpatialGUI:
 
         for a in actions:
             f = ctk.CTkFrame(tab); f.pack(pady=2, fill="x", padx=20)
-            display_names = {"test_btn": "Test White", "test_color": "Test Color", "test_movement": "Test Movement"}
+            display_names = {"test_btn": "Test Ok Popup", "test_color": "Test Color", "test_movement": "Test Movement"}
             label_text = display_names.get(a, a.replace("_", " ").capitalize())
             ctk.CTkLabel(f, text=label_text, width=100).pack(side="left", padx=5)
             e = ctk.CTkEntry(f, width=80); e.insert(0, hotkeys.get(a, "")); e.pack(side="right", padx=5)

@@ -1,3 +1,10 @@
+WHAT'S NEW IN V5.6
+=================
+- Ok Button Detection Rework: Scanner now OCRs the entire Roblox window and looks for the text "Ok" directly, then clicks it with smooth movement. Clicks twice with a 1 second gap to ensure the popup registers.
+- Post-Ok Recovery: After dismissing the Ok popup, the library macro automatically re-runs the approach movement (D/S/W) so the character gets back to the correct position without the cycle failing.
+- Roblox Window Scoping: All popup detection now scopes to the Roblox window bounds specifically rather than the full monitor, preventing false detections from other windows.
+- pixel_search_raw Utility: Added raw pixel coordinate search method to SpatialUtils for dense pixel-level detection independent of contour filtering.
+
 WHAT'S NEW IN V5.5.2
 =================
 - Reset to Defaults Fix: Clover color reset now saves colors as lists instead of tuples, preventing JSON round-trip mismatches that caused the reset to silently fail for some users.

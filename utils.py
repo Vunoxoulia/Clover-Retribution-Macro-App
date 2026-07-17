@@ -273,14 +273,24 @@ class SpatialUtils:
             return centers
         return None
 
-    def check_pixel_area(self, region, target_color, tolerance=10):
+    def pixel_search_raw(self, region, target_color, tolerance=10):
         img = self.capture_screen(region)
         img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-        
         r, g, b = self._parse_target_color(target_color)
         lower = np.array([max(0, b - tolerance), max(0, g - tolerance), max(0, r - tolerance)])
         upper = np.array([min(255, b + tolerance), min(255, g + tolerance), min(255, r + tolerance)])
-        
+        mask = cv2.inRange(img_bgr, lower, upper)
+        coords = np.column_stack(np.where(mask > 0))
+        if len(coords) == 0:
+            return []
+        return [(region[0] + int(c[1]), region[1] + int(c[0])) for c in coords]
+
+    def check_pixel_area(self, region, target_color, tolerance=10):
+        img = self.capture_screen(region)
+        img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+        r, g, b = self._parse_target_color(target_color)
+        lower = np.array([max(0, b - tolerance), max(0, g - tolerance), max(0, r - tolerance)])
+        upper = np.array([min(255, b + tolerance), min(255, g + tolerance), min(255, r + tolerance)])
         mask = cv2.inRange(img_bgr, lower, upper)
         return np.any(mask > 0)
 

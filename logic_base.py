@@ -22,6 +22,7 @@ class BaseLogic:
         self._mouse = MouseController()
         self.input_lock = RobloxInputDriver._lock
         self.test_running = False
+        self.on_ok_clicked = None
 
     def _sleep(self, seconds, granularity=0.05):
         end = time.time() + seconds
@@ -112,15 +113,16 @@ class BaseLogic:
             steps = max(6, int(distance / random.randint(15, 30)))
             sleep_per_step = duration / steps
 
+            was_running = self.running
             for i in range(1, steps + 1):
-                if not self.running:
+                if was_running and not self.running:
                     break
                 t = i / steps
-                t = t * (2 - t)  
-                
+                t = t * (2 - t)
+
                 current_x = int(start_x + dx * t)
                 current_y = int(start_y + dy * t)
-                
+
                 RobloxInputDriver.move_to(current_x, current_y)
                 time.sleep(sleep_per_step)
                 
@@ -142,32 +144,61 @@ class BaseLogic:
             pass
         return 1920, 1080           
 
-    def handle_ok_popup(self):
-        """Scans the screen for an 'Ok' button and clicks it if found."""
+    def _find_button_cluster(self, hits, min_cluster=30, proximity=20):
+        if not hits:
+            return None
+        clusters = []
+        for x, y in hits:
+            placed = False
+            for cluster in clusters:
+                cx, cy = cluster["cx"], cluster["cy"]
+                if abs(x - cx) <= proximity and abs(y - cy) <= proximity:
+                    cluster["points"].append((x, y))
+                    cluster["cx"] = int(np.mean([p[0] for p in cluster["points"]]))
+                    cluster["cy"] = int(np.mean([p[1] for p in cluster["points"]]))
+                    placed = True
+                    break
+            if not placed:
+                clusters.append({"points": [(x, y)], "cx": x, "cy": y})
+        best = max(clusters, key=lambda c: len(c["points"]))
+        if len(best["points"]) >= min_cluster:
+            return (best["cx"], best["cy"])
+        return None
+
+    def get_roblox_window_region(self):
         try:
-            screen_w, screen_h = self.get_screen_size()
-                                                                                  
-            left = int(screen_w * 0.3)
-            top = int(screen_h * 0.3)
-            right = int(screen_w * 0.7)
-            bottom = int(screen_h * 0.7)
-            center_region = [left, top, right, bottom]
-            
-            results = self.utils.get_text_from_region(center_region, upscale=1)
+            import pywinctl
+            windows = pywinctl.getWindowsWithTitle("Roblox")
+            if windows:
+                active = pywinctl.getActiveWindow()
+                w = active if active and "Roblox" in active.title else windows[0]
+                return [w.left, w.top, w.left + w.width, w.top + w.height]
+        except Exception:
+            pass
+        screen_w, screen_h = self.get_screen_size()
+        return [0, 0, screen_w, screen_h]
+
+    def handle_ok_popup(self):
+        try:
+            win = self.get_roblox_window_region()
+            results = self.utils.get_text_from_region(win, upscale=1)
             for bbox, text, conf in results:
-                if text.strip() == "Ok":
-                    cx = center_region[0] + int(np.mean([p[0] for p in bbox]))
-                    cy = center_region[1] + int(np.mean([p[1] for p in bbox]))
-                    self.app.log(f"Detected 'Ok' popup at ({cx}, {cy}). Clicking...")
-                    
+                if text.strip().lower() == "ok":
+                    cx = win[0] + int(np.mean([p[0] for p in bbox]))
+                    cy = win[1] + int(np.mean([p[1] for p in bbox]))
+                    self.app.log(f"Found 'Ok' at ({cx}, {cy}). Clicking...")
                     with self.input_lock:
                         old_x, old_y = self.get_cursor_pos()
-                        self.human_click(cx, cy, duration=0.08)
-                        time.sleep(0.1)
+                    self.human_click(cx, cy, duration=0.15)
+                    time.sleep(1.0)
+                    self.human_click(cx, cy, duration=0.15)
+                    with self.input_lock:
                         RobloxInputDriver.move_to(old_x, old_y)
+                    if self.on_ok_clicked:
+                        threading.Thread(target=self.on_ok_clicked, daemon=True).start()
                     return True
         except Exception as e:
-            self.app.log(f"Error checking for 'Ok' popup: {e}")
+            self.app.log(f"Error checking for Ok popup: {e}")
         return False
 
     def main_loop(self):

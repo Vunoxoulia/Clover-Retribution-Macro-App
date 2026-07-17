@@ -1,9 +1,9 @@
 {
     "use_ocr": true,
     "move_names": [
-        "Striking",
-        "Sky",
-        "Cagc"
+        "Shift",
+        "Budge",
+        ""
     ],
     "clover_colors": {
         "gold": [
@@ -68,16 +68,16 @@
     },
     "regions": {
         "score": [
-            46,
-            213,
-            1916,
-            904
+            1122,
+            179,
+            1919,
+            928
         ],
         "quest_region": [
-            410,
-            48,
-            507,
-            64
+            1526,
+            54,
+            1633,
+            77
         ],
         "tundra_detection_region": [
             833,
@@ -86,22 +86,22 @@
             724
         ],
         "gold_clover_1": [
-            735,
-            938,
-            747,
-            952
+            1298,
+            939,
+            1307,
+            953
         ],
         "gold_clover_2": [
-            804,
-            943,
-            813,
-            955
+            1363,
+            941,
+            1367,
+            956
         ],
         "gold_clover_3": [
-            985,
-            965,
-            1008,
-            984
+            1427,
+            946,
+            1435,
+            964
         ],
         "anti_hotkey": [
             0,
@@ -122,10 +122,10 @@
             0
         ],
         "move_menu": [
-            1235,
-            810,
-            1459,
-            1011
+            1626,
+            813,
+            1736,
+            1024
         ],
         "minigame_bar": [
             615,
@@ -148,30 +148,27 @@
         187,
         144
     ],
-    "total_gold": 27250,
+    "total_gold": 0,
     "move_stats": [
-        27000,
-        250,
+        0,
+        0,
         0
     ],
     "resolved_move_names": [
-        "Sovercign Magic: Striking",
-        "Sovercign Magic: Sky Gates",
-        "Sovercign Magic: Cagc Gates"
+        "Balancc Shift",
+        "Budge",
+        ""
     ],
     "resolved_move_positions": [
         [
-            1345,
-            833
+            1680,
+            838
         ],
         [
-            1345,
-            888
+            1680,
+            894
         ],
-        [
-            1345,
-            937
-        ]
+        null
     ],
     "speed_multiplier": 1.0,
     "clover_tolerances": {

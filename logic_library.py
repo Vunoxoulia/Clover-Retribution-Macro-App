@@ -33,6 +33,14 @@ class LibraryLogic(BaseLogic):
         }
         
         self.ocr_cache = {}
+        self.on_ok_clicked = self._recover_after_ok
+
+    def _recover_after_ok(self):
+        if not self.running:
+            return
+        self.app.log("Ok popup dismissed — redoing approach movement to recover position...")
+        time.sleep(1.0)
+        self.perform_approach_movement()
 
     def main_loop(self):
         while self.running:
@@ -329,31 +337,21 @@ class LibraryLogic(BaseLogic):
         return True
 
     def test_detection(self):
-        settings = self.app.settings.settings
-        menu_region = settings["regions"].get("move_menu", [0, 0, 0, 0])
-        
-        if all(v == 0 for v in menu_region):
-            self.app.log("Test: Move Selection Area (move_menu) region is not set!")
-            return
-            
-        self.app.log("Testing Move Selection Area for 'clover' or 'training'...")
-        
-        results = self.utils.get_text_from_region(menu_region)
-        combined_text = " ".join([res[1].lower() for res in results])
-        
-        if "clover" in combined_text or "training" in combined_text:
-            matched_word = "clover" if "clover" in combined_text else "training"
-            self.app.log(f"Test: SUCCESS! Detected '{matched_word}' in selection area.")
-            
-            for bbox, text, conf in results:
-                if "clover" in text.lower() or "training" in text.lower():
-                    center_x = menu_region[0] + int(np.mean([p[0] for p in bbox]))
-                    center_y = menu_region[1] + int(np.mean([p[1] for p in bbox]))
-                    self.smooth_move(center_x, center_y, duration=0.15)
-                    break
-        else:
-            detected_raw = ", ".join([res[1] for res in results]) if results else "Nothing"
-            self.app.log(f"Test: FAILED. Keywords not found. Saw: [{detected_raw}]")
+        self.app.log("Testing Ok popup detection...")
+        win = self.get_roblox_window_region()
+        self.app.log(f"Scanning Roblox window: {win}")
+        results = self.utils.get_text_from_region(win, upscale=1)
+        self.app.log(f"OCR saw: [{', '.join([r[1] for r in results]) if results else 'nothing'}]")
+        for bbox, text, conf in results:
+            if text.strip().lower() == "ok":
+                cx = win[0] + int(np.mean([p[0] for p in bbox]))
+                cy = win[1] + int(np.mean([p[1] for p in bbox]))
+                self.app.log(f"Test: Found 'Ok' at ({cx}, {cy}). Moving and clicking.")
+                self.utils.mouse_move(cx, cy)
+                time.sleep(0.5)
+                RobloxInputDriver.click_at(cx, cy, duration=0.035)
+                return
+        self.app.log("Test: 'Ok' not found in Roblox window.")
 
     def _save_resolved_name(self, idx, text, abs_pos=None):
         """Persist the resolved move name and optional absolute screen position for slot idx."""
