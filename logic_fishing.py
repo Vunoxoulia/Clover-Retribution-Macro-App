@@ -9,6 +9,10 @@ class FishingLogic(BaseLogic):
         super().__init__(app)
         self.is_holding_space = False
 
+    def _hue_tol(self, tolerance):
+        """Map the color-tolerance setting onto a usable HSV hue window (hue spans 0-179)."""
+        return max(3, min(45, int(tolerance)))
+
     def test_detection(self):
         """The 'Test Full Tracking' button logic."""
         self.app.log("Manual Test: Waiting for Minigame Bar...")
@@ -24,23 +28,24 @@ class FishingLogic(BaseLogic):
         
         minigame_active = False
         start_wait = time.time()
-        while time.time() - start_wait < 60: 
-            
-            if self.utils.find_color_hsv_x(bar_region, bar_color, hue_tol=15, min_area=300):
+        while self.test_running and time.time() - start_wait < 60:
+
+            if self.utils.find_color_hsv_x(bar_region, bar_color, hue_tol=self._hue_tol(tolerance), min_area=300):
                 minigame_active = True
                 break
             time.sleep(0.2)
-        
+
         if not minigame_active:
-            self.app.log("Test timed out waiting for bar.")
+            if self.test_running:
+                self.app.log("Test timed out waiting for bar.")
             return
 
-        
+
         self.app.log("Test: Minigame Detected! Tracking...")
         last_seen_bar = time.time()
-        
-        while True:
-            
+
+        while self.test_running:
+
             bar_x, fish_x = self._get_positions(bar_region, bar_color, fish_color, tolerance)
             
             if bar_x:
@@ -64,18 +69,22 @@ class FishingLogic(BaseLogic):
         if self.is_holding_space:
             keyboard.release('space')
             self.is_holding_space = False
-        self.app.log("Test Complete: Bar no longer detected.")
+        if self.test_running:
+            self.app.log("Test Complete: Bar no longer detected.")
+        else:
+            self.app.log("Test stopped.")
 
     def test_bar_detection(self):
         self.app.log("Testing Bar Detection (HSV/LARGE)...")
         bar_region = self.app.settings.get("regions", {}).get("minigame_bar")
         bar_color = self.app.settings.get("bar_color", [95, 153, 98])
-        
+        tolerance = self.app.settings.get("color_tolerance", 25)
+
         if not bar_region or all(v == 0 for v in bar_region):
             self.app.log("Error: Minigame Bar region not set!")
             return
 
-        bar_x = self.utils.find_color_hsv_x(bar_region, bar_color, hue_tol=15, min_area=300)
+        bar_x = self.utils.find_color_hsv_x(bar_region, bar_color, hue_tol=self._hue_tol(tolerance), min_area=300)
         if bar_x:
             center_y = bar_region[1] + (bar_region[3] - bar_region[1]) // 2
             self.utils.mouse_move(bar_x, center_y)
@@ -108,14 +117,14 @@ class FishingLogic(BaseLogic):
         img_hsv = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2HSV)
         
         bar_x, fish_x = None, None
-        
-        
+        hue_tol = self._hue_tol(tolerance)
+
         b_target_img = np.uint8([[list(bar_color)]])
         b_target_hsv = cv2.cvtColor(b_target_img, cv2.COLOR_RGB2HSV)[0][0]
-        b_lower = np.array([max(0, b_target_hsv[0] - 15), 40, 40])
-        b_upper = np.array([min(179, b_target_hsv[0] + 15), 255, 255])
+        b_lower = np.array([max(0, b_target_hsv[0] - hue_tol), 40, 40])
+        b_upper = np.array([min(179, b_target_hsv[0] + hue_tol), 255, 255])
         b_mask = cv2.inRange(img_hsv, b_lower, b_upper)
-        
+
         b_contours, _ = cv2.findContours(b_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         for cnt in b_contours:
             if cv2.contourArea(cnt) > 350:
@@ -123,11 +132,11 @@ class FishingLogic(BaseLogic):
                 bar_x = region[0] + cx + w // 2
                 break
 
-        
+
         f_target_img = np.uint8([[list(fish_color)]])
         f_target_hsv = cv2.cvtColor(f_target_img, cv2.COLOR_RGB2HSV)[0][0]
-        f_lower = np.array([max(0, f_target_hsv[0] - 15), 30, 30])
-        f_upper = np.array([min(179, f_target_hsv[0] + 15), 255, 255])
+        f_lower = np.array([max(0, f_target_hsv[0] - hue_tol), 30, 30])
+        f_upper = np.array([min(179, f_target_hsv[0] + hue_tol), 255, 255])
         f_mask = cv2.inRange(img_hsv, f_lower, f_upper)
         
         f_contours, _ = cv2.findContours(f_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)

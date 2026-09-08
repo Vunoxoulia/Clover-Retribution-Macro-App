@@ -1,3 +1,18 @@
+WHAT'S NEW IN V5.6.1
+=================
+- Mining macro UI: added timer UI 
+- Ok button detection: OCR whole Roblox window, click twice.
+- Post‑Ok recovery: auto‑restart movement after popup.
+- Window scoping: restrict detection to Roblox bounds.
+- pixel_search_raw: raw pixel coordinate utility added.
+- Editable WASD walk timers: Tundra node timers now show the exact keys (W/A/S/D) held to reach each node and let you edit the raw hold time in seconds directly - no more guessing multipliers, and each node only shows the keys it actually uses.
+- Fixed Tundra macro crash: the mining loop referenced speed/sprint-delay logic that was never defined, which would have crashed the macro the moment it tried to move. Movement timing is now driven directly by the editable per-node values.
+- Fixed "Reset to Defaults" crash in Tundra Settings caused by a leftover reference from before the WASD timer rework.
+- Collapsible node list: each Tundra node is now a single click-to-expand row instead of a wall of open cards, so the Settings tab stays readable with all 11 nodes visible at once.
+- Readability pass: brighter, larger labels across every macro's tabs (was small low-contrast gray text), plus a wider Tundra window so all four WASD fields fit without scrolling.
+- Fishing macro: "Test Full Tracking" no longer ignores the Stop/Reload hotkey - it previously could run forever and leave Space stuck held down if interrupted mid-test.
+- Fishing macro: the Tolerance slider in Fishing Settings now actually affects bar/fish color detection; it was previously hardcoded and had no effect on the main detection path.
+
 WHAT'S NEW IN V5.6
 =================
 - Ok Button Detection Rework: Scanner now OCRs the entire Roblox window and looks for the text "Ok" directly, then clicks it with smooth movement. Clicks twice with a 1 second gap to ensure the popup registers.

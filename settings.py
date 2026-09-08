@@ -30,7 +30,14 @@ class SpatialSettings:
                 "test_movement": "f2"
             },
             "positions": {
-                "clover_training": [0, 0]
+                "clover_training": [0, 0],
+                "skip_button": [0, 0],
+                "move_1": [0, 0],
+                "move_2": [0, 0],
+                "move_3": [0, 0],
+                "anti_hotkey": [0, 0],
+                "anti_menu": [0, 0],
+                "anti_party": [0, 0]
             },
             "regions": {
                 "score": [0, 0, 0, 0],
@@ -40,7 +47,11 @@ class SpatialSettings:
                 "gold_clover_1": [0, 0, 0, 0],
                 "gold_clover_2": [0, 0, 0, 0],
                 "gold_clover_3": [0, 0, 0, 0],
-                "minigame_bar": [0, 0, 0, 0]
+                "anti_hotkey": [0, 0, 0, 0],
+                "anti_main": [0, 0, 0, 0],
+                "anti_party": [0, 0, 0, 0],
+                "minigame_bar": [0, 0, 0, 0],
+                "fishing_click_pos": [0, 0]
             },
             "bar_color": [95, 153, 98],
             "fish_color": [188, 187, 144],
@@ -48,7 +59,33 @@ class SpatialSettings:
             "move_stats": [0, 0, 0],
             "resolved_move_names": ["", "", ""],
             "resolved_move_positions": [None, None, None],
-            "speed_multiplier": 1.0
+            "speed_multiplier": 1.0,
+            "sprinting_delay": 0.25,
+            "node_timers": {
+                "1": {"mine_hold": 3.0, "mine_wait": 1.75, "steps": [
+                    {"key": "d", "seconds": 0.23}, {"key": "s", "seconds": 0.0}]},
+                "2": {"mine_hold": 3.0, "mine_wait": 1.75, "steps": [
+                    {"key": "d", "seconds": 4.0}]},
+                "3": {"mine_hold": 3.0, "mine_wait": 1.75, "steps": [
+                    {"key": "s", "seconds": 0.25}, {"key": "d", "seconds": 0.55}]},
+                "4": {"mine_hold": 3.0, "mine_wait": 1.75, "steps": [
+                    {"key": "w", "seconds": 1.5}, {"key": "d", "seconds": 0.3}]},
+                "5": {"mine_hold": 3.0, "mine_wait": 1.75, "steps": [
+                    {"key": "d", "seconds": 12.0}]},
+                "6": {"mine_hold": 3.0, "mine_wait": 1.75, "steps": [
+                    {"key": "d", "seconds": 1.0}, {"key": "w", "seconds": 0.4}, {"key": "d", "seconds": 0.1}]},
+                "7": {"mine_hold": 3.0, "mine_wait": 1.75, "steps": [
+                    {"key": "a", "seconds": 0.2}, {"key": "w", "seconds": 1.0}]},
+                "8": {"mine_hold": 3.0, "mine_wait": 1.75, "steps": [
+                    {"key": "a", "seconds": 1.25}]},
+                "9": {"mine_hold": 3.0, "mine_wait": 1.75, "steps": [
+                    {"key": "a", "seconds": 0.5}, {"key": "s", "seconds": 2.5},
+                    {"key": "a", "seconds": 1.55}, {"key": "s", "seconds": 3.6}]},
+                "10": {"mine_hold": 3.0, "mine_wait": 1.75, "steps": [
+                    {"key": "a", "seconds": 0.70}, {"key": "s", "seconds": 2.4}, {"key": "d", "seconds": 0.35}]},
+                "11": {"mine_hold": 3.0, "mine_wait": 1.75, "steps": [
+                    {"key": "a", "seconds": 1.35}, {"key": "s", "seconds": 2.0}]},
+            }
         }
         self.load()
 

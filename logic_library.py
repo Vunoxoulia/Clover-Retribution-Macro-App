@@ -73,9 +73,9 @@ class LibraryLogic(BaseLogic):
             while self.running:
                 if not self.initiate_dialogue():
                     dialogue_fail_count += 1
-                    self.app.log("Failed to open dialogue, retrying without moving...")
+                    self.app.log("Quest and Guide didn't detect properly! NPC dialogue didn't open. Retrying...")
                     if dialogue_fail_count >= 3:
-                        self.app.log("3 consecutive dialogue failures, re-running approach movement.")
+                        self.app.log("Dialogue failed 3 times in a row. Re-approaching NPC to reset character position...")
                         self.perform_approach_movement()
                         dialogue_fail_count = 0
                     time.sleep(1.0)
@@ -85,7 +85,7 @@ class LibraryLogic(BaseLogic):
                 time.sleep(2)
 
                 if not self.handle_dialogue_sequence(to_train[0]):
-                    self.app.log("Dialogue sequence failed, retrying without moving...")
+                    self.app.log("Quest and Guide didn't detect properly! Dialogue sequence failed. Retrying...")
                     time.sleep(1.0)
                     continue
 
@@ -181,9 +181,9 @@ class LibraryLogic(BaseLogic):
                     return True
             
             if time.time() - start_time > 20:
-                self.app.log("Dialogue initiation timed out.")
+                self.app.log("Quest & Guide Dialogue Error: NPC dialogue menu didn't open or 'Research'/'Training' was not detected. Please verify your Move Selection Area in Settings tab.")
                 return False
-                
+
             time.sleep(0.1)
         return False
 
@@ -201,12 +201,12 @@ class LibraryLogic(BaseLogic):
     def handle_dialogue_sequence(self, target_idx):
         settings = self.app.settings.settings
         menu_region = settings["regions"].get("move_menu", [0, 0, 0, 0])
-        
+
         if all(v == 0 for v in menu_region):
-            self.app.log("Automation Error: 'move_menu' region bounds are not calibrated.")
+            self.app.log("Calibration Warning: Move Selection Area is set to [0,0,0,0]. Please set 'Move Selection Area' in Settings tab.")
             return False
-        
-        self.app.log("[1/3] Waiting for Clover Training dialogue menu via OCR...")
+
+        self.app.log("[1/3] Scanning for Quest and Guide dialogue menu via OCR...")
         clover_menu_clicked = False
         dialogue_start_time = time.time()
         

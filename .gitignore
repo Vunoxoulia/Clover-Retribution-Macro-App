@@ -109,3 +109,7 @@ ENV/
 # OS specific files
 .DS_Store
 Thumbs.db
+
+# Per-user macro save data (calibrated regions, hotkeys, progress) -
+# must never be distributed to other users or overwritten on update.
+settings.json
