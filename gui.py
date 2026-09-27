@@ -168,6 +168,17 @@ class SpatialGUI:
         self.refresh_btn = ctk.CTkButton(tab, text=f"Reload Macro ({hk['refresh'].upper()})", font=("Arial", 12), fg_color="#6c757d", hover_color="#5c636a", command=self.refresh_macro)
         self.refresh_btn.pack(pady=4, fill="x", padx=40)
 
+        # Always-Click-OK toggle — works even when the macro is stopped or paused
+        self._always_ok_on = False
+        self.always_ok_btn = ctk.CTkButton(
+            tab, text="🔔 Always Click OK: OFF",
+            font=("Arial", 12, "bold"),
+            fg_color="#343a40", hover_color="#495057",
+            text_color="#adb5bd",
+            command=self.toggle_always_ok
+        )
+        self.always_ok_btn.pack(pady=(2, 8), fill="x", padx=40)
+
         if self.on_back:
             ctk.CTkButton(tab, text="Back to Menu", fg_color="transparent", border_color="#6c757d", border_width=2, text_color="#e9ecef", command=self.go_back).pack(pady=(15, 8))
         tutorial_link = ctk.CTkLabel(tab, text="Video Tutorial", font=("Arial", 14, "underline"), text_color="#0dcaf0", cursor="hand2")
@@ -201,6 +212,23 @@ class SpatialGUI:
         self.logic.stop()
         keyboard.unhook_all()
         if self.on_back: self.on_back()
+
+    def toggle_always_ok(self):
+        self._always_ok_on = not self._always_ok_on
+        if self._always_ok_on:
+            self.always_ok_btn.configure(
+                text="🔔 Always Click OK: ON",
+                fg_color="#0d6efd", hover_color="#0b5ed7",
+                text_color="#ffffff"
+            )
+            self.logic.start_global_ok_scanner()
+        else:
+            self.always_ok_btn.configure(
+                text="🔔 Always Click OK: OFF",
+                fg_color="#343a40", hover_color="#495057",
+                text_color="#adb5bd"
+            )
+            self.logic.stop_global_ok_scanner()
 
     def setup_settings_tab(self):
         tab = self.tabview.tab("Settings")
@@ -259,16 +287,22 @@ class SpatialGUI:
 
             self.node_expanded = getattr(self, 'node_expanded', {})
 
-            for i in range(1, 12):
-                node_key = str(i)
+            for node_key in ["start", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "return"]:
                 cfg = node_timers.get(node_key, {})
                 steps = cfg.get("steps") or [{"key": k, "seconds": s} for k, s in DEFAULT_NODE_STEPS[node_key]]
 
                 card = ctk.CTkFrame(self.nodes_scroll_frame, fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
                 card.pack(fill="x", padx=4, pady=3)
 
+                if node_key == "start":
+                    node_label = "Start Alignment"
+                elif node_key == "return":
+                    node_label = "Return Journey"
+                else:
+                    node_label = f"Node {node_key}"
+
                 # Node header - click to expand/collapse this node's settings
-                toggle_btn = ctk.CTkButton(card, text=f"Node {i}   ▸", fg_color="#0d6efd", hover_color="#0b5ed7",
+                toggle_btn = ctk.CTkButton(card, text=f"{node_label}   ▸", fg_color="#0d6efd", hover_color="#0b5ed7",
                                            text_color="#ffffff", font=("Arial", 13, "bold"), anchor="w",
                                            corner_radius=6, height=32)
                 toggle_btn.pack(fill="x", padx=6, pady=6)
@@ -284,46 +318,64 @@ class SpatialGUI:
                 hold_entry = ctk.CTkEntry(row, width=48, font=("Arial", 12))
                 hold_entry.insert(0, f"{float(cfg.get('mine_hold', 3.0)):.2f}")
                 hold_entry.pack(side="left", padx=(0, 10))
-                hold_entry.bind("<FocusOut>", lambda e, idx=i: self.save_node_timer(idx))
-                hold_entry.bind("<KeyRelease>", lambda e, idx=i: self.save_node_timer(idx))
+                hold_entry.bind("<FocusOut>", lambda e, idx=node_key: self.save_node_timer(idx))
+                hold_entry.bind("<KeyRelease>", lambda e, idx=node_key: self.save_node_timer(idx))
 
                 ctk.CTkLabel(row, text="Waiting Secs:", font=("Arial", 12, "bold"), text_color="#e9ecef").pack(side="left", padx=(0, 2))
                 wait_entry = ctk.CTkEntry(row, width=48, font=("Arial", 12))
                 wait_entry.insert(0, f"{float(cfg.get('mine_wait', 1.75)):.2f}")
                 wait_entry.pack(side="left", padx=(0, 6))
-                wait_entry.bind("<FocusOut>", lambda e, idx=i: self.save_node_timer(idx))
-                wait_entry.bind("<KeyRelease>", lambda e, idx=i: self.save_node_timer(idx))
+                wait_entry.bind("<FocusOut>", lambda e, idx=node_key: self.save_node_timer(idx))
+                wait_entry.bind("<KeyRelease>", lambda e, idx=node_key: self.save_node_timer(idx))
 
-                # Inputs Row 2: the exact WASD key sequence walked to reach this node.
-                # Each entry is the raw hold duration (seconds) for that key press -
-                # not a multiplier - so it shows only the keys actually used per node.
-                steps_row = ctk.CTkFrame(details, fg_color="transparent")
-                steps_row.pack(fill="x", padx=8, pady=(0, 8))
+                # Inputs Row 2: one row per WASD step, with a "no sprint" checkbox per step.
+                steps_container = ctk.CTkFrame(details, fg_color="transparent")
+                steps_container.pack(fill="x", padx=8, pady=(0, 8))
 
-                ctk.CTkLabel(steps_row, text="Walk (sec):", font=("Arial", 12, "bold"), text_color="#e9ecef").pack(side="left", padx=(0, 4))
+                ctk.CTkLabel(steps_container, text="Walk steps:", font=("Arial", 12, "bold"),
+                             text_color="#e9ecef").pack(anchor="w", pady=(0, 2))
 
                 step_widgets = []
-                for step in steps:
+                for s_idx, step in enumerate(steps):
                     key_char = str(step.get("key", "?")).upper()
-                    ctk.CTkLabel(steps_row, text=key_char, font=("Arial", 12, "bold"), text_color="#8bb9fe").pack(side="left", padx=(0, 2))
-                    step_entry = ctk.CTkEntry(steps_row, width=46, font=("Arial", 12))
+                    no_sprint_saved = bool(step.get("no_sprint", False))
+
+                    step_row = ctk.CTkFrame(steps_container, fg_color="#2b2f33", corner_radius=5)
+                    step_row.pack(fill="x", pady=2)
+
+                    ctk.CTkLabel(step_row, text=key_char, font=("Arial", 13, "bold"),
+                                 text_color="#8bb9fe", width=20).pack(side="left", padx=(8, 4))
+                    step_entry = ctk.CTkEntry(step_row, width=56, font=("Arial", 12))
                     step_entry.insert(0, f"{float(step.get('seconds', 0.0)):.2f}")
-                    step_entry.pack(side="left", padx=(0, 8))
-                    step_entry.bind("<FocusOut>", lambda e, idx=i: self.save_node_timer(idx))
-                    step_entry.bind("<KeyRelease>", lambda e, idx=i: self.save_node_timer(idx))
-                    step_widgets.append({"key": step.get("key"), "entry": step_entry})
+                    step_entry.pack(side="left", padx=(0, 10))
+                    step_entry.bind("<FocusOut>", lambda e, idx=node_key: self.save_node_timer(idx))
+                    step_entry.bind("<KeyRelease>", lambda e, idx=node_key: self.save_node_timer(idx))
+
+                    no_sprint_var = tk.BooleanVar(value=no_sprint_saved)
+                    no_sprint_chk = ctk.CTkCheckBox(step_row, text="No Sprint Delay",
+                                                    variable=no_sprint_var,
+                                                    font=("Arial", 11), text_color="#adb5bd",
+                                                    onvalue=True, offvalue=False,
+                                                    command=lambda idx=node_key: self.save_node_timer(idx))
+                    no_sprint_chk.pack(side="left", padx=(0, 8))
+
+                    step_widgets.append({
+                        "key": step.get("key"),
+                        "entry": step_entry,
+                        "no_sprint_var": no_sprint_var
+                    })
 
                 # Store widgets for all controls
-                self.node_input_widgets[i] = {
+                self.node_input_widgets[node_key] = {
                     "hold": hold_entry,
                     "wait": wait_entry,
                     "steps": step_widgets
                 }
 
-                toggle_btn.configure(command=lambda idx=i, btn=toggle_btn, frame=details: self.toggle_node_card(idx, btn, frame))
-                if self.node_expanded.get(i):
+                toggle_btn.configure(command=lambda idx=node_key, btn=toggle_btn, frame=details: self.toggle_node_card(idx, btn, frame))
+                if self.node_expanded.get(node_key):
                     details.pack(fill="x")
-                    toggle_btn.configure(text=f"Node {i}   ▾")
+                    toggle_btn.configure(text=f"{node_label}   ▾")
 
             return
 
@@ -635,12 +687,18 @@ class SpatialGUI:
 
     def toggle_node_card(self, node_idx, btn, details_frame):
         expanded = self.node_expanded.get(node_idx, False)
+        if node_idx == "start":
+            label = "Start Alignment"
+        elif node_idx == "return":
+            label = "Return Journey"
+        else:
+            label = f"Node {node_idx}"
         if expanded:
             details_frame.pack_forget()
-            btn.configure(text=f"Node {node_idx}   ▸")
+            btn.configure(text=f"{label}   ▸")
         else:
             details_frame.pack(fill="x")
-            btn.configure(text=f"Node {node_idx}   ▾")
+            btn.configure(text=f"{label}   ▾")
         self.node_expanded[node_idx] = not expanded
 
     def save_node_timer(self, node_idx):
@@ -663,7 +721,8 @@ class SpatialGUI:
                 seconds_val = max(0.0, float(step["entry"].get()))
             except ValueError:
                 seconds_val = 0.0
-            steps.append({"key": step["key"], "seconds": seconds_val})
+            no_sprint = bool(step.get("no_sprint_var") and step["no_sprint_var"].get())
+            steps.append({"key": step["key"], "seconds": seconds_val, "no_sprint": no_sprint})
 
         node_timers = dict(self.settings.get("node_timers", {}))
         node_timers[str(node_idx)] = {

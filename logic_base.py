@@ -23,6 +23,9 @@ class BaseLogic:
         self.input_lock = RobloxInputDriver._lock
         self.test_running = False
         self.on_ok_clicked = None
+        # Global always-on OK scanner (runs even when macro is stopped/paused)
+        self._global_ok_active = False
+        self._global_ok_thread = None
 
     def _sleep(self, seconds, granularity=0.05):
         end = time.time() + seconds
@@ -55,6 +58,36 @@ class BaseLogic:
         if self.thread:
             self.thread.join(timeout=1.0)
         self.app.log("Macro stopped")
+
+    def start_global_ok_scanner(self):
+        """Start the always-on OK clicker that runs regardless of macro state."""
+        if self._global_ok_active:
+            return
+        self._global_ok_active = True
+        self._global_ok_thread = threading.Thread(target=self._global_ok_loop, daemon=True)
+        self._global_ok_thread.start()
+        self.app.log("Always-Click-OK: Enabled")
+
+    def stop_global_ok_scanner(self):
+        """Stop the always-on OK clicker."""
+        self._global_ok_active = False
+        self.app.log("Always-Click-OK: Disabled")
+
+    def _global_ok_loop(self):
+        """Continuously scan and click OK popups, independent of macro state."""
+        while self._global_ok_active:
+            if self._ok_scanner_lock.acquire(blocking=False):
+                try:
+                    self.handle_ok_popup()
+                except Exception as e:
+                    self.app.log(f"Always-OK error: {e}")
+                finally:
+                    self._ok_scanner_lock.release()
+            # Poll every ~10 seconds
+            for _ in range(40):
+                if not self._global_ok_active:
+                    return
+                time.sleep(0.25)
 
     def _ok_scanner_loop(self):
         while self.running and self.ok_scanner_running:

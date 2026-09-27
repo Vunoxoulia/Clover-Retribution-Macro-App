@@ -62,6 +62,8 @@ class SpatialSettings:
             "speed_multiplier": 1.0,
             "sprinting_delay": 0.25,
             "node_timers": {
+                "start": {"mine_hold": 0.0, "mine_wait": 0.0, "steps": [
+                    {"key": "a", "seconds": 0.15}, {"key": "w", "seconds": 1.0}, {"key": "a", "seconds": 0.15}]},
                 "1": {"mine_hold": 3.0, "mine_wait": 1.75, "steps": [
                     {"key": "d", "seconds": 0.23}, {"key": "s", "seconds": 0.0}]},
                 "2": {"mine_hold": 3.0, "mine_wait": 1.75, "steps": [
@@ -85,6 +87,10 @@ class SpatialSettings:
                     {"key": "a", "seconds": 0.70}, {"key": "s", "seconds": 2.4}, {"key": "d", "seconds": 0.35}]},
                 "11": {"mine_hold": 3.0, "mine_wait": 1.75, "steps": [
                     {"key": "a", "seconds": 1.35}, {"key": "s", "seconds": 2.0}]},
+                "return": {"mine_hold": 0.0, "mine_wait": 0.0, "steps": [
+                    {"key": "w", "seconds": 5.0}, {"key": "a", "seconds": 7.0},
+                    {"key": "w", "seconds": 3.0}, {"key": "a", "seconds": 7.0},
+                    {"key": "a", "seconds": 0.15}, {"key": "w", "seconds": 1.0}, {"key": "a", "seconds": 0.15}]}
             }
         }
         self.load()

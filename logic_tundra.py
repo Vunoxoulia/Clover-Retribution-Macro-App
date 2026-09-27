@@ -6,6 +6,7 @@ from logic_base import BaseLogic
 # previous spot to each node. These are the values shown/edited in the
 # Settings tab and are exactly what gets pressed in-game - no multiplier.
 DEFAULT_NODE_STEPS = {
+    "start": [("a", 0.15), ("w", 1.0), ("a", 0.15)],
     "1": [("d", 0.23), ("s", 0.0)],
     "2": [("d", 4.0)],
     "3": [("s", 0.25), ("d", 0.55)],
@@ -17,6 +18,10 @@ DEFAULT_NODE_STEPS = {
     "9": [("a", 0.5), ("s", 2.5), ("a", 1.55), ("s", 3.6)],
     "10": [("a", 0.70), ("s", 2.4), ("d", 0.35)],
     "11": [("a", 1.35), ("s", 2.0)],
+    "return": [
+        ("w", 5.0), ("a", 7.0), ("w", 3.0), ("a", 7.0),
+        ("a", 0.15), ("w", 1.0), ("a", 0.15)
+    ]
 }
 
 class TundraLogic(BaseLogic):
@@ -40,13 +45,17 @@ class TundraLogic(BaseLogic):
         }
 
     def get_node_steps(self, node_idx):
-        """Fetch the exact key/duration sequence used to walk to this node, in raw seconds."""
+        """Fetch the exact key/duration sequence used to walk to this node.
+        Returns list of (key, seconds, no_sprint) tuples.
+        """
         node_timers = self.app.settings.get("node_timers", {})
         config = node_timers.get(str(node_idx), {})
         steps = config.get("steps")
         if not steps:
-            steps = [{"key": k, "seconds": s} for k, s in DEFAULT_NODE_STEPS[str(node_idx)]]
-        return [(s["key"], max(0.0, float(s["seconds"]))) for s in steps]
+            steps = [{"key": k, "seconds": s, "no_sprint": False}
+                     for k, s in DEFAULT_NODE_STEPS[str(node_idx)]]
+        return [(s["key"], max(0.0, float(s["seconds"])), bool(s.get("no_sprint", False)))
+                for s in steps]
 
     def mine_node(self, node_idx):
         """Perform mining action for specified node index using per-node hold & wait timers."""
@@ -60,11 +69,12 @@ class TundraLogic(BaseLogic):
     def travel_to_node(self, node_idx, label=None):
         """Walk the exact configured WASD key sequence for a node."""
         self.app.log(label or f"Travelling pathway to Node {node_idx}")
-        for key, seconds in self.get_node_steps(node_idx):
+        for key, seconds, no_sprint in self.get_node_steps(node_idx):
             if not self.running:
                 return
+            delay = 0.0 if no_sprint else self._sprint_delay()
             keyboard.press(key)
-            time.sleep(seconds + self._sprint_delay())
+            time.sleep(seconds + delay)
             keyboard.release(key)
             time.sleep(0.5)
 
@@ -109,43 +119,23 @@ class TundraLogic(BaseLogic):
 
         try:
             self.app.log("Adjusting to optimal position...")
-            keyboard.press('a')
-            if not self._sleep(self._t(0.15)):
-                keyboard.release('a'); return
-            keyboard.press('w')
-            if not self._sleep(self._t(1)):
-                keyboard.release('w'); keyboard.release('a'); return
-            keyboard.release('w')
-            if not self._sleep(self._t(0.15)):
-                keyboard.release('a'); return
-            keyboard.release('a')
-            if not self._sleep(0.5): return
+            for key, seconds, no_sprint in self.get_node_steps('start'):
+                delay = 0.0 if no_sprint else self._sprint_delay()
+                if not move(key, seconds + delay): return
 
             for node_idx in range(1, 12):
                 if not self.test_running: return
-                for key, seconds in self.get_node_steps(node_idx):
-                    if not move(key, seconds + self._sprint_delay()): return
+                for key, seconds, no_sprint in self.get_node_steps(node_idx):
+                    delay = 0.0 if no_sprint else self._sprint_delay()
+                    if not move(key, seconds + delay): return
                 # Simulate node mining wait
                 wait_t = self.get_node_timer(node_idx)["mine_wait"]
                 if not self._sleep(wait_t): return
 
-            # Return trip steps
-            return_steps = [
-                ('w', self._t(5)), ('a', self._t(7)), ('w', self._t(3)), ('a', self._t(7))
-            ]
-            for key, dur in return_steps:
-                if not move(key, dur): return
-
-            keyboard.press('a')
-            if not self._sleep(self._t(0.15)):
-                keyboard.release('a'); return
-            keyboard.press('w')
-            if not self._sleep(self._t(1)):
-                keyboard.release('w'); keyboard.release('a'); return
-            keyboard.release('w')
-            if not self._sleep(self._t(0.15)):
-                keyboard.release('a'); return
-            keyboard.release('a')
+            # Return trip using configured return steps
+            for key, seconds, no_sprint in self.get_node_steps('return'):
+                delay = 0.0 if no_sprint else self._sprint_delay()
+                if not move(key, seconds + delay): return
 
             self.app.log("--- Movement Test Complete ---")
         except Exception as e:
@@ -169,15 +159,8 @@ class TundraLogic(BaseLogic):
             self.utils.send_key(',')
             time.sleep(1.5)
 
-            self.app.log("Adjusting to optimal position...")
-            keyboard.press('a')
-            time.sleep(self._t(0.15))
-            keyboard.press('w')
-            time.sleep(self._t(1))
-            keyboard.release('w')
-            time.sleep(self._t(0.15))
-            keyboard.release('a')
-            time.sleep(0.5)
+            # Alignment to starting position using defined start steps
+            self.travel_to_node('start')
 
             self.handle_ok_popup()
 
@@ -223,36 +206,8 @@ class TundraLogic(BaseLogic):
 
                 if not self.running: break
 
-                # Return pathway
-                self.app.log("Returning to starting position...")
-                keyboard.press('w')
-                time.sleep(self._t(5))
-                keyboard.release('w')
-                time.sleep(0.5)
-
-                keyboard.press('a')
-                time.sleep(self._t(7))
-                keyboard.release('a')
-                time.sleep(0.5)
-
-                keyboard.press('w')
-                time.sleep(self._t(3))
-                keyboard.release('w')
-                time.sleep(0.5)
-
-                keyboard.press('a')
-                time.sleep(self._t(7))
-                keyboard.release('a')
-                time.sleep(0.5)
-
-                keyboard.press('a')
-                time.sleep(self._t(0.15))
-                keyboard.press('w')
-                time.sleep(self._t(1))
-                keyboard.release('w')
-                time.sleep(self._t(0.15))
-                keyboard.release('a')
-                time.sleep(0.5)
+                # Return to start using defined return steps
+                self.travel_to_node('return')
 
         except Exception as e:
             self.app.log(f"Tundra Logic Error: {e}")
