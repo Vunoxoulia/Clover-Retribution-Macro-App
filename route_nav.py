@@ -265,8 +265,16 @@ class RouteNav(BaseLogic):
             time.sleep(0.08)
 
     # ================= Interact prompt =================
+    def route_checks(self):
+        """Line-ups on snapshots (start spot, checkpoints). Mining can turn them off."""
+        return True
+
     def _near_player_region(self):
-        """Box around the screen centre (the character, with the fixed top-down camera)."""
+        """Where the '[E] Interact' prompt is looked for: the user's own box if set,
+        otherwise a box around the screen centre (the character, with the fixed top-down camera)."""
+        own = self.app.settings.get("regions", {}).get("prompt_area", [0, 0, 0, 0])
+        if own and own[2] > own[0] and own[3] > own[1]:
+            return list(own)
         l, t, r, b = self.get_roblox_window_region()
         cx, cy = (l + r) // 2, (t + b) // 2
         dx, dy = int((r - l) * 0.16), int((b - t) * 0.24)
@@ -406,6 +414,8 @@ class RouteNav(BaseLogic):
 
     def align_home(self, alive=None):
         alive = alive or (lambda: self.running)
+        if not self.route_checks():
+            return alive()
         if not self.has_home():
             return True
         if not self.USE_ALIGNMENT:   # free camera: just check we're roughly at the start
@@ -415,10 +425,8 @@ class RouteNav(BaseLogic):
             return True
         result = self.align_to(cv2.imread(self._home_path()), "home", alive)
         if result == "lost":
-            self.app.log("-> HOME: can't recognise the start spot. Stopping so it doesn't mine in the wrong place.")
-            return False
-        self.app.log("-> HOME: lined up" if result == "ok" else "-> HOME: couldn't settle exactly; continuing anyway.")
-        return True
+            self.app.log("   start spot not recognised - continuing anyway")
+        return alive()                                   # never stops the macro by itself
 
     # ================= Recording (Ctrl+P) =================
     def is_recording(self):
@@ -562,7 +570,8 @@ class RouteNav(BaseLogic):
         - At each checkpoint it lines up on the checkpoint snapshot, then continues."""
         alive = alive or (lambda: self.running)
         events = sorted(seg["events"], key=lambda e: e[0])
-        cps = sorted(seg.get("checkpoints", []), key=lambda c: c["t"]) if self.USE_ALIGNMENT else []
+        cps = (sorted(seg.get("checkpoints", []), key=lambda c: c["t"])
+               if self.USE_ALIGNMENT and self.route_checks() else [])
         folder = self.route_dir()
         smart = self._smart()
         threshold = float(self.app.settings.get("motion_threshold", 2.5))

@@ -132,11 +132,32 @@ def real_card(c, y, rank, name, key, expanded=True, status=("no img", "#ea868f")
     r2 = y + 40
     small(c, 60, r2 + 11, "⏱ Delay before (s)"); drop(c, 166, r2, 54, "0.1")
     small(c, 232, r2 + 11, "⏱ Delay after (s)"); drop(c, 330, r2, 54, "0.5")
-    label(c, 400, r2 + 11, "mouse → before → key → after", "#6c757d", 8, "w")
+    label(c, 400, r2 + 11, "mouse → before → key → M1 → after", "#6c757d", 8, "w")
     r3 = y + 76
     small(c, 60, r3 + 11, "Repeat"); drop(c, 104, r3, 44, "3", blue=True)
-    small(c, 160, r3 + 11, "Hold click (s)"); drop(c, 242, r3, 54, "off")
+    rrect(c, 222, r3 + 3, 238, r3 + 19, 3, fill=BLUE, outline=""); label(c, 230, r3 + 11, "✔", "#ffffff", 8, bold=True)
+    small(c, 244, r3 + 11, "then M1")
     small(c, 310, r3 + 11, "Cooldown (s)"); drop(c, 388, r3, 52, "off")
+
+
+def draw_tune(c):
+    label(c, W / 2, 16, "A move that's READY but Test says 'cd'? Auto-tune it", YELLOW, 11, bold=True)
+    rrect(c, 330, 34, 430, 60, 6, fill=BLUE, outline=""); label(c, 380, 47, "🪄 Auto-tune", "#ffffff", 10, bold=True)
+    rrect(c, 438, 34, 494, 60, 6, fill="#495057", outline=""); label(c, 466, 47, "Test", "#ffffff", 10)
+    marker(c, 330, 30, 1); marker(c, 438, 30, 2)
+    # before / after
+    label(c, 150, 80, "Before", "#adb5bd", 10, bold=True)
+    label(c, 450, 80, "After Auto-tune", GREEN, 10, bold=True)
+    arrow(c, 262, 120, 338, 120, DIM)
+    for i, (name, before, after) in enumerate([("Mana Lance", ("cd 0.78/0.85", YELLOW), ("ready 0.78/0.62", GREEN)),
+                                               ("Chrono Burst", ("ready 0.97/0.85", GREEN), ("ready 0.97/0.71", GREEN))]):
+        y = 98 + i * 34
+        for x, (t, col) in ((40, before), (340, after)):
+            rrect(c, x, y, x + 220, y + 26, 6, fill="#212529", outline="#343a40")
+            label(c, x + 10, y + 13, name, "#ffffff", 9, "w", True)
+            label(c, x + 210, y + 13, t, col, 9, "e", True)
+    label(c, W / 2, 178, "score / its line:  READY when the score is at or above the line", TXT, 10)
+    label(c, W / 2, 200, "Or set a slot's line yourself: its ⚙ → Ready at  (off = the global one in Settings)", DIM, 9)
 
 
 def draw_priority(c):
@@ -161,15 +182,16 @@ def draw_card(c):
 def draw_anim(c):
     label(c, W / 2, 20, "One cast, left to right", YELLOW, 11, bold=True)
     y = 70
-    blocks = [(20, 130, "#0dcaf0", "move mouse", "#000000"), (130, 225, "#343a40", "delay before", "#dce4ee"),
-              (225, 300, BLUE, "press 7", "#ffffff"), (300, 480, "#664d03", "delay after  1.5 s", "#ffda6a"),
-              (480, 580, GREEN, "next move", "#000000")]
+    blocks = [(20, 120, "#0dcaf0", "move mouse", "#000000"), (120, 210, "#343a40", "delay before", "#dce4ee"),
+              (210, 275, BLUE, "press 7", "#ffffff"), (275, 330, "#6f42c1", "M1", "#ffffff"),
+              (330, 490, "#664d03", "delay after  1.5 s", "#ffda6a"), (490, 580, GREEN, "next move", "#000000")]
     for x1, x2, fill, text, col in blocks:
         c.create_rectangle(x1, y, x2, y + 32, fill=fill, outline="#1e2124")
         label(c, (x1 + x2) / 2, y + 16, text, col, 10, bold=True)
-    label(c, 75, y + 54, "only if the move\nhas a Mouse aim", DIM, 9)
-    label(c, 177, y + 46, "Delay before (s)", YELLOW, 9)
-    label(c, 390, y + 46, "Delay after (s)", YELLOW, 9)
+    label(c, 70, y + 54, "only if the move\nhas a Mouse aim", DIM, 9)
+    label(c, 165, y + 46, "Delay before (s)", YELLOW, 9)
+    label(c, 302, y + 54, "only if\n'then M1'", DIM, 9)
+    label(c, 410, y + 46, "Delay after (s)", YELLOW, 9)
     arrow(c, 30, 160, 570, 160, DIM); label(c, 570, 174, "time", DIM, 9, "e")
     label(c, W / 2, 200, "Two waits, both in each move's ⚙: one BEFORE the key, one AFTER it.", TXT, 10)
 
@@ -184,10 +206,9 @@ def draw_aim(c):
         sel, aimed = i in (0, 2), i in (0, 2, 4)
         c.create_oval(x, 70, x + 26, 96, fill=BLUE if sel else "#343a40", outline=CYAN if aimed else "#343a40", width=2)
         label(c, x + 13, 83, str(i + 1), "#ffffff", 10, bold=True)
-    rrect(c, 330, 70, 400, 96, 6, fill="#1f6aa5", outline=""); label(c, 365, 83, "Move|Click", "#ffffff", 9)
     rrect(c, 406, 70, 496, 96, 6, fill=BLUE, outline=""); label(c, 451, 83, "🎯 Pick spot", "#ffffff", 9, bold=True)
     rrect(c, 502, 70, 576, 96, 6, fill="#495057", outline=""); label(c, 539, 83, "✖ Clear", "#ffffff", 9)
-    label(c, 24, 122, "(960, 540) click → slot 1, 3, 5", "#adb5bd", 9, "w")
+    label(c, 24, 122, "(960, 540) → slot 1, 3, 5", "#adb5bd", 9, "w")
     for n, (x, y) in enumerate([(70, 66), (451, 64), (539, 64), (24, 110)], start=1):
         marker(c, x, y, n)
     label(c, 160, 176, "blue = ticked now", BLUE, 9)
@@ -274,35 +295,40 @@ PAGES = [
     ("Rotation", "3. Snapshot the ready icons", draw_snapshot,
      "Wait until EVERY move shows its name (no timer), then press 📸 Snapshot All. "
      "Fix a single slot later with its 📸 button. Press Test to see READY / cooldown for each slot."),
-    ("Rotation", "4. Set the priority order", draw_priority,
+    ("Rotation", "4. Slot stuck on cooldown? Auto-tune", draw_tune,
+     "1 🪄 Auto-tune (macro stopped): click into the Roblox window within 3 s. It finds the hotbar "
+     "by itself (only your FILLED slots), waits for each move to be ready, snapshots it, then casts it once to learn its 'ready' line. 2 Test shows score/line for each slot.\n"
+     "Still wrong? Open the move's ⚙ and pick 'Ready at' yourself (lower = counts as ready sooner). "
+     "If Auto-tune says nothing changed after the key, the move didn't cast (no target?) - give it a manual Cooldown."),
+    ("Rotation", "5. Set the priority order", draw_priority,
      "The macro always casts the highest move in the list that is READY. "
      "Cooldown reductions from other moves are picked up automatically because it reads the screen."),
-    ("Rotation", "5. Each move card", draw_card,
+    ("Rotation", "6. Each move card", draw_card,
      "1 On/off   2 Name (optional)   3 Key   9 ⚙ – open / close the extra options below\n"
      "4 Delay before – wait after the mouse moves, before the key   5 Delay after – wait after the key (lets slow moves finish)\n"
      "6 Repeat – multi-use moves: 4 every 0.25 s = 4 presses, 0.25 s apart (set it just above the move's lockout)\n"
-     "7 Hold click – hold left mouse after the key   8 Cooldown – only for slots with no snapshot"),
-    ("Rotation", "6. Mouse aim (optional)", draw_aim,
-     "1 Tick the slots that should aim at the same spot   2 Pick spot: click where on screen (Move = just move "
-     "the mouse, Click = also click there)   3 Clear: ticked slots go back to 'wherever the mouse is'   "
+     "7 then M1 – one left click right after the key (like Items)   8 Cooldown – only for slots with no snapshot   Ready at – this slot's own 'ready' line (Auto-tune sets it)"),
+    ("Rotation", "7. Mouse aim (optional)", draw_aim,
+     "1 Tick the slots that should aim at the same spot   2 Pick spot: click where on screen (the mouse moves "
+     "there before the key; tick 'then M1' on the move to also click)   3 Clear: ticked slots go back to 'wherever the mouse is'   "
      "4 The list shows which slots aim where. Pick again with other slots ticked for a different spot."),
-    ("Rotation", "7. The order of one cast", draw_anim,
-     "Move mouse → Delay before → press → Delay after → next move. Delay before gives the game time to turn "
-     "toward the mouse before the key. Delay after lets slow moves finish before the next cast."),
-    ("Skill Combo", "8. Skill Combos", draw_combo,
+    ("Rotation", "8. The order of one cast", draw_anim,
+     "Move mouse → Delay before → press → M1 (if ticked) → Delay after → next move. Delay before gives the game "
+     "time to turn toward the mouse before the key. Delay after lets slow moves finish before the next cast."),
+    ("Skill Combo", "9. Skill Combos", draw_combo,
      "Skill Combo page → + Add Combo, set the trigger key, then + Step. Each step reads like a sentence: "
-     "Press [key] [1 time] then wait [0.2 s]; with 2+ times it waits after each press. The step's ⚙ adds hold click or mouse aim (mouse → wait → press). Works while the macro is running."),
-    ("Items", "9. Item auto-use (optional)", draw_items,
+     "Press [key] [1 time] then wait [0.2 s]; with 2+ times it waits after each press. The step's ⚙ adds 'then M1' or mouse aim (mouse → wait → press → M1). Works while the macro is running."),
+    ("Items", "10. Item auto-use (optional)", draw_items,
      "Items page → Set Scan Area over the pickup messages, then + Add Item: \"When [Copper] shows up, press [9] ☑ then M1\". "
      "It presses the key, then left-clicks to use the item — once per message. Test OCR (while a message is on screen) shows what it reads."),
-    ("Settings", "10. Events & OK Popup pages", draw_skill_extras,
+    ("Settings", "11. Events & OK Popup pages", draw_skill_extras,
      "The Skill Macro also has the 📣 Events and 🔔 OK Popup pages (same as every macro), each with its own ? Help. "
      "Turn on their big bars to post events to Discord or click OK popups while the rotation runs."),
-    ("Settings", "11. Loadouts (saved builds)", draw_loadouts,
+    ("Settings", "12. Loadouts (saved builds)", draw_loadouts,
      "The 🎒 Loadout bar at the top saves a whole build: hotbar region, snapshots, move order and options, mouse aim, "
-     "combos and items. New = copy of the current one (then re-snapshot if the skills changed). "
+     "combos and items. New = a fresh empty save (your current one stays as it is); use Auto-tune to set it up. "
      "Switching applies instantly, even while running. The hotkey and focus setting are shared by all loadouts."),
-    ("Settings", "12. Start it", draw_start,
+    ("Settings", "13. Start it", draw_start,
      "Press Start or F6 (change it in Settings). Press again to stop."),
 ]
 
@@ -688,9 +714,32 @@ def draw_min_tune(c):
 def draw_min_start(c):
     rrect(c, 60, 46, 250, 92, 8, fill=GREEN, outline=""); label(c, 155, 69, "Start Macro (F6)", "#ffffff", 13, bold=True)
     rrect(c, 60, 106, 250, 140, 8, fill="#495057", outline=""); label(c, 155, 123, "Test Path (F2)", "#ffffff", 10)
-    for i, t in enumerate(["walk to each ore and mine it", "walk back to the start", "line up on the start spot",
+    for i, t in enumerate(["walk to each ore and mine it", "walk back to the start", "line up on the start spot (if checks on)",
                            "check events (if Event alerts is on)", "repeat"]):
         label(c, 290, 50 + i * 26, f"{i + 1}.  {t}", TXT, 10, "w")
+
+
+def draw_min_checks(c):
+    label(c, W / 2, 16, "Settings → Line-up checks & Prompt area", YELLOW, 11, bold=True)
+    rrect(c, 20, 34, 580, 132, 8, fill="#212529", outline="#343a40")
+    # Line-up checks switch
+    rrect(c, 34, 50, 70, 68, 9, fill=BLUE, outline=""); c.create_oval(52, 51, 68, 67, fill="#ffffff", outline="")
+    label(c, 80, 59, "📍 Line-up checks", "#ffffff", 10, "w", True)
+    label(c, 230, 59, "ON = line up on start spot / checkpoints / ores + look for [E]", DIM, 9, "w")
+    label(c, 230, 77, "OFF = just follow the recorded path and press E", GREEN, 9, "w", True)
+    # Prompt area row
+    label(c, 34, 108, "Prompt area", "#ffffff", 10, "w", True)
+    for x, t in ((130, "🔲 Set"), (196, "Clear"), (256, "👁 Show")):
+        rrect(c, x, 96, x + 58, 120, 5, fill="#495057", outline=""); label(c, x + 29, 108, t, "#ffffff", 9)
+    label(c, 326, 108, "auto (around your character)", DIM, 9, "w")
+    for n, (x, y) in enumerate([(34, 46), (130, 92), (256, 92)], start=1):
+        marker(c, x, y, n)
+    # where the prompt is looked for
+    rrect(c, 200, 146, 400, 206, 6, fill="", outline=CYAN, width=2)
+    label(c, 300, 158, "Prompt area", CYAN, 9, bold=True)
+    rrect(c, 262, 172, 280, 190, 3, fill="", outline="#ffffff"); label(c, 271, 181, "E", "#ffffff", 9, bold=True)
+    label(c, 312, 181, "Interact", "#ffffff", 9)
+    label(c, 108, 176, "not the whole screen:\na box around your\ncharacter (or yours)", DIM, 9)
 
 
 MINING_PAGES = [
@@ -699,7 +748,12 @@ MINING_PAGES = [
      "walk back to the start, press Ctrl+P. Pause briefly at corners."),
     ("Route", "2. Fine-tune the walk", draw_min_tune,
      "Each ore's card lists the recorded keys. Edit how long a key is held to fix over/under-shooting."),
-    ("Start", "3. Test and start", draw_min_start,
+    ("Route", "3. Line-up checks & Prompt area", draw_min_checks,
+     "1 Line-up checks: ON lines up on the start spot, checkpoints and each ore, and looks for the [E] Interact prompt "
+     "(nudging if it's missing). OFF just plays your recorded path and presses E at each ore.   "
+     "2 Prompt area: drag a box where the [E] Interact prompt shows up (Clear = automatic box around your character). "
+     "3 Show flashes the box it uses. Test Prompt (F1) checks it."),
+    ("Start", "4. Test and start", draw_min_start,
      "Test Path (F2) walks one lap without mining (click into Roblox within 5 s if you used the button). "
      "Then Start (F6)."),
 ]

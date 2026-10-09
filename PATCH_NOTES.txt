@@ -1,3 +1,16 @@
+WHAT'S NEW IN V6.2
+===================
+- fixed Windows_Launcher.bat closing instantly / not opening for some people (wrong line endings, Python in a folder with spaces, or brackets in the folder name)
+- fixed Skill Macro slots always showing 'on cooldown' when the hotbar region is a few pixels off or the icon glows
+- Skill Macro: new 🪄 Auto-tune: finds the hotbar by itself (only your filled slots), snapshots it and learns each slot's ready line by casting it once (waits for each move to come off cooldown first)
+- Skill Macro: per-slot 'Ready at' setting to adjust a slot by hand
+- Skill Macro: Auto-tune works with small / windowed Roblox, shows where it found the slots, and stops instead of overwriting your snapshots when it can't find the hotbar
+- Skill Macro: New loadout now starts as a fresh empty save instead of a copy of the current one
+- Skill Macro: "Hold click" is now a simple "then M1" tick box (move → delay before → key → M1 → delay after), the Move/Click switch is gone
+- Mining: new 'Line-up checks' switch (off = just follow the recorded path and press E, no checks)
+- Mining: new 'Prompt area' to set where it looks for the [E] Interact prompt
+- Mining: removed the old Test Start Spot button and Tolerance slider; Mining no longer stops when it can't recognise the start spot
+
 WHAT'S NEW IN V6.1
 ===================
 - fixed Event Notifier not working with multiple Roblox windows (each window now posts its own events and does its own /clear)

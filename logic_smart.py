@@ -19,9 +19,10 @@ TEMPLATE_DIR = os.path.join(get_base_path(), "smart_templates")
 DEFAULT_MOVE = {
     "enabled": True, "name": "", "key": "", "priority": 1,
     "repeat": 1, "repeat_delay": 0.15, "cooldown": 0.0,
-    "mouse_mode": "none", "x": 0, "y": 0, "hold_click": 0.0,
-    # one cast:  move mouse -> delay_before -> press key -> delay_after -> next move
+    "mouse_mode": "none", "x": 0, "y": 0, "click": False,
+    # one cast:  move mouse -> delay_before -> press key -> M1 (if ticked) -> delay_after -> next move
     "delay_before": 0.0, "delay_after": 0.0,
+    "ready_at": 0.0,          # this slot's own match level for READY (0 = use the global one); Auto-tune sets it
 }
 
 DEFAULT_SMART = {
@@ -117,14 +118,18 @@ class SmartMacroLogic:
         return True
 
     def new_loadout(self, name):
-        """New loadout = copy of the current one (settings + snapshots), then switch to it."""
+        """New loadout = a fresh, empty save (default settings, no snapshots), then switch to it.
+        The current loadout is saved first and stays as it was."""
         if not name or name in self.loadouts():
             return False
         self._store_active()
-        self.loadouts()[name] = self._snapshot_sections()
-        src, dst = loadout_dir(self.active_loadout()), loadout_dir(name)
-        if os.path.isdir(src):
-            shutil.copytree(src, dst, dirs_exist_ok=True)
+        fresh = {k: copy.deepcopy(DEFAULT_SMART[k]) for k in LOADOUT_SECTIONS}
+        self.loadouts()[name] = copy.deepcopy(fresh)
+        for k, v in fresh.items():
+            self.cfg[k] = v
+        dst = loadout_dir(name)
+        if os.path.isdir(dst):                           # leftovers from an old loadout with this name
+            shutil.rmtree(dst, ignore_errors=True)
         self.app.settings.settings["skill_active_loadout"] = name
         self._templates.clear()
         self.app.settings.save()
@@ -178,6 +183,7 @@ class SmartMacroLogic:
             if "delay_before" not in m:          # settings from before the two delays existed
                 m["delay_before"] = float(m.get("aim_wait", 0.1)) if m.get("mouse_mode", "none") != "none" else 0.0
                 m["delay_after"] = float(m.get("anim") or 0)
+            self.migrate_click(m)
             for old in ("aim_wait", "anim", "require_slot", "require_count"):
                 m.pop(old, None)
             for k, v in DEFAULT_MOVE.items():
@@ -220,18 +226,206 @@ class SmartMacroLogic:
         return self._templates[slot]
 
     def slot_score(self, slot, frame):
-        tpl = self._template(slot)
+        return self.compare(frame, self._template(slot))
+
+    @staticmethod
+    def compare(frame, tpl):
+        """How alike a slot picture is to a reference picture (1 = same)."""
         if tpl is None or frame is None or not frame.size:
             return None
         if frame.shape[:2] != tpl.shape[:2]:
             frame = cv2.resize(frame, (tpl.shape[1], tpl.shape[0]))
-        a = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY).astype(np.float32)
-        b = cv2.cvtColor(tpl, cv2.COLOR_BGR2GRAY).astype(np.float32)
-        # Normalised correlation catches layout (name text vs timer number);
-        # mean brightness catches the darkened cooldown overlay.
-        corr = float(cv2.matchTemplate(a, b, cv2.TM_CCOEFF_NORMED)[0][0])
+        # A light blur hides sparkles / glow animations that made some icons never match.
+        a = cv2.GaussianBlur(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), (3, 3), 0).astype(np.float32)
+        b = cv2.GaussianBlur(cv2.cvtColor(tpl, cv2.COLOR_BGR2GRAY), (3, 3), 0).astype(np.float32)
+        # Normalised correlation catches layout (name text vs timer number). The snapshot's middle is
+        # searched a few pixels around, so a hotbar box that's slightly off still matches.
+        h, w = b.shape
+        my, mx = max(1, h // 12), max(1, w // 12)
+        inner = b[my:h - my, mx:w - mx]
+        if inner.size and inner.std() > 1:
+            corr = float(cv2.matchTemplate(a, inner, cv2.TM_CCOEFF_NORMED).max())
+        else:
+            corr = float(cv2.matchTemplate(a, b, cv2.TM_CCOEFF_NORMED)[0][0])
+        # Mean brightness catches the darkened cooldown overlay.
         bright = 1.0 - min(1.0, abs(a.mean() - b.mean()) / max(b.mean(), 1.0))
         return min(corr, bright)
+
+    # ---------- finding the hotbar by itself ----------
+    @staticmethod
+    def _slot_row(boxes, bottom_aligned):
+        """The longest row of same-size, evenly spaced boxes."""
+        best = []
+        for b in boxes:
+            ref = b[1] + b[3] if bottom_aligned else b[1] + b[3] / 2
+            row = sorted(o for o in boxes
+                         if abs((o[1] + o[3] if bottom_aligned else o[1] + o[3] / 2) - ref) < max(6, b[3] * 0.2)
+                         and abs(o[2] - b[2]) < b[2] * 0.25)
+            ded = []
+            for o in row:                                 # one box per slot (contours can repeat)
+                if not ded or o[0] - ded[-1][0] > o[2] * 0.5:
+                    ded.append(o)
+            if len(ded) >= 3:
+                gaps = np.diff([o[0] for o in ded])
+                if gaps.min() > b[2] * 0.8 and gaps.std() < gaps.mean() * 0.15 and len(ded) > len(best):
+                    best = ded
+        return best
+
+    @classmethod
+    def find_hotbar_slots(cls, img_bgr):
+        """The hotbar = the longest row of same-size, evenly spaced square slots in the lower part
+        of the window. Returns [(x, y, w, h, filled)] left to right (image coords) or []."""
+        H, W = img_bgr.shape[:2]
+        y0 = int(H * 0.55)
+        gray = cv2.cvtColor(img_bgr[y0:], cv2.COLOR_BGR2GRAY)
+        best = []
+        # 1. Slots are dark grey on a near-black bar: anything not near-black, split by the black gaps.
+        #    Works at any window size (small windows blur the slot outlines into the text).
+        for t in (22, 28, 34):
+            mask = cv2.morphologyEx(cv2.inRange(gray, t, 255), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+            _, _, stats, _ = cv2.connectedComponentsWithStats(mask)
+            boxes = [(int(x), int(y) + y0, int(w), int(h)) for x, y, w, h, _ in stats[1:]
+                     if W * 0.025 <= w <= W * 0.09 and 0.6 <= w / h <= 1.5]
+            row = cls._slot_row(boxes, bottom_aligned=True)   # crowns on filled slots make them taller
+            if len(row) > len(best):
+                best = row
+        # 2. Fallback: slot outlines (edges)
+        if len(best) < 3:
+            edges = cv2.dilate(cv2.Canny(gray, 40, 120), np.ones((3, 3), np.uint8))
+            cnts, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+            boxes = []
+            for c in cnts:
+                x, y, w, h = cv2.boundingRect(c)
+                if W * 0.02 <= w <= W * 0.09 and 0.75 <= w / h <= 1.3:
+                    boxes.append((x, y + y0, w, h))
+            best = cls._slot_row(boxes, bottom_aligned=False)
+        if not best:
+            return []
+        side = int(np.median([b[2] for b in best]))
+        bottom = int(np.median([b[1] + b[3] for b in best]))
+        out = []
+        for x, _, w, _ in best:
+            y = bottom - side                            # square, from the bottom (skips the crowns)
+            inner = cv2.cvtColor(img_bgr[y + side // 5:y + side * 4 // 5, x + w // 5:x + w * 4 // 5],
+                                 cv2.COLOR_BGR2GRAY)
+            out.append((x, y, w, side, bool(inner.size and inner.std() > 10)))   # empty slots are one flat colour
+        return out
+
+    def auto_find_hotbar(self):
+        """Find the hotbar in the Roblox window that's in front and point the rotation at the
+        FILLED slots only (2 skills = 2 slots). Returns (filled, total) or None."""
+        try:
+            import pywinctl
+            win = pywinctl.getActiveWindow()
+        except Exception:
+            win = None
+        if not win or "Roblox" not in win.title:
+            self.app.log("Auto-find: click into the Roblox window first.")
+            return None
+        reg = [win.left, win.top, win.left + win.width, win.top + win.height]
+        img = self.utils.capture_screen_bgr(reg)
+        slots = self.find_hotbar_slots(img) if img is not None else []
+        if not slots:
+            self.app.log("Auto-find: couldn't see the hotbar - set it with 🔲 Hotbar region instead.")
+            return None
+        filled = max((i for i, s in enumerate(slots, start=1) if s[4]), default=0)
+        if not filled:
+            self.app.log("Auto-find: the hotbar looks empty.")
+            return None
+        n = min(10, filled)
+        pitch = (slots[-1][0] - slots[0][0]) / max(1, len(slots) - 1) if len(slots) > 1 else slots[0][2]
+        x1 = reg[0] + slots[0][0] - (pitch - slots[0][2]) / 2
+        top = reg[1] + min(s[1] for s in slots[:n])
+        bottom = reg[1] + max(s[1] + s[3] for s in slots[:n])
+        rot = self.cfg["rotation"]
+        rot["region"] = [int(x1), int(top), int(x1 + pitch * n), int(bottom)]
+        rot["slot_count"] = n
+        self.moves()                                     # make sure there's a card per slot
+        self.app.settings.save()
+        self.app.log(f"Auto-find: hotbar found ({len(slots)} slots, using the {n} filled one(s)).")
+        return n, len(slots)
+
+    def slot_threshold(self, slot):
+        """READY when the score is at least this: the slot's own 'Ready at' (Auto-tune), else the global one."""
+        moves = self.moves()
+        own = float(moves[slot - 1].get("ready_at") or 0) if 0 < slot <= len(moves) else 0
+        return own if own > 0 else float(self.cfg["rotation"]["threshold"])
+
+    def slot_image(self, slot):
+        """The live picture of one hotbar slot."""
+        regions = self.slot_regions()
+        if not 0 < slot <= len(regions):
+            return None
+        return self.utils.capture_screen_bgr(regions[slot - 1])
+
+    def wait_until_ready(self, slot, alive, timeout=60.0):
+        """A slot on cooldown changes every second (its timer counts down); a READY slot stays still.
+        Wait until the slot looks the same 1 s apart, then return that picture (None = gave up)."""
+        end = time.time() + timeout
+        prev = self.slot_image(slot)
+        while alive() and time.time() < end:
+            time.sleep(1.0)
+            cur = self.slot_image(slot)
+            score = self.compare(cur, prev)
+            if score is not None and score >= 0.97:
+                return cur
+            prev = cur
+        return None
+
+    def auto_tune(self, slots=None, alive=lambda: True):
+        """Learn each slot by itself, so it works even if moves are still on cooldown when you press it:
+        1. wait until the slot is READY (its picture stops changing) and save that as its snapshot,
+        2. read how well it matches while ready, 3. cast it, 4. read it on cooldown,
+        5. put its own 'Ready at' line halfway between. Returns {slot: (result, detail)}."""
+        results = {}
+        if not self.slot_regions():
+            return results
+        os.makedirs(loadout_dir(self.active_loadout()), exist_ok=True)
+
+        def sample(slot, n, gap):
+            vals = []
+            for _ in range(n):
+                v = self.slot_score(slot, self.slot_image(slot))
+                if v is not None:
+                    vals.append(v)
+                time.sleep(gap)
+            return vals
+
+        for slot, m in enumerate(self.moves(), start=1):
+            if slots and slot not in slots:
+                continue
+            if not alive():
+                break
+            name = m["name"] or f"slot {slot}"
+            if not m["key"]:
+                results[slot] = ("skip", "no key")
+                continue
+            self.app.log(f"Auto-tune {name}: waiting for it to be ready…")
+            ready_img = self.wait_until_ready(slot, alive)
+            if ready_img is None:
+                results[slot] = ("busy", "never stopped changing")
+                self.app.log(f"Auto-tune {name}: its icon never stopped changing (animated?) - set 'Ready at' by hand")
+                continue
+            cv2.imwrite(self.template_path(slot), ready_img)        # the READY snapshot, taken when it really is
+            self._templates.pop(slot, None)
+            ready = sample(slot, 6, 0.1)
+            lo = min(ready) if ready else 0.0
+            with RobloxInputDriver._lock:
+                self._press(m["key"])
+            time.sleep(max(0.6, float(self.cfg["rotation"]["cast_delay"])))
+            cd = sample(slot, 5, 0.1)
+            hi = max(cd) if cd else lo
+            if lo - hi < 0.06:
+                results[slot] = ("same", f"ready {lo:.2f} / after cast {hi:.2f}")
+                self.app.log(f"Auto-tune {name}: nothing changed after pressing {m['key']} - did it cast? "
+                             "(no target / wrong key?) Give it a manual Cooldown instead")
+                continue
+            thr = round(hi + (lo - hi) * 0.5, 2)
+            m["ready_at"] = thr
+            results[slot] = ("ok", f"ready {lo:.2f} / cd {hi:.2f} → {thr:.2f}")
+            self.app.log(f"Auto-tune {name}: ready {lo:.2f}, cooldown {hi:.2f} → Ready at {thr:.2f}")
+        self.app.settings.save()
+        return results
 
     def read_slots(self):
         """Return {slot: score or None} for every slot."""
@@ -251,7 +445,7 @@ class SmartMacroLogic:
         if score is not None:
             # Snapshot wins: the screen reflects cooldown reduction from other casts,
             # a fixed manual timer would not.
-            return score >= float(self.cfg["rotation"]["threshold"])
+            return score >= self.slot_threshold(slot)
         # No snapshot: rely on the manual cooldown alone (none set = unconfigured, skip)
         cd = float(move["cooldown"] or 0)
         return cd > 0 and time.time() - self.last_cast.get(slot, 0) >= cd
@@ -332,33 +526,31 @@ class SmartMacroLogic:
             time.sleep(min(0.02, max(0.0, end - time.time())))
         return self.running
 
+    @staticmethod
+    def migrate_click(d):
+        """Old settings: 'Hold click (s)' and the 'Click' aim mode became one 'then M1' tick box."""
+        if "click" not in d:
+            d["click"] = float(d.get("hold_click") or 0) > 0 or d.get("mouse_mode") == "click"
+        if d.get("mouse_mode") == "click":
+            d["mouse_mode"] = "move"
+        d.pop("hold_click", None)
+        return d
+
     def _aim(self, mode, x, y, wait=0.1):
-        """Move (or click) the mouse to the move's spot, then wait so the game turns to it before the key.
+        """Move the mouse to the move's spot, then wait so the game turns to it before the key.
         mode "none" = use wherever the mouse already is (no wait)."""
-        if mode == "move":
+        if mode in ("move", "click"):                    # "click" = old setting, now just moves
             RobloxInputDriver.move_to(int(x), int(y))
-        elif mode == "click":
-            RobloxInputDriver.click_at(int(x), int(y), duration=0.04)
         else:
             return
         if wait:
             self._wait(float(wait))
 
-    def _hold_click(self, seconds):
-        """Hold left mouse at the current cursor position (after the key press)."""
-        seconds = float(seconds or 0)
-        if seconds <= 0:
-            return
-        mouse = MouseController()
-        with RobloxInputDriver._lock:
-            mouse.press(Button.left)
-        try:
-            end = time.time() + seconds
-            while time.time() < end and (self.running or self._testing):
-                time.sleep(0.02)
-        finally:
-            with RobloxInputDriver._lock:
-                mouse.release(Button.left)
+    def _m1_after(self, d):
+        """'then M1': a short pause after the key (like Items), then one left click."""
+        if self.migrate_click(d).get("click"):
+            time.sleep(0.15)
+            self._click()
 
     def _click(self):
         """One left click (M1) wherever the mouse is."""
@@ -414,15 +606,15 @@ class SmartMacroLogic:
                         self._aim(m["mouse_mode"], m["x"], m["y"], 0)        # 1. move mouse (if it aims)
                         self._wait(float(m.get("delay_before") or 0))        # 2. delay before
                         self._press(m["key"])                                # 3. press
-                        self._hold_click(m["hold_click"])
+                        self._m1_after(m)                                    # 4. M1 (if ticked)
                     if n < int(m["repeat"]) - 1:
                         # gap between presses of a multi-use move (e.g. its 0.2 s anti-spam lockout)
                         self._wait(max(0.05, float(m.get("repeat_delay") or 0.15)))
-                # 4. delay after (with a small floor so the icon has time to show its cooldown)
+                # 5. delay after (with a small floor so the icon has time to show its cooldown)
                 self._wait(max(float(m.get("delay_after") or 0), float(rot["cast_delay"])))
                 # Confirm the cast: a slot with a snapshot should no longer match it.
                 score = self.read_slots().get(slot)
-                if score is not None and score >= float(rot["threshold"]):
+                if score is not None and score >= self.slot_threshold(slot):
                     self.app.log(f"{m['name'] or 'Slot ' + str(slot)}: still ready, retrying")
                     continue
                 self.last_cast[slot] = time.time()
@@ -484,7 +676,7 @@ class SmartMacroLogic:
                         break
                     with RobloxInputDriver._lock:            # not in the middle of the Event Notifier's /clear
                         self._press(step.get("key", ""))
-                        self._hold_click(step.get("hold_click", 0))
+                        self._m1_after(step)
                     self.app.log(f"Combo [{trig}]: step {num} pressed {step.get('key', '')}" + (f" ({i + 1}/{n})" if n > 1 else ""))
                     self._wait(max(0.08, float(step.get("delay", 0) or 0)))   # 0.08 s floor so taps stay separate
         except Exception as e:

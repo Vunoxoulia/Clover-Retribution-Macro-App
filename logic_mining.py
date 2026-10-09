@@ -67,10 +67,18 @@ class MiningLogic(RouteNav):
         time.sleep(wait)
 
 
+    def route_checks(self):
+        """Settings → 'Line-up checks'. Off = just follow the recorded path and press E, no checks."""
+        return bool(self.app.settings.get("mining_checks", True))
+
     def _mine_here(self, ore_idx, seg):
         """Line up on the ore snapshot, confirm the Interact prompt, mine."""
         self.lap["targets"] += 1
         self._wait_still()
+        if not self.route_checks():                      # no checks: mine right where the path ended
+            self.mine(ore_idx, seg)
+            self.lap["mined"] += 1
+            return True
         snap = os.path.join(self.route_dir(), f"ore_{ore_idx}.png")
         if os.path.exists(snap):
             if self.align_to(cv2.imread(snap), f"ore {ore_idx}", max_tries=8) == "lost":
@@ -94,8 +102,8 @@ class MiningLogic(RouteNav):
         self.app.log(f"[{self.active_route()}] Returning to start")
         self.play_segment(route["return"], label="home")
         self._end_lap()
-        if self.has_home() and not self.align_home():
-            self.running = False
+        if self.has_home():
+            self.align_home()                            # small line-up on the start spot, never stops the lap
 
     # ----- Lap statistics -----
 
@@ -110,18 +118,6 @@ class MiningLogic(RouteNav):
     def test_detection(self):
         hit = self.prompt_near_player()
         self.app.log(f"Interact prompt near character: {'FOUND at ' + str(hit) if hit else 'not found'}")
-
-
-    def test_home(self):
-        if not self.has_home():
-            self.app.log("No start spot saved for this route yet (it's saved when you record).")
-            return
-        score, dx, dy = self.measure_offset(cv2.imread(self._home_path()), self._screen())
-        ok = score >= self.SNAP_MIN_SCORE
-        self.app.log(f"Start spot {'recognised' if ok else 'NOT recognised'}: match {score:.2f}, off by ({dx}, {dy}) px")
-        if ok and self.check_focus():
-            self.app.log("Walking back onto the start spot...")
-            self.align_to(cv2.imread(self._home_path()), "home", alive=lambda: self.test_running)
 
 
     def test_movement(self):

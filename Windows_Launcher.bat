@@ -1,6 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
-title VunVun's Macro Loader - V6
+title VunVun's Macro Loader - V6.2
 echo ========================================
 echo   Spatial Macro Launcher - Initializing
 echo ========================================
@@ -16,7 +16,7 @@ if not exist "requirements.txt" (
     echo      Running it from inside the .zip does NOT work.
     echo   2. Do NOT use "Run as administrator" - just double-click the launcher.
     echo.
-    echo   Current folder: %CD%
+    echo   Current folder: !CD!
     echo.
     pause
     exit /b 1
@@ -55,12 +55,12 @@ for /f "usebackq tokens=*" %%a in (`powershell -NoProfile -Command "Get-ItemProp
 
 
 for %%v in (313 312 311 310) do (
-    if exist "%LocalAppData%\Programs\Python\Python%%v\python.exe" (
-        set "PY_EXE=%LocalAppData%\Programs\Python\Python%%v\python.exe"
+    if exist "!LocalAppData!\Programs\Python\Python%%v\python.exe" (
+        set "PY_EXE=!LocalAppData!\Programs\Python\Python%%v\python.exe"
         goto :python_ok
     )
-    if exist "%ProgramFiles%\Python%%v\python.exe" (
-        set "PY_EXE=%ProgramFiles%\Python%%v\python.exe"
+    if exist "!ProgramFiles!\Python%%v\python.exe" (
+        set "PY_EXE=!ProgramFiles!\Python%%v\python.exe"
         goto :python_ok
     )
 )
@@ -90,7 +90,7 @@ if /i "!CHOICE!" neq "Y" exit
 echo.
 echo [INFO] Downloading Python 3.12 installer...
 set "PY_URL=https://www.python.org/ftp/python/3.12.3/python-3.12.3-amd64.exe"
-set "PY_INST=%TEMP%\python_installer_v54.exe"
+set "PY_INST=!TEMP!\python_installer_v54.exe"
 
 
 curl -L -o "!PY_INST!" "!PY_URL!"
@@ -118,44 +118,37 @@ pause
 exit
 
 :python_ok
-for /f "tokens=2 delims= " %%V in ('"!PY_EXE!" --version 2^>^&1') do set "PY_VER=%%V"
-for /f "tokens=1,2 delims=." %%A in ("%PY_VER%") do (
-    set "PY_MAJOR=%%A"
-    set "PY_MINOR=%%B"
-)
-if "%PY_MAJOR%" neq "3" (
+REM "call" keeps the quotes when Python is in a folder with spaces (C:\Program Files\...)
+set "PY_VER=unknown"
+for /f "tokens=2 delims= " %%V in ('call "!PY_EXE!" --version 2^>^&1') do set "PY_VER=%%V"
+REM Let Python check its own version (no fragile number parsing)
+call "!PY_EXE!" -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>&1
+if errorlevel 1 (
     echo.
-    echo [ERROR] Unsupported Python version: %PY_VER%
+    echo [ERROR] Unsupported Python version: !PY_VER!
     echo This project requires Python 3.10 or newer.
     pause
     exit /b 1
 )
-if %PY_MINOR% lss 10 (
-    echo.
-    echo [ERROR] Unsupported Python version: %PY_VER%
-    echo This project requires Python 3.10 or newer.
-    pause
-    exit /b 1
-)
-echo [INFO] Using: !PY_EXE! (Python %PY_VER%)
+echo [INFO] Using: !PY_EXE! - Python !PY_VER!
 
 
 echo.
-echo [INFO] Performing V6 Cleanup...
+echo [INFO] Performing cleanup...
 
 
-if exist "%LocalAppData%\Python\pythoncore-3.14-64\python.exe" (
+if exist "!LocalAppData!\Python\pythoncore-3.14-64\python.exe" (
     echo [CLEANING] Legacy 3.14 assets...
-    "%LocalAppData%\Python\pythoncore-3.14-64\python.exe" -m pip uninstall -y easyocr torch torchvision >nul 2>&1
+    "!LocalAppData!\Python\pythoncore-3.14-64\python.exe" -m pip uninstall -y easyocr torch torchvision >nul 2>&1
 )
 
 
 "!PY_EXE!" -m pip uninstall -y easyocr torch torchvision >nul 2>&1
 
 
-if exist "%USERPROFILE%\.EasyOCR" (
+if exist "!USERPROFILE!\.EasyOCR" (
     echo [INFO] Removing EasyOCR model cache...
-    rmdir /s /q "%USERPROFILE%\.EasyOCR" >nul 2>&1
+    rmdir /s /q "!USERPROFILE!\.EasyOCR" >nul 2>&1
 )
 echo [SUCCESS] Cleanup complete.
 
@@ -167,8 +160,8 @@ echo [INFO] No external software (like Tesseract) is required anymore!
 
 REM The text reader (RapidOCR / onnxruntime) needs the Microsoft Visual C++ Redistributable (x64)
 set "VC_OK=1"
-if not exist "%SystemRoot%\System32\vcruntime140_1.dll" set "VC_OK=0"
-if not exist "%SystemRoot%\System32\msvcp140.dll" set "VC_OK=0"
+if not exist "!SystemRoot!\System32\vcruntime140_1.dll" set "VC_OK=0"
+if not exist "!SystemRoot!\System32\msvcp140.dll" set "VC_OK=0"
 if "!VC_OK!"=="0" (
     echo.
     echo [WARNING] Microsoft Visual C++ Redistributable x64 was NOT found.
@@ -195,7 +188,7 @@ if !errorlevel! neq 0 (
 
 echo.
 echo [2/2] Starting Spatial Macro...
-echo [NOTICE] If this is your first time using V6, it may take a 
+echo [NOTICE] The first start may take a
 echo moment to initialize the RapidOCR engine. Please wait!
 echo.
 "!PY_EXE!" main.py

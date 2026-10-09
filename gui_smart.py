@@ -17,7 +17,7 @@ CARD = dict(fg_color="#212529", border_color="#343a40", border_width=1, corner_r
 BTN = dict(height=26, font=("Arial", 12), fg_color="#495057", hover_color="#343a40")
 BLUE = dict(fg_color="#0d6efd", hover_color="#0b5ed7")
 RED = dict(fg_color="#842029", hover_color="#6a1a21")
-MOUSE_MODES = ["none", "move", "click"]
+MOUSE_MODES = ["none", "move"]
 
 
 # Steps/items/combos can be identical dicts, and list.index/remove match by content.
@@ -188,6 +188,16 @@ class SmartMacroGUI:
                              command=lambda: (self._hide(), PointSelector(picked)))
         return om, pick, lbl
 
+    def _m1_box(self, parent, d, on_save=None):
+        """'then M1' tick box: one left click right after the key (like Items)."""
+        from logic_smart import SmartMacroLogic
+        SmartMacroLogic.migrate_click(d)
+        box = ctk.CTkCheckBox(parent, text="then M1", width=80, font=("Arial", 12))
+        box.configure(command=lambda: (self._set(d, "click", bool(box.get())), on_save and on_save()))
+        if d.get("click"):
+            box.select()
+        return box
+
     def _hide(self):
         self.root.withdraw()
         self.root.update()
@@ -263,6 +273,8 @@ class SmartMacroGUI:
                       command=self.snapshot_all).pack(side="left", padx=(10, 3))
         ctk.CTkButton(row, text="Show", width=56, **BTN, command=self.flash_slots).pack(side="right", padx=3)
         ctk.CTkButton(row, text="Test", width=56, **BTN, command=self.test_rotation).pack(side="right", padx=3)
+        ctk.CTkButton(row, text="🪄 Auto-tune", width=100, height=28, **BLUE,
+                      command=self.auto_tune).pack(side="right", padx=3)
 
         self.build_aim_panel(p)
         self.cards_box = ctk.CTkFrame(p, fg_color="transparent")
@@ -277,17 +289,13 @@ class SmartMacroGUI:
         card = ctk.CTkFrame(parent, **CARD); card.pack(fill="x", pady=4)
         head = ctk.CTkFrame(card, fg_color="transparent"); head.pack(fill="x", padx=10, pady=(6, 0))
         ctk.CTkLabel(head, text="🎯 Mouse aim", font=("Arial", 13, "bold")).pack(side="left")
-        ctk.CTkLabel(head, text="optional — tick slots, then Pick spot. Order: move mouse → delay before → press.",
+        ctk.CTkLabel(head, text="optional — tick slots, then Pick spot. Order: move mouse → delay before → press → M1 (if ticked) → delay after.",
                      font=("Arial", 12), text_color="#ced4da").pack(side="left", padx=8)
         row = ctk.CTkFrame(card, fg_color="transparent"); row.pack(fill="x", padx=8, pady=4)
         self.aim_chips_box = ctk.CTkFrame(row, fg_color="transparent", width=1, height=1)
         self.aim_chips_box.pack(side="left")
         ctk.CTkButton(row, text="✖ Clear", width=70, **BTN, command=self.clear_aim).pack(side="right", padx=3)
         ctk.CTkButton(row, text="🎯 Pick spot", width=100, height=28, **BLUE, command=self.pick_aim).pack(side="right", padx=3)
-        seg = ctk.CTkSegmentedButton(row, values=["Move", "Click"], width=110, height=28,
-                                     command=lambda v: self.set_aim_mode(v.lower()))
-        seg.set("Move")
-        seg.pack(side="right", padx=3)
         self.aim_info = ctk.CTkLabel(card, text="", font=("Arial", 12), text_color="#ced4da", justify="left", anchor="w",
                                      wraplength=660)
         self.aim_info.pack(fill="x", padx=12, pady=(0, 6))
@@ -309,15 +317,6 @@ class SmartMacroGUI:
     def toggle_aim_slot(self, slot):
         self._aim_sel ^= {slot}
         self._refresh_aim()
-
-    def set_aim_mode(self, mode):
-        self._aim_mode = mode
-        changed = [s for s in self._aim_sel if self.logic.moves()[s - 1]["mouse_mode"] != "none"]
-        for s in changed:                                # switch already-aimed selected slots too
-            self.logic.moves()[s - 1]["mouse_mode"] = mode
-        if changed:
-            self.save()
-            self._aim_changed(changed)
 
     def pick_aim(self):
         if not self._aim_sel:
@@ -452,10 +451,12 @@ class SmartMacroGUI:
             parts.append(f"after {float(m['delay_after']):g}s")
         if int(m.get("repeat") or 1) > 1:
             parts.append(f"×{m['repeat']} every {float(m.get('repeat_delay', 0.15)):g}s")
-        if float(m.get("hold_click") or 0):
-            parts.append(f"hold {float(m['hold_click']):g}s")
+        if m.get("click"):
+            parts.append("+ M1")
+        if has_snapshot and float(m.get("ready_at") or 0):
+            parts.append(f"ready at {float(m['ready_at']):g}")
         if m.get("mouse_mode", "none") != "none":
-            parts.append(f"🎯 {m['mouse_mode']}")
+            parts.append("🎯 aim")
         if not has_snapshot and float(m.get("cooldown") or 0):
             parts.append(f"cd {float(m['cooldown']):g}s")
         return " · ".join(parts) or "default"
@@ -528,8 +529,11 @@ class SmartMacroGUI:
                    on_save=lambda: (fill_gap(), refresh())).pack(side="left")
         gap.pack(side="left")
         fill_gap()
-        lab(r2, "Hold click (s)")
-        self._pick(r2, m, "hold_click", ["off", "0.3", "0.5", "1", "1.5", "2", "3"], 64, on_save=refresh).pack(side="left")
+        self._m1_box(r2, m, on_save=refresh).pack(side="left", padx=(12, 0))
+        if self.logic.has_template(slot):
+            lab(r2, "Ready at")
+            self._pick(r2, m, "ready_at", ["off", "0.5", "0.6", "0.7", "0.75", "0.8", "0.85", "0.9", "0.95"], 64,
+                       on_save=refresh).pack(side="left")
         if not self.logic.has_template(slot):
             lab(r2, "Cooldown (s)")
             self._pick(r2, m, "cooldown", ["off", "5", "10", "15", "20", "30", "45", "60"], 64, on_save=refresh).pack(side="left")
@@ -576,18 +580,51 @@ class SmartMacroGUI:
         if not scores:
             self.log("Set the hotbar region first.")
             return
-        thr = float(self.cfg["rotation"]["threshold"])
         for slot, s in scores.items():
             lbl = self.score_labels.get(slot)
             if not lbl:
                 continue
+            thr = self.logic.slot_threshold(slot)
             if s is None:
                 lbl.configure(text="no img", text_color="#ea868f")
             else:
-                lbl.configure(text=f"{'ready' if s >= thr else 'cd'} {s:.2f}",
+                lbl.configure(text=f"{'ready' if s >= thr else 'cd'} {s:.2f}/{thr:.2f}",
                               text_color="#75b798" if s >= thr else "#ffc107")
         pick = self.logic.pick_move(scores)
         self.log(f"Would cast: {pick[1]['name'] or 'slot ' + str(pick[0])}" if pick else "Nothing ready.")
+
+    def auto_tune(self):
+        """One button: find the hotbar in the Roblox window you click into (filled slots only),
+        snapshot it, then cast each move once (ready → cooldown) to learn its own 'Ready at'."""
+        if self.logic.running:
+            self.log("Stop the macro first (F6), then Auto-tune.")
+            return
+        self.log("Auto-tune: click into the Roblox window you'll AFK in - starts in 3 s. It finds the hotbar, "
+                 "waits for each move to be ready, snapshots it and casts it once.")
+
+        def run():
+            time.sleep(3)
+            if not self.logic._focused():
+                self.log("Auto-tune cancelled: Roblox wasn't the focused window.")
+                return
+            found = self.logic.auto_find_hotbar()
+            if not found:
+                # don't tune a region that may be wrong: that would overwrite good snapshots
+                self.log("Auto-tune stopped: couldn't find the hotbar in this Roblox window. "
+                         "Set it with ① 🔲 Hotbar region, then Auto-tune again.")
+                return
+            self.root.after(0, lambda: (self.build_cards(), self.flash_slots()))   # show where it found the slots
+            time.sleep(1.0)
+            time.sleep(0.5)
+            res = self.logic.auto_tune(alive=lambda: not self.logic.running)
+            ok = [s for s, (r, _) in res.items() if r == "ok"]
+            why = {"busy": "icon never stopped changing", "same": "nothing changed after its key (did it cast?)",
+                   "skip": "no key"}
+            bad = [f"slot {s}: {why.get(r, r)}" for s, (r, _) in res.items() if r != "ok"]
+            self.log(f"Auto-tune done: {len(ok)}/{len(res)} slot(s) tuned"
+                     + (f" ({'; '.join(bad)})" if bad else "") + ". Press Test to check.")
+            self.root.after(300, lambda: [self._refresh_snapshot(s) for s in res if s in self._cards])
+        threading.Thread(target=run, daemon=True).start()
 
     def flash_slots(self):
         for o in self.overlays:
@@ -621,7 +658,7 @@ class SmartMacroGUI:
 
     @staticmethod
     def _new_step():
-        return {"key": "", "delay": 0.1, "repeat": 1, "mouse_mode": "none", "x": 0, "y": 0, "hold_click": 0.0}
+        return {"key": "", "delay": 0.1, "repeat": 1, "mouse_mode": "none", "x": 0, "y": 0, "click": False}
 
     def add_combo(self):
         combo = {"enabled": True, "trigger": "", "passthrough": True, "steps": [self._new_step()]}
@@ -707,17 +744,16 @@ class SmartMacroGUI:
 
         def recap():
             parts = []
-            if float(step.get("hold_click") or 0):
-                parts.append(f"hold click {float(step['hold_click']):g}s")
+            if step.get("click"):
+                parts.append("+ M1")
             if step.get("mouse_mode", "none") != "none":
-                parts.append(f"aim: {step['mouse_mode']}")
+                parts.append("🎯 aim")
             extra_lbl.configure(text="" if more["open"] else " · ".join(parts))
 
         def toggle():
             if more["box"] is None:
                 b = ctk.CTkFrame(s, fg_color="transparent")
-                ctk.CTkLabel(b, text="Hold click (s)", font=("Arial", 12)).pack(side="left", padx=(62, 2))
-                self._pick(b, step, "hold_click", ["off", "0.3", "0.5", "1", "1.5", "2", "3"], 64, on_save=recap).pack(side="left")
+                self._m1_box(b, step, on_save=recap).pack(side="left", padx=(62, 2))
                 ctk.CTkLabel(b, text="Mouse", font=("Arial", 12)).pack(side="left", padx=(10, 2))
                 for w in self._mouse_controls(b, step, on_save=recap, on_mode=recap):
                     w.pack(side="left", padx=2)
@@ -826,7 +862,7 @@ class SmartMacroGUI:
         r2 = ctk.CTkFrame(c, fg_color="transparent"); r2.pack(fill="x", padx=8, pady=(0, 6))
         ctk.CTkLabel(r2, text="Rotation match strictness", font=("Arial", 12, "bold")).pack(side="left", padx=4)
         self._pick(r2, self.cfg["rotation"], "threshold", ["0.75", "0.8", "0.85", "0.9", "0.95"], 70).pack(side="left")
-        ctk.CTkLabel(r2, text="lower it if ready moves show as 'cd' in Test", font=("Arial", 12),
+        ctk.CTkLabel(r2, text="used by slots without their own 'Ready at' (Auto-tune sets those)", font=("Arial", 12),
                      text_color="#ced4da").pack(side="left", padx=6)
         ctk.CTkLabel(c, text="The hotkey starts every feature whose 'Enabled' switch is on. Rotation and Skill Combo "
                              "can't both be on — enabling one turns the other off. Items works with either.",
@@ -881,7 +917,7 @@ class SmartMacroGUI:
             self.log(f"Loadout '{name}' loaded.")
 
     def new_loadout(self):
-        name = self._ask("New loadout", "Name for the new loadout (starts as a copy of the current one):")
+        name = self._ask("New loadout", "Name for the new loadout (starts empty - your current loadout stays saved):")
         if not name:
             return
         if name in self.logic.loadouts():
@@ -889,7 +925,7 @@ class SmartMacroGUI:
             return
         self.logic.new_loadout(name)
         self._loadout_switched()
-        self.log(f"Loadout '{name}' created — change its moves / re-snapshot for the new build.")
+        self.log(f"Loadout '{name}' created (empty) — press 🪄 Auto-tune or set the hotbar and snapshot for this build.")
 
     def rename_loadout(self):
         old = self.logic.active_loadout()
@@ -950,7 +986,10 @@ class SmartMacroGUI:
 
     def log(self, msg):
         self._safe_set(self.status_label, text=f"Status: {msg}")
-        print(msg)
+        try:
+            print(msg)
+        except UnicodeEncodeError:                       # console without UTF-8 (arrows, emoji)
+            print(msg.encode("ascii", "replace").decode())
 
     def go_back(self):
         self.logic.stop()

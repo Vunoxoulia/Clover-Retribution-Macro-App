@@ -317,8 +317,6 @@ class SpatialGUI:
         self.smart_switch.pack(side="left")
         ctk.CTkButton(row, text="Test Sensor", width=90, command=lambda: self._run_test(self.logic.test_motion_sensor),
                       **btn).pack(side="right")
-        ctk.CTkButton(row, text="Test Start Spot", width=110, command=lambda: self._run_test(self.logic.test_home),
-                      **btn).pack(side="right", padx=4)
         row = ctk.CTkFrame(mc, fg_color="transparent"); row.pack(fill="x", padx=6, pady=(2, 6))
 
         def slider(parent, label, key, default, lo, hi, steps, fmt):
@@ -330,8 +328,27 @@ class SpatialGUI:
             sl = ctk.CTkSlider(parent, from_=lo, to=hi, number_of_steps=steps, width=95, command=on)
             sl.set(self.settings.get(key, default)); sl.pack(side="left", padx=3); val.pack(side="left", padx=(0, 10))
 
-        slider(row, "Tolerance:", "home_tolerance", 30, 5, 80, 15, lambda v: f"{int(v)}px")
         slider(row, "Motion:", "motion_threshold", 2.5, 0.5, 10, 95, lambda v: f"{float(v):.1f}")
+
+        # No checks = just follow the recorded path
+        row = ctk.CTkFrame(mc, fg_color="transparent"); row.pack(fill="x", padx=6, pady=(2, 2))
+        self.checks_switch = ctk.CTkSwitch(row, text="📍 Line-up checks", font=("Arial", 12, "bold"),
+                                           command=lambda: self.settings.set("mining_checks", bool(self.checks_switch.get())))
+        if self.settings.get("mining_checks", True): self.checks_switch.select()
+        self.checks_switch.pack(side="left")
+        ctk.CTkLabel(row, text="Off = just follow the path and press E: no start-spot / checkpoint / ore line-ups, "
+                               "no prompt search.", font=("Arial", 12), text_color="#ced4da", wraplength=330,
+                     justify="left").pack(side="left", padx=8)
+
+        # Where the [E] Interact prompt is looked for
+        row = ctk.CTkFrame(mc, fg_color="transparent"); row.pack(fill="x", padx=6, pady=(4, 6))
+        ctk.CTkLabel(row, text="Prompt area", font=("Arial", 12, "bold")).pack(side="left")
+        self.prompt_area_lbl = ctk.CTkLabel(row, text="", font=("Arial", 12), text_color="#ced4da")
+        ctk.CTkButton(row, text="🔲 Set", width=60, command=lambda: self.pick_region("prompt_area"), **btn).pack(side="left", padx=(8, 3))
+        ctk.CTkButton(row, text="Clear", width=50, command=self._clear_prompt_area, **btn).pack(side="left", padx=3)
+        ctk.CTkButton(row, text="👁 Show", width=60, command=self._show_prompt_area, **btn).pack(side="left", padx=3)
+        self.prompt_area_lbl.pack(side="left", padx=8)
+        self._refresh_prompt_area()
 
         # Recorded path per ore
         head = ctk.CTkFrame(tab, fg_color="transparent"); head.pack(fill="x", padx=15, pady=(6, 0))
@@ -1276,8 +1293,26 @@ class SpatialGUI:
         self._hide_for_pick()
         Overlay(lambda x1, y1, x2, y2: self.save_region(key, x1, y1, x2, y2))
 
+    def _refresh_prompt_area(self):
+        own = self.settings.get("regions", {}).get("prompt_area", [0, 0, 0, 0])
+        if hasattr(self, "prompt_area_lbl"):
+            self.prompt_area_lbl.configure(text="✔ your box" if own and any(own) else "auto (around your character)")
+
+    def _clear_prompt_area(self):
+        self.settings.settings["regions"]["prompt_area"] = [0, 0, 0, 0]
+        self.settings.save()
+        self._refresh_prompt_area()
+
+    def _show_prompt_area(self):
+        """Flash where the [E] prompt is looked for (yours, or the automatic box) for 3 seconds."""
+        r = self.logic._near_player_region()
+        ov = PersistentOverlay(r[0], r[1], r[2], r[3], color="cyan")
+        self.root.after(3000, ov.destroy)
+
     def save_region(self, key, x1, y1, x2, y2):
         self.root.deiconify(); self.settings.settings["regions"][key] = [x1, y1, x2, y2]; self.settings.save(); self.check_calibration()
+        if key == "prompt_area":
+            self._refresh_prompt_area()
         if key.startswith("gold_clover_") and getattr(self, "gold_status", {}).get(int(key[-1])):
             self.gold_status[int(key[-1])].configure(text="✔ set", text_color="#75b798")
         if key == "ok_scan_area":
