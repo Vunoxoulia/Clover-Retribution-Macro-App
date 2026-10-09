@@ -77,6 +77,62 @@ class LibraryLogic(RouteNav):
         r = hb.get("region", [0, 0, 0, 0])
         return (r, max(1, int(hb.get("slots", 6)))) if r[2] > r[0] and r[3] > r[1] else (None, 0)
 
+    CLOVER_ROW = 1.13        # box height = icon height × this (adds the row of clovers above the icons)
+
+    def auto_find_gold_hotbar(self):
+        """Find the hotbar in the Roblox window that's in front (same search as the Skill Macro's Auto-tune)
+        and set the gold-clover box over the FILLED slots, clovers included. Returns slot count or None."""
+        from logic_smart import SmartMacroLogic
+        try:
+            import pywinctl
+            win = pywinctl.getActiveWindow()
+        except Exception:
+            win = None
+        if not win or "Roblox" not in win.title:
+            self.app.log("Auto-find: click into the Roblox window first.")
+            return None
+        reg = [win.left, win.top, win.left + win.width, win.top + win.height]
+        img = self.utils.capture_screen_bgr(reg)
+        slots = SmartMacroLogic.find_hotbar_slots(img) if img is not None else []
+        filled = max((i for i, s in enumerate(slots, start=1) if s[4]), default=0)
+        if not filled:
+            self.app.log("Auto-find: couldn't see the hotbar - drag it with 🔲 Set hotbar instead.")
+            return None
+        side = slots[0][3]
+        bottom_img = slots[0][1] + side
+        last = slots[filled - 1]
+        # Where the clover row really is (Roblox scales it differently in small windows): the gold/bronze
+        # clovers are the colourful bits just above the right side of the filled slots.
+        cy = self._clover_row_y(img, slots)
+        if cy is not None:
+            top_img = (cy - self.THIRD_Y[1] / 2 * bottom_img) / (1 - self.THIRD_Y[1] / 2)   # 3rd-clover box centred on it
+        else:
+            top_img = bottom_img - side * self.CLOVER_ROW                              # no clovers yet: usual spot
+        hb = self.app.settings.settings.setdefault("gold_hotbar", {})
+        hb["region"] = [reg[0] + slots[0][0], reg[1] + int(round(top_img)), reg[0] + last[0] + last[2],
+                        reg[1] + bottom_img]
+        hb["slots"] = filled
+        self.app.settings.save()
+        self.app.log(f"Auto-find: hotbar found, {filled} filled slot(s). Press Show to check the yellow boxes.")
+        return filled
+
+    @staticmethod
+    def _clover_row_y(img, slots):
+        """Centre height of the clover row above the hotbar (image coords), or None if no clovers show."""
+        side, top = slots[0][3], slots[0][1]
+        y1, y2 = max(0, int(top - side * 0.3)), int(top + side * 0.25)
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        prof = np.zeros(max(0, y2 - y1))
+        for x, _, w, _, filled in slots:
+            if not filled:
+                continue
+            band = hsv[y1:y2, x + int(w * 0.55):x + int(w * 0.98)]
+            prof += ((band[:, :, 0] >= 8) & (band[:, :, 0] <= 32) & (band[:, :, 1] > 120)
+                     & (band[:, :, 2] > 150)).sum(axis=1)
+        if not prof.size or prof.max() < 3:
+            return None
+        return float((prof * np.arange(y1, y2)).sum() / prof.sum())
+
     def move_slot(self, i):
         return int(self._nine("gold_move_slots", lambda k: k + 1)[i])
 

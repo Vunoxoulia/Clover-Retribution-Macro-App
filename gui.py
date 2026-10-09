@@ -13,6 +13,7 @@ import os
 import sys
 import webbrowser
 import time
+import threading
 
 class MacroSelector:
     def __init__(self, root, on_select, current_version):
@@ -896,18 +897,20 @@ class SpatialGUI:
             ctk.CTkLabel(gc, text="", height=4).pack()
             return
 
-        ctk.CTkLabel(gc, text="Drag ONE box over your whole hotbar, from the TOP of the clovers to the bottom of the "
-                              "icons, first icon to last. The 3rd-clover spot of every slot is found automatically.",
+        ctk.CTkLabel(gc, text="🪄 Auto finds your hotbar by itself (click into Roblox within 3 s). Or drag ONE box over "
+                              "it with Set hotbar: from the TOP of the clovers to the bottom of the icons, first icon to last.",
                      font=("Arial", 12), text_color="#ced4da", justify="left", wraplength=420).pack(fill="x", padx=8)
         hb = self.settings.settings.setdefault("gold_hotbar", {"region": [0, 0, 0, 0], "slots": 6})
         row = ctk.CTkFrame(gc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(6, 2))
-        ctk.CTkButton(row, text="🔲 Set hotbar", width=120, height=28, fg_color="#0d6efd", hover_color="#0b5ed7",
+        ctk.CTkButton(row, text="🪄 Auto", width=62, height=28, fg_color="#0d6efd", hover_color="#0b5ed7",
+                      command=self.auto_gold_hotbar).pack(side="left", padx=(0, 4))
+        ctk.CTkButton(row, text="🔲 Set hotbar", width=96, height=28, fg_color="#495057", hover_color="#343a40",
                       command=self.pick_gold_hotbar).pack(side="left")
         ok = self.logic.gold_hotbar()[0] is not None
         ctk.CTkLabel(row, text="✔ set" if ok else "not set", font=("Arial", 12),
                      text_color="#75b798" if ok else "#ea868f").pack(side="left", padx=6)
-        ctk.CTkLabel(row, text="Slots", font=("Arial", 12)).pack(side="left", padx=(8, 2))
-        om = ctk.CTkOptionMenu(row, values=[str(i) for i in range(1, 11)], width=60, height=26,
+        ctk.CTkLabel(row, text="Slots", font=("Arial", 12)).pack(side="left", padx=(4, 2))
+        om = ctk.CTkOptionMenu(row, values=[str(i) for i in range(1, 11)], width=52, height=26,
                                command=lambda v: (hb.__setitem__("slots", int(v)), self.settings.save(), self.build_gold_card()))
         om.set(str(hb.get("slots", 6)))
         om.pack(side="left")
@@ -920,6 +923,16 @@ class SpatialGUI:
         self.gold_test_lbl = ctk.CTkLabel(gc, text="", font=("Arial", 12), justify="left", wraplength=420, anchor="w")
         self.gold_test_lbl.pack(fill="x", padx=8)
         ctk.CTkLabel(gc, text="", height=4).pack()
+
+    def auto_gold_hotbar(self):
+        """Find the hotbar in the Roblox window you click into, then show the 3rd-clover boxes."""
+        self.log("Auto-find: click into the Roblox window now - it looks in 3 s.")
+
+        def run():
+            time.sleep(3)
+            if self.logic.auto_find_gold_hotbar():
+                self.root.after(0, lambda: (self.build_gold_card(), self.show_gold_spots()))
+        threading.Thread(target=run, daemon=True).start()
 
     def pick_gold_hotbar(self):
         self._hide_for_pick()

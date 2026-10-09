@@ -1,3 +1,10 @@
+WHAT'S NEW IN V6.2.1
+=====================
+- Library: new 🪄 Auto button for Gold Clover detection - finds the hotbar and your filled slots by itself
+- fixed hotbar auto-detect (Library Auto and Skill Macro Auto-tune) failing in small Roblox windows or with a bright floor behind the hotbar
+- Skill Macro: "then M1" delay is now adjustable (default 0.3 s): in Rotation it's the "after" box next to then M1, in Skill Combo it's the step's own wait box (press → wait → M1); Items also wait 0.3 s before M1
+- fixed the 'OK detection not set up' message pointing to the old main tab (it's on the OK Popup page)
+
 WHAT'S NEW IN V6.2
 ===================
 - fixed Windows_Launcher.bat closing instantly / not opening for some people (wrong line endings, Python in a folder with spaces, or brackets in the folder name)

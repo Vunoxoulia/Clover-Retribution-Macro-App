@@ -19,7 +19,7 @@ TEMPLATE_DIR = os.path.join(get_base_path(), "smart_templates")
 DEFAULT_MOVE = {
     "enabled": True, "name": "", "key": "", "priority": 1,
     "repeat": 1, "repeat_delay": 0.15, "cooldown": 0.0,
-    "mouse_mode": "none", "x": 0, "y": 0, "click": False,
+    "mouse_mode": "none", "x": 0, "y": 0, "click": False, "m1_delay": 0.3,
     # one cast:  move mouse -> delay_before -> press key -> M1 (if ticked) -> delay_after -> next move
     "delay_before": 0.0, "delay_after": 0.0,
     "ready_at": 0.0,          # this slot's own match level for READY (0 = use the global one); Auto-tune sets it
@@ -279,6 +279,17 @@ class SmartMacroLogic:
         y0 = int(H * 0.55)
         gray = cv2.cvtColor(img_bgr[y0:], cv2.COLOR_BGR2GRAY)
         best = []
+        # 0. The flat dark-grey fill inside each slot (works whatever is behind the hotbar: black bar,
+        #    bright floor...). The fill surrounds the move's name, so each slot is one blob; pad it out to the frame.
+        for lo, hi in ((30, 62), (34, 56)):
+            _, _, stats, _ = cv2.connectedComponentsWithStats(cv2.inRange(gray, lo, hi), connectivity=4)
+            boxes = [(int(x), int(y) + y0, int(w), int(h)) for x, y, w, h, _ in stats[1:]
+                     if W * 0.025 <= w <= W * 0.09 and 0.6 <= w / h <= 1.6]
+            row = cls._slot_row(boxes, bottom_aligned=True)
+            if len(row) > len(best):
+                pad = lambda b: (b[0] - max(1, round(b[2] * 0.05)), b[1] - max(1, round(b[3] * 0.05)),
+                                 b[2] + 2 * max(1, round(b[2] * 0.05)), b[3] + 2 * max(1, round(b[3] * 0.05)))
+                best = [pad(b) for b in row]
         # 1. Slots are dark grey on a near-black bar: anything not near-black, split by the black gaps.
         #    Works at any window size (small windows blur the slot outlines into the text).
         for t in (22, 28, 34):
@@ -534,6 +545,11 @@ class SmartMacroLogic:
         if d.get("mouse_mode") == "click":
             d["mouse_mode"] = "move"
         d.pop("hold_click", None)
+        # The M1 delay's default went from 0.15 to 0.3 s: move settings still on the old default (once)
+        if not d.get("m1_v2"):
+            if float(d.get("m1_delay", 0.15) or 0) == 0.15:
+                d["m1_delay"] = 0.3
+            d["m1_v2"] = True
         return d
 
     def _aim(self, mode, x, y, wait=0.1):
@@ -547,9 +563,9 @@ class SmartMacroLogic:
             self._wait(float(wait))
 
     def _m1_after(self, d):
-        """'then M1': a short pause after the key (like Items), then one left click."""
+        """'then M1': wait the move's M1 delay after the key (default 0.3 s, like Items), then one left click."""
         if self.migrate_click(d).get("click"):
-            time.sleep(0.15)
+            time.sleep(max(0.0, float(d.get("m1_delay", 0.3) or 0)))
             self._click()
 
     def _click(self):
@@ -565,7 +581,7 @@ class SmartMacroLogic:
         with RobloxInputDriver._lock:                    # not in the middle of the Event Notifier's /clear
             self._press(item["key"])
             if item.get("click", True):
-                time.sleep(max(0.05, float(item.get("click_delay", 0.15) or 0.15)))
+                time.sleep(max(0.05, float(item.get("click_delay", 0.3) or 0.3)))
                 self._click()
         self.app.log(f"Item '{item['name']}' seen -> pressed {item['key']}" + (" + M1" if item.get("click", True) else ""))
 
@@ -674,11 +690,15 @@ class SmartMacroLogic:
                 for i in range(n):
                     if not self.running:
                         break
+                    wait = max(0.08, float(step.get("delay", 0) or 0))   # 0.08 s floor so taps stay separate
                     with RobloxInputDriver._lock:            # not in the middle of the Event Notifier's /clear
                         self._press(step.get("key", ""))
-                        self._m1_after(step)
                     self.app.log(f"Combo [{trig}]: step {num} pressed {step.get('key', '')}" + (f" ({i + 1}/{n})" if n > 1 else ""))
-                    self._wait(max(0.08, float(step.get("delay", 0) or 0)))   # 0.08 s floor so taps stay separate
+                    self._wait(wait)
+                    if self.migrate_click(step).get("click") and self.running:
+                        # 'then M1': the step's wait box is the wait BEFORE the click (key → wait → M1 → next)
+                        self._click()
+                        self._wait(0.08)
         except Exception as e:
             self.app.log(f"Combo error: {e}")
         finally:

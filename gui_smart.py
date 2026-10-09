@@ -188,15 +188,33 @@ class SmartMacroGUI:
                              command=lambda: (self._hide(), PointSelector(picked)))
         return om, pick, lbl
 
-    def _m1_box(self, parent, d, on_save=None):
-        """'then M1' tick box: one left click right after the key (like Items)."""
+    def _m1_box(self, parent, d, on_save=None, with_delay=True):
+        """'then M1' tick box + its delay: key → wait [M1 delay] → one left click (like Items)."""
         from logic_smart import SmartMacroLogic
         SmartMacroLogic.migrate_click(d)
-        box = ctk.CTkCheckBox(parent, text="then M1", width=80, font=("Arial", 12))
-        box.configure(command=lambda: (self._set(d, "click", bool(box.get())), on_save and on_save()))
+        f = ctk.CTkFrame(parent, fg_color="transparent")
+        box = ctk.CTkCheckBox(f, text="then M1", width=80, font=("Arial", 12))
+        box.pack(side="left")
+        delay = ctk.CTkFrame(f, fg_color="transparent")
+        ctk.CTkLabel(delay, text="after", font=("Arial", 12)).pack(side="left", padx=(0, 2))
+        d.setdefault("m1_delay", 0.3)
+        self._pick(delay, d, "m1_delay", ["0", "0.05", "0.1", "0.15", "0.2", "0.3", "0.5", "1"], 60,
+                   on_save=on_save).pack(side="left")
+        ctk.CTkLabel(delay, text="s", font=("Arial", 12)).pack(side="left", padx=(2, 0))
+
+        def show():
+            delay.pack(side="left", padx=(2, 0)) if d.get("click") and with_delay else delay.pack_forget()
+
+        def flip():
+            self._set(d, "click", bool(box.get()))
+            show()
+            if on_save:
+                on_save()
+        box.configure(command=flip)
         if d.get("click"):
             box.select()
-        return box
+        show()
+        return f
 
     def _hide(self):
         self.root.withdraw()
@@ -452,7 +470,7 @@ class SmartMacroGUI:
         if int(m.get("repeat") or 1) > 1:
             parts.append(f"×{m['repeat']} every {float(m.get('repeat_delay', 0.15)):g}s")
         if m.get("click"):
-            parts.append("+ M1")
+            parts.append(f"+ M1 after {float(m.get('m1_delay', 0.3)):g}s")
         if has_snapshot and float(m.get("ready_at") or 0):
             parts.append(f"ready at {float(m['ready_at']):g}")
         if m.get("mouse_mode", "none") != "none":
@@ -511,7 +529,7 @@ class SmartMacroGUI:
         self._pick(r1, m, "delay_before", delays, 64, on_save=refresh).pack(side="left")
         lab(r1, "⏱ Delay after (s)")
         self._pick(r1, m, "delay_after", delays, 64, on_save=refresh).pack(side="left")
-        ctk.CTkLabel(r1, text="mouse → before → key → after", font=("Arial", 11),
+        ctk.CTkLabel(r1, text="mouse → before → key → M1 → after", font=("Arial", 11),
                      text_color="#ced4da").pack(side="left", padx=10)
         r2 = ctk.CTkFrame(box, fg_color="transparent"); r2.pack(fill="x", pady=(2, 0))
         lab(r2, "Repeat")
@@ -658,7 +676,7 @@ class SmartMacroGUI:
 
     @staticmethod
     def _new_step():
-        return {"key": "", "delay": 0.1, "repeat": 1, "mouse_mode": "none", "x": 0, "y": 0, "click": False}
+        return {"key": "", "delay": 0.3, "repeat": 1, "mouse_mode": "none", "x": 0, "y": 0, "click": False}
 
     def add_combo(self):
         combo = {"enabled": True, "trigger": "", "passthrough": True, "steps": [self._new_step()]}
@@ -697,7 +715,7 @@ class SmartMacroGUI:
         ctk.CTkButton(c, text="+ Step", width=70, **BTN, command=add_step).pack(anchor="w", padx=10, pady=6)
 
     def _step_row(self, box, combo, step):
-        """One step, read as a sentence: Press [key] [N times], then wait [s].  ⚙ = hold click / mouse."""
+        """One step, read as a sentence: Press [key] [N times], then wait [s] (or 'then M1 after [s]').  ⚙ = M1 / mouse."""
         s = ctk.CTkFrame(box, fg_color="#1a1d20", corner_radius=6); s.pack(fill="x", padx=10, pady=2)
         line = ctk.CTkFrame(s, fg_color="transparent"); line.pack(fill="x")
         s.num = ctk.CTkLabel(line, text=f"Step {index_obj(combo['steps'], step) + 1}", width=52, font=("Arial", 12, "bold"))
@@ -707,7 +725,10 @@ class SmartMacroGUI:
             ctk.CTkLabel(line, text=t, font=("Arial", 12)).pack(side="left", padx=(6, 4))
         word("Press")
         self._pick(line, step, "key", [str(i % 10) for i in range(1, 11)], 56, str).pack(side="left", pady=4)
-        def wait_text(n):
+        def wait_text(n=None):
+            n = int(step.get("repeat") or 1) if n is None else n
+            if step.get("click"):
+                return "M1 after each" if n > 1 else "then M1 after"   # the wait box = wait before the M1
             return "wait after each" if n > 1 else "then wait"
 
         def set_times(v):
@@ -743,9 +764,8 @@ class SmartMacroGUI:
         more = {"box": None, "open": False}
 
         def recap():
+            wait_word.configure(text=wait_text())
             parts = []
-            if step.get("click"):
-                parts.append("+ M1")
             if step.get("mouse_mode", "none") != "none":
                 parts.append("🎯 aim")
             extra_lbl.configure(text="" if more["open"] else " · ".join(parts))
@@ -753,7 +773,7 @@ class SmartMacroGUI:
         def toggle():
             if more["box"] is None:
                 b = ctk.CTkFrame(s, fg_color="transparent")
-                self._m1_box(b, step, on_save=recap).pack(side="left", padx=(62, 2))
+                self._m1_box(b, step, on_save=recap, with_delay=False).pack(side="left", padx=(62, 2))
                 ctk.CTkLabel(b, text="Mouse", font=("Arial", 12)).pack(side="left", padx=(10, 2))
                 for w in self._mouse_controls(b, step, on_save=recap, on_mode=recap):
                     w.pack(side="left", padx=2)

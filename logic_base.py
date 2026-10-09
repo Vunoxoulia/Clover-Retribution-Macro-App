@@ -270,7 +270,7 @@ class BaseLogic:
         search = self.get_ok_search_region()
         if not search:
             if not getattr(self, "_ok_region_warned", False):
-                self.app.log("OK detection not set up — use 'Capture OK Button' on the main tab.")
+                self.app.log("OK detection not set up — capture the OK button on the 🔔 OK Popup page.")
                 self._ok_region_warned = True
             return None
         sx, sy = search[0], search[1]

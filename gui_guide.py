@@ -307,7 +307,7 @@ PAGES = [
      "1 On/off   2 Name (optional)   3 Key   9 ⚙ – open / close the extra options below\n"
      "4 Delay before – wait after the mouse moves, before the key   5 Delay after – wait after the key (lets slow moves finish)\n"
      "6 Repeat – multi-use moves: 4 every 0.25 s = 4 presses, 0.25 s apart (set it just above the move's lockout)\n"
-     "7 then M1 – one left click right after the key (like Items)   8 Cooldown – only for slots with no snapshot   Ready at – this slot's own 'ready' line (Auto-tune sets it)"),
+     "7 then M1 – one left click after the key, 'after' = how long to wait first (default 0.3 s)   8 Cooldown – only for slots with no snapshot   Ready at – this slot's own 'ready' line (Auto-tune sets it)"),
     ("Rotation", "7. Mouse aim (optional)", draw_aim,
      "1 Tick the slots that should aim at the same spot   2 Pick spot: click where on screen (the mouse moves "
      "there before the key; tick 'then M1' on the move to also click)   3 Clear: ticked slots go back to 'wherever the mouse is'   "
@@ -317,7 +317,7 @@ PAGES = [
      "time to turn toward the mouse before the key. Delay after lets slow moves finish before the next cast."),
     ("Skill Combo", "9. Skill Combos", draw_combo,
      "Skill Combo page → + Add Combo, set the trigger key, then + Step. Each step reads like a sentence: "
-     "Press [key] [1 time] then wait [0.2 s]; with 2+ times it waits after each press. The step's ⚙ adds 'then M1' or mouse aim (mouse → wait → press → M1). Works while the macro is running."),
+     "Press [key] [1 time] then wait [0.2 s]; with 2+ times it waits after each press. The step's ⚙ adds 'then M1' (the row then reads 'then M1 after [s]': press → wait → M1) or mouse aim. Works while the macro is running."),
     ("Items", "10. Item auto-use (optional)", draw_items,
      "Items page → Set Scan Area over the pickup messages, then + Add Item: \"When [Copper] shows up, press [9] ☑ then M1\". "
      "It presses the key, then left-clicks to use the item — once per message. Test OCR (while a message is on screen) shows what it reads."),
@@ -441,7 +441,7 @@ def draw_gold_spots(c):
 
 
 def draw_gold_box(c):
-    label(c, W / 2, 16, "Automatic: drag ONE box over the whole hotbar — clovers included", YELLOW, 11, bold=True)
+    label(c, W / 2, 16, "Automatic: 🪄 Auto finds the hotbar (or drag ONE box over it, clovers included)", YELLOW, 11, bold=True)
     x0, y0, size, gap = 40, 60, 78, 8
     for i in range(6):
         x = x0 + i * (size + gap)
@@ -451,7 +451,7 @@ def draw_gold_box(c):
             c.create_text(x + fx * size, y0 - 10, text="✿", fill="#f0a020", font=("Arial", 13))
         c.create_rectangle(x + 0.68 * size, y0 - 22, x + 0.92 * size, y0 + 2, outline=YELLOW, width=2)
     c.create_rectangle(x0 - 4, y0 - 26, x0 + 6 * (size + gap) - gap + 4, y0 + size + 4, outline=RED, width=2, dash=(6, 3))
-    label(c, W / 2, 168, "red = your hotbar box (top of the clovers → bottom of the icons)   yellow = spots it checks",
+    label(c, W / 2, 168, "red = the hotbar box (top of the clovers → bottom of the icons)   yellow = spots it checks",
           TXT, 9)
     label(c, W / 2, 190, "Then pick which hotbar slot each Move is, and press Test / Show to check.", DIM, 9)
 
@@ -532,7 +532,8 @@ LIBRARY_PAGES = [
     ("Gold Clover", "6. Where the 3rd clover appears", draw_gold_spots,
      "Moves are trained in order: Move 1 until its 3rd clover is gold, then Move 2, and so on."),
     ("Gold Clover", "7. Set up Gold Clover detection", draw_gold_box,
-     "Areas tab → Automatic → 🔲 Set hotbar, pick how many Slots, then choose which hotbar slot each Move is "
+     "Areas tab → Automatic → 🪄 Auto (click into Roblox within 3 s: it finds the hotbar and your filled slots by itself) "
+     "or 🔲 Set hotbar + Slots by hand. Then choose which hotbar slot each Move is "
      "(Move N = the N-th button in the wisp's menu). Show draws the yellow spots; Test reads them. "
      "Manual is still there if you'd rather drag each spot yourself."),
     ("Clover Clicker", "8. Clover colours", draw_clicker,
