@@ -278,6 +278,7 @@ class SmartMacroLogic:
                 self._spawn(self._items_loop); parts.append("Items")
         if cfg["combos"]["enabled"]:
             self._hook_combos(); parts.append("Combos")
+        self._spawn(self._ok_loop)          # built in: OK popups are clicked while the macro runs (toggle or not)
         self.app.log(f"Running: {', '.join(parts) or 'nothing enabled'}")
         self.app.on_state_change(True)
 
@@ -291,6 +292,25 @@ class SmartMacroLogic:
         self._threads = []
         self.app.log("Stopped")
         self.app.on_state_change(False)
+
+    def _ok_loop(self):
+        """Click OK popups every ~10 s while running, same as Library / Mining / Fishing do.
+        Uses the OK Popup page's setup and lock, so it never clicks at the same time as 'Always Click OK'."""
+        ok = getattr(getattr(self.app, "ok_page", None), "logic", None)
+        if ok is None:
+            return
+        while self.running:
+            if ok._ok_scanner_lock.acquire(blocking=False):
+                try:
+                    ok.handle_ok_popup()
+                except Exception as e:
+                    self.app.log(f"OK check error: {e}")
+                finally:
+                    ok._ok_scanner_lock.release()
+            for _ in range(40):
+                if not self.running:
+                    return
+                time.sleep(0.25)
 
     def _spawn(self, fn):
         t = threading.Thread(target=fn, daemon=True)

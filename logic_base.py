@@ -1,3 +1,4 @@
+import ctypes
 import os
 import threading
 import cv2
@@ -25,6 +26,9 @@ class BaseLogic:
         self.input_lock = RobloxInputDriver._lock
         self.test_running = False
         self.on_ok_clicked = None
+        # Set while an OK popup is being clicked: a route walk pauses (keys up, clock stopped) until it's done.
+        self.ok_busy = threading.Event()
+        self.walking = False          # a route is being walked: look for OK every second instead of every 10
         # Global always-on OK scanner (runs even when macro is stopped/paused)
         self._global_ok_active = False
         self._global_ok_thread = None
@@ -101,9 +105,11 @@ class BaseLogic:
             else:
                 self.app.log("OK scanner busy; skipping this scan cycle.")
 
-            for _ in range(40):
+            for i in range(40):
                 if not self.running or not self.ok_scanner_running:
                     return
+                if self.walking and i >= 4:            # mid-route: a popup freezes you, so catch it fast
+                    break
                 time.sleep(0.25)
 
     def wait_for_roblox_focus(self):
@@ -311,19 +317,33 @@ class BaseLogic:
             if hit:
                 cx, cy, score = self.resolve_ok_click(hit)
                 self.app.log(f"Found 'Ok' [match {score:.2f}]. Clicking at ({cx}, {cy})...")
-                with self.input_lock:
-                    old_x, old_y = self.get_cursor_pos()
-                self.human_click(cx, cy, duration=0.15)
-                time.sleep(1.0)
-                self.human_click(cx, cy, duration=0.15)
-                with self.input_lock:
-                    RobloxInputDriver.move_to(old_x, old_y)
+                self.ok_busy.set()                     # a route walk pauses until this is done
+                try:
+                    self._click_ok(cx, cy)
+                finally:
+                    self.ok_busy.clear()
                 if self.on_ok_clicked:
                     threading.Thread(target=self.on_ok_clicked, daemon=True).start()
                 return True
         except Exception as e:
             self.app.log(f"Error checking for Ok popup: {e}")
         return False
+
+    def _click_ok(self, cx, cy):
+        # Hold the shared input lock for the whole thing (a running rotation waits), and remember
+        # which window had focus: clicking OK in ANOTHER Roblox window makes Windows switch to it,
+        # so afterwards we switch back or the macro keeps pressing keys in the wrong window.
+        with RobloxInputDriver._lock:
+            prev = ctypes.windll.user32.GetForegroundWindow()
+            old_x, old_y = self.get_cursor_pos()
+            self.human_click(cx, cy, duration=0.15)
+            time.sleep(1.0)
+            self.human_click(cx, cy, duration=0.15)
+            RobloxInputDriver.move_to(old_x, old_y)
+            if prev and ctypes.windll.user32.GetForegroundWindow() != prev:
+                from logic_events import EventWatcher
+                time.sleep(0.2)
+                EventWatcher.focus_window(prev, timeout=1.0)
 
     def main_loop(self):
         """To be overridden by subclasses"""

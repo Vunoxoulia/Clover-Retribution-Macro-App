@@ -657,7 +657,9 @@ class SpatialGUI:
         ctk.CTkButton(tab, text="? Help", width=60, height=24, font=("Arial", 11, "bold"), fg_color="#343a40",
                       hover_color="#495057", text_color="#0dcaf0",
                       command=self.open_ok_guide).place(relx=1.0, x=-14, y=14, anchor="ne")
-        ctk.CTkLabel(tab, text="Shared by every macro, so you only set it up once.", font=("Arial", 12),
+        ctk.CTkLabel(tab, text="Shared by every macro, so you only set it up once.\n"
+                          "OK popups are always clicked while a macro runs. Always Click OK also clicks them "
+                          "when no macro is running.", font=("Arial", 12), wraplength=460,
                      text_color="#ced4da").pack(pady=(0, 6))
         if not hasattr(self, "_always_ok_on"):
             self._always_ok_on = False

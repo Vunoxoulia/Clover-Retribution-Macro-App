@@ -185,6 +185,23 @@ class RouteNav(BaseLogic):
     def _motion_amount(self, a, b):
         return float(np.mean(np.abs(a - b)))
 
+    def _ok_pause(self, held, alive):
+        """An OK popup is being clicked (it freezes the character): let go of the held keys, wait
+        until it's handled, then press them again. Returns the seconds spent, so the walk can resume
+        exactly where it was instead of losing that time."""
+        if not self.ok_busy.is_set():
+            return 0.0
+        t0 = time.perf_counter()
+        for k in held:
+            keyboard.release(k)
+        self.app.log("   'Ok' popup: route paused")
+        while self.ok_busy.is_set() and alive():
+            time.sleep(0.05)
+        time.sleep(0.3)                                  # let the game take control back
+        for k in held:
+            keyboard.press(k)
+        return time.perf_counter() - t0
+
     def hold_key(self, key, seconds, alive=None):
         """Hold a key for `seconds` of actual movement (Smart Movement: the clock
         pauses while the screen is frozen; capped so a wall can't hang it)."""
@@ -193,19 +210,31 @@ class RouteNav(BaseLogic):
         if seconds <= 0:
             return alive()
         if not self._smart():
+            self.walking = True
             keyboard.press(key)
             end = time.perf_counter() + seconds
-            while alive() and time.perf_counter() < end:
-                time.sleep(min(0.02, max(0.0, end - time.perf_counter())))
-            keyboard.release(key)
+            try:
+                while alive() and time.perf_counter() < end:
+                    end += self._ok_pause([key], alive)
+                    time.sleep(min(0.02, max(0.0, end - time.perf_counter())))
+            finally:
+                keyboard.release(key)
+                self.walking = False
             return alive()
         threshold = float(self.app.settings.get("motion_threshold", 2.5))
         cap = seconds * 1.6 + 1.5
         moved, prev = 0.0, self._motion_probe()
         start = last = time.perf_counter()
+        self.walking = True
         keyboard.press(key)
         try:
             while alive() and moved < seconds and (last - start) < cap:
+                paused = self._ok_pause([key], alive)
+                if paused:
+                    cap += paused
+                    start += paused
+                    last, prev = time.perf_counter(), self._motion_probe()
+                    continue
                 time.sleep(0.04)
                 now = time.perf_counter()
                 dt, last = now - last, now
@@ -215,6 +244,7 @@ class RouteNav(BaseLogic):
                 prev = cur
         finally:
             keyboard.release(key)
+            self.walking = False
         return alive()
 
     def _wait_still(self, max_wait=1.0, alive=None):
@@ -551,8 +581,14 @@ class RouteNav(BaseLogic):
         start = time.perf_counter()
         shift, lag_used, last = 0.0, 0.0, start
         down, ei, ci = set(), 0, 0
+        self.walking = True
         try:
             while alive():
+                paused = self._ok_pause(list(down), alive)
+                if paused:
+                    shift += paused
+                    last = time.perf_counter()
+                    continue
                 now = time.perf_counter()
                 dt, last = now - last, now
                 lagging = smart and down and not motion["moving"] and (now - start - shift) > 0.2
@@ -587,6 +623,7 @@ class RouteNav(BaseLogic):
                 self.app.log(f"   ~ lag compensated: +{lag_used:.2f}s")
         finally:
             motion["stop"] = True
+            self.walking = False
             for k in down:
                 keyboard.release(k)
         return alive()

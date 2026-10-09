@@ -1,6 +1,18 @@
 HOW TO RUN SPATIAL MACRO
 ========================
 
+WHAT'S NEW IN V6.1
+===================
+- fixed Event Notifier not working with multiple Roblox windows (each window now posts its own events and does its own /clear)
+- fixed Event Notifier not posting events that were already in chat when you turned alerts on
+- fixed "Same event again after" blocking other windows (it now counts per window)
+- fixed the Skill Macro pressing keys in the middle of an event check (it now waits until the check and /clear are done)
+- fixed Event alerts turning on by themselves when opening the app (always OFF at start now)
+- fixed the Skill Macro not clicking "Ok" popups while running (no need to turn on Always Click OK anymore)
+- fixed staying on the wrong window after an "Ok" popup was clicked in another Roblox window
+- fixed Library / Mining routes going off-course when an "Ok" popup appears mid-walk (the walk now pauses, clicks Ok, then continues where it was)
+- fixed an error message spam after leaving the Skill Macro page
+
 WHAT'S NEW IN V6
 =================
 - NEW Skill Macro: auto uses your skills when they're ready, in the order you pick
