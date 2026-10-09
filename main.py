@@ -4,7 +4,7 @@ import sys
 import ctypes
 import os
 
-VERSION = "5.6.1"
+VERSION = "6"
 
 def get_resource_path(relative_path):
     
@@ -29,9 +29,12 @@ class SpatialApp:
         self.clear_screen()
         self.selector = MacroSelector(self.root, self.launch_macro, VERSION)
 
-    def launch_macro(self, title, logic_class, tabs=None, tutorial_url="#"):
+    def launch_macro(self, title, logic_class, tabs=None, tutorial_url="#", gui_class=None):
         self.clear_screen()
-        self.app = SpatialGUI(self.root, title=title, logic_class=logic_class, on_back=self.show_selector, tabs=tabs, tutorial_url=tutorial_url)
+        if gui_class:
+            self.app = gui_class(self.root, title=title, on_back=self.show_selector)
+            return
+        self.app =SpatialGUI(self.root, title=title, logic_class=logic_class, on_back=self.show_selector, tabs=tabs, tutorial_url=tutorial_url)
 
 def main():
     if sys.platform.startswith('win'):

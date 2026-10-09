@@ -1,4 +1,13 @@
 #!/bin/bash
+# Always work from the folder this launcher is in
+cd "$(dirname "$0")" || exit 1
+if [ ! -f "requirements.txt" ]; then
+    echo "[ERROR] requirements.txt was not found next to this launcher."
+    echo "  Unzip the download first and run the launcher from the extracted folder (not from inside the zip)."
+    echo "  Current folder: $(pwd)"
+    exit 1
+fi
+
 
 # --- VunVun's Macro Loader (Linux/macOS) ---
 echo "========================================"
@@ -44,7 +53,7 @@ fi
 echo "[INFO] Using: $PY_EXE"
 
 # 3. Migration Cleanup (Remove EasyOCR/Torch)
-echo "[INFO] Performing V5.4 Cleanup..."
+echo "[INFO] Performing V6 Cleanup..."
 $PY_EXE -m pip uninstall -y easyocr torch torchvision &> /dev/null
 rm -rf ~/.EasyOCR &> /dev/null
 
@@ -58,6 +67,6 @@ $PY_EXE -m pip install -r requirements.txt
 
 # 6. Run Macro
 echo "[INFO] Starting Spatial Macro..."
-echo "[NOTICE] If this is your first time using V5.4, it may take a"
+echo "[NOTICE] If this is your first time using V6, it may take a"
 echo "moment to initialize the RapidOCR engine. Please wait!"
 $PY_EXE main.py

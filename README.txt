@@ -1,15 +1,22 @@
 HOW TO RUN SPATIAL MACRO
 ========================
 
-WHAT'S NEW IN V5.4
+WHAT'S NEW IN V6
 =================
-- New OCR Engine: Switched from EasyOCR to RapidOCR (PaddleOCR).
-- Added Fishing Macro: Full automation for the fishing minigame.
-- Experimental Linux & Mac Support: New launcher for non-Windows platforms (Untested).
-- Launcher Fix: Resolved redundant Python installation attempts.
-- UI Overhaul: New card-based Macro Hub layout with easy navigation.
-- Platform Optimization: CoreML/CUDA support for near-instant OCR.
-- Stability Improvements: Refined logic handling and better error reporting.
+- NEW Skill Macro: auto uses your skills when they're ready, in the order you pick
+- Skill Combo: press one key to do a chain of moves
+- Item auto-use: uses an item (hotkey + M1) when a message like "Obtained Copper!" shows up
+- Loadouts: save different skill setups and switch between them
+- NEW Event Notifier: sends server events from chat to your Discord (works in every macro or on its own)
+- Mouse aim: make moves aim at a spot on the screen before casting
+- added Setup Guides with pictures for every macro, Events and OK Popup (click "How to Setup" or "? Help")
+- Library Macro: new ways to find the wisp's buttons if the auto one doesn't work
+- Library Macro: new minigame detector, it knows when to click clovers and when to walk
+- Library Macro: Test Path button works now (also on F3)
+- Mining Macro: routes now use however many ores you record
+- cleaner and faster menus, with the same big ON/OFF buttons everywhere
+- Library Macro: can hide the chat during the minigame so it isn't clicked as a clover
+- fixed the macro window not coming back when you press Esc while selecting an area, spot or color
 
 PREREQUISITES & SYSTEM REQUIREMENTS
 ==================================

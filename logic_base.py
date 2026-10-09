@@ -1,4 +1,6 @@
+import os
 import threading
+import cv2
 import time
 import random  
 import numpy as np
@@ -211,25 +213,114 @@ class BaseLogic:
         screen_w, screen_h = self.get_screen_size()
         return [0, 0, screen_w, screen_h]
 
+    OK_TEMPLATE_FILE = "ok_template.png"
+    OK_SEARCH_PAD = 60        # px of slack around the saved area (popup may shift slightly)
+    OK_MATCH_THRESHOLD = 0.80
+
+    def _ok_template_path(self):
+        from settings import get_base_path
+        return os.path.join(get_base_path(), self.OK_TEMPLATE_FILE)
+
+    def capture_ok_template(self, region):
+        """Screenshot the selected OK button area and save it as the match template."""
+        try:
+            if region[2] - region[0] < 5 or region[3] - region[1] < 5:
+                return False
+            img = self.utils.capture_screen_bgr(region)
+            cv2.imwrite(self._ok_template_path(), img)
+            self._ok_template = None  # force reload
+            return True
+        except Exception as e:
+            self.app.log(f"Error saving OK template: {e}")
+            return False
+
+    def _load_ok_template(self):
+        tpl = getattr(self, "_ok_template", None)
+        if tpl is None:
+            path = self._ok_template_path()
+            if os.path.exists(path):
+                img = cv2.imread(path)
+                if img is not None:
+                    tpl = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            self._ok_template = tpl
+        return tpl
+
+    def get_ok_search_region(self):
+        """Area the OK detector scans. Uses the user-set 'ok_scan_area' if present,
+        otherwise the captured OK button box plus a little padding. None = not set up."""
+        regions = self.app.settings.get("regions", {})
+        scan = regions.get("ok_scan_area", [0, 0, 0, 0])
+        if scan and any(v != 0 for v in scan):
+            return list(scan)
+        btn = regions.get("ok_button", [0, 0, 0, 0])
+        if btn and any(v != 0 for v in btn):
+            pad = self.OK_SEARCH_PAD
+            return [max(0, btn[0] - pad), max(0, btn[1] - pad), btn[2] + pad, btn[3] + pad]
+        return None
+
+    def find_ok_button(self):
+        """Look for the OK button only inside the OK scan area. Returns (x, y, score) or None.
+        Uses grayscale template matching on a small crop — much cheaper than OCR on the whole window."""
+        search = self.get_ok_search_region()
+        if not search:
+            if not getattr(self, "_ok_region_warned", False):
+                self.app.log("OK detection not set up — use 'Capture OK Button' on the main tab.")
+                self._ok_region_warned = True
+            return None
+        sx, sy = search[0], search[1]
+        frame = cv2.cvtColor(self.utils.capture_screen_bgr(search), cv2.COLOR_BGR2GRAY)
+
+        tpl = self._load_ok_template()
+        if tpl is not None and tpl.shape[0] <= frame.shape[0] and tpl.shape[1] <= frame.shape[1]:
+            res = cv2.matchTemplate(frame, tpl, cv2.TM_CCOEFF_NORMED)
+            _, max_val, _, max_loc = cv2.minMaxLoc(res)
+            if max_val >= float(self.app.settings.get("ok_match_threshold", self.OK_MATCH_THRESHOLD)):
+                th, tw = tpl.shape[:2]
+                return (sx + max_loc[0] + tw // 2, sy + max_loc[1] + th // 2, max_val)
+            return None
+
+        # No template image: fall back to OCR, but only on the small area
+        for bbox, text, conf in self.utils.get_text_from_region(search, upscale=2):
+            if text.strip().lower() == "ok":
+                return (sx + int(np.mean([p[0] for p in bbox])),
+                        sy + int(np.mean([p[1] for p in bbox])), conf)
+        return None
+
+    def resolve_ok_click(self, hit):
+        """Swap the detected position for the user's fixed click spot, if one is set."""
+        pos = self.app.settings.get("regions", {}).get("ok_click_pos", [0, 0])
+        if pos and len(pos) == 2 and any(v != 0 for v in pos):
+            return (pos[0], pos[1], hit[2])
+        return hit
+
+    def test_ok_popup(self):
+        self.app.log("Testing OK popup detection...")
+        hit = self.find_ok_button()
+        if not hit:
+            self.app.log("Test: 'Ok' not found in the OK scan area.")
+            return
+        cx, cy, score = self.resolve_ok_click(hit)
+        self.app.log(f"Test: Found 'Ok' [match {score:.2f}]. Moving and clicking at ({cx}, {cy}).")
+        self.utils.mouse_move(cx, cy)
+        time.sleep(0.5)
+        RobloxInputDriver.click_at(cx, cy, duration=0.035)
+
     def handle_ok_popup(self):
         try:
-            win = self.get_roblox_window_region()
-            results = self.utils.get_text_from_region(win, upscale=1)
-            for bbox, text, conf in results:
-                if text.strip().lower() == "ok":
-                    cx = win[0] + int(np.mean([p[0] for p in bbox]))
-                    cy = win[1] + int(np.mean([p[1] for p in bbox]))
-                    self.app.log(f"Found 'Ok' at ({cx}, {cy}). Clicking...")
-                    with self.input_lock:
-                        old_x, old_y = self.get_cursor_pos()
-                    self.human_click(cx, cy, duration=0.15)
-                    time.sleep(1.0)
-                    self.human_click(cx, cy, duration=0.15)
-                    with self.input_lock:
-                        RobloxInputDriver.move_to(old_x, old_y)
-                    if self.on_ok_clicked:
-                        threading.Thread(target=self.on_ok_clicked, daemon=True).start()
-                    return True
+            hit = self.find_ok_button()
+            if hit:
+                cx, cy, score = self.resolve_ok_click(hit)
+                self.app.log(f"Found 'Ok' [match {score:.2f}]. Clicking at ({cx}, {cy})...")
+                with self.input_lock:
+                    old_x, old_y = self.get_cursor_pos()
+                self.human_click(cx, cy, duration=0.15)
+                time.sleep(1.0)
+                self.human_click(cx, cy, duration=0.15)
+                with self.input_lock:
+                    RobloxInputDriver.move_to(old_x, old_y)
+                if self.on_ok_clicked:
+                    threading.Thread(target=self.on_ok_clicked, daemon=True).start()
+                return True
         except Exception as e:
             self.app.log(f"Error checking for Ok popup: {e}")
         return False

@@ -154,6 +154,15 @@ class FishingLogic(BaseLogic):
         return bar_x, fish_x
 
     def main_loop(self):
+        from logic_events import WATCHER
+        WATCHER.hold("Fishing")             # event checks only between catches (see checkpoint below)
+        try:
+            self._fishing_loop()
+        finally:
+            WATCHER.release("Fishing")
+
+    def _fishing_loop(self):
+        from logic_events import WATCHER
         self.app.log("Fishing Macro Started")
         bar_color = self.app.settings.get("bar_color", [95, 153, 98])
         fish_color = self.app.settings.get("fish_color", [188, 187, 144])
@@ -244,6 +253,8 @@ class FishingLogic(BaseLogic):
             
             self.app.log("Caught! Waiting 2 seconds before next cast...")
             self.handle_ok_popup()
+            if self.running:
+                WATCHER.checkpoint("Fishing")   # minigame finished, before the recast: safe moment to check chat
             time.sleep(2.0) 
             
             if not self.running:

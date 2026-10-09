@@ -101,11 +101,15 @@ class SpatialUpdater:
                 dest_dir = os.path.abspath(".")
 
                 PRESERVE = {"settings.json", "Vunoxoulia.ico", "__pycache__"}
+                # The user's own saved data: never deleted or overwritten by an update.
+                # (recorded routes, Skill Macro snapshots, captured dialogue / minigame / OK pictures)
+                USER_DATA = {"routes", "routes_library", "smart_templates", "library_templates",
+                             "ok_template.png", "event_roles_import.json"}
 
                 incoming_names = set(os.listdir(extracted_folder))
 
                 for existing in os.listdir(dest_dir):
-                    if existing in PRESERVE:
+                    if existing in PRESERVE or existing in USER_DATA:
                         continue
                     if existing not in incoming_names:
                         existing_path = os.path.join(dest_dir, existing)
@@ -120,6 +124,18 @@ class SpatialUpdater:
                 for item in incoming_names:
                     src_path = os.path.join(extracted_folder, item)
                     dest_path = os.path.join(dest_dir, item)
+
+                    if item in PRESERVE or (item in USER_DATA and os.path.exists(dest_path)):
+                        if os.path.isdir(src_path) and os.path.isdir(dest_path):
+                            # only add files the user doesn't have yet; never replace theirs
+                            for root, _, files in os.walk(src_path):
+                                rel = os.path.relpath(root, src_path)
+                                os.makedirs(os.path.join(dest_path, rel), exist_ok=True)
+                                for f in files:
+                                    target = os.path.join(dest_path, rel, f)
+                                    if not os.path.exists(target):
+                                        shutil.copy2(os.path.join(root, f), target)
+                        continue
 
                     if os.path.isdir(src_path):
                         if os.path.exists(dest_path):

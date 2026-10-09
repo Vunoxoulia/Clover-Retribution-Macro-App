@@ -15,9 +15,9 @@ class SpatialSettings:
             "use_ocr": False,
             "move_names": ["", "", ""],
             "clover_colors": {
-                "bronze": (251, 197, 170),
-                "silver": (187, 197, 197),
-                "gold": (251, 198, 108)
+                "bronze": (198, 62, 37),
+                "silver": (164, 178, 178),
+                "gold": (255, 180, 51)
             },
             "color_tolerance": 25,
             "hotkeys": {
@@ -27,7 +27,8 @@ class SpatialSettings:
                 "refresh": "f5",
                 "test_btn": "f1",
                 "test_color": "f2",
-                "test_movement": "f2"
+                "test_movement": "f2",
+                "test_path": "f3"
             },
             "positions": {
                 "clover_training": [0, 0],
@@ -51,6 +52,9 @@ class SpatialSettings:
                 "anti_main": [0, 0, 0, 0],
                 "anti_party": [0, 0, 0, 0],
                 "minigame_bar": [0, 0, 0, 0],
+                "ok_button": [0, 0, 0, 0],
+                "ok_scan_area": [0, 0, 0, 0],
+                "ok_click_pos": [0, 0],
                 "fishing_click_pos": [0, 0]
             },
             "bar_color": [95, 153, 98],
@@ -61,6 +65,14 @@ class SpatialSettings:
             "resolved_move_positions": [None, None, None],
             "speed_multiplier": 1.0,
             "sprinting_delay": 0.25,
+            "smart_movement": True,
+            "active_route": "",
+            "home_tolerance": 30,
+            "motion_threshold": 2.5,
+            "arrival_wait": 1.5,
+            "max_node_misses": 2,
+            "dialogue_jump_delay": 0.3,
+            "dialogue_retry_delay": 0.5,
             "node_timers": {
                 "start": {"mine_hold": 0.0, "mine_wait": 0.0, "steps": [
                     {"key": "a", "seconds": 0.15}, {"key": "w", "seconds": 1.0}, {"key": "a", "seconds": 0.15}]},
@@ -101,6 +113,8 @@ class SpatialSettings:
                 with open(self.filename, 'r') as f:
                     data = json.load(f)
                     self.settings.update(data)
+                    # hotkeys are replaced as a whole on load: re-add actions added since that file was saved
+                    self.settings["hotkeys"].setdefault("test_path", "f3")
             except Exception as e:
                 print(f"Error loading settings: {e}")
 

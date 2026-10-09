@@ -1,36 +1,22 @@
-WHAT'S NEW IN V5.6.2
+WHAT'S NEW IN V6
 =================
-
-WHAT'S NEW IN V5.6.1
-=================
-- Mining macro UI: added timer UI 
-- Ok button detection: OCR whole Roblox window, click twice.
-- Post‑Ok recovery: auto‑restart movement after popup.
-- Window scoping: restrict detection to Roblox bounds.
-- pixel_search_raw: raw pixel coordinate utility added.
-- Editable WASD walk timers: Tundra node timers now show the exact keys (W/A/S/D) held to reach each node and let you edit the raw hold time in seconds directly - no more guessing multipliers, and each node only shows the keys it actually uses.
-- Fixed Tundra macro crash: the mining loop referenced speed/sprint-delay logic that was never defined, which would have crashed the macro the moment it tried to move. Movement timing is now driven directly by the editable per-node values.
-- Fixed "Reset to Defaults" crash in Tundra Settings caused by a leftover reference from before the WASD timer rework.
-- Collapsible node list: each Tundra node is now a single click-to-expand row instead of a wall of open cards, so the Settings tab stays readable with all 11 nodes visible at once.
-- Readability pass: brighter, larger labels across every macro's tabs (was small low-contrast gray text), plus a wider Tundra window so all four WASD fields fit without scrolling.
-- Fishing macro: "Test Full Tracking" no longer ignores the Stop/Reload hotkey - it previously could run forever and leave Space stuck held down if interrupted mid-test.
-- Fishing macro: the Tolerance slider in Fishing Settings now actually affects bar/fish color detection; it was previously hardcoded and had no effect on the main detection path.
-
-WHAT'S NEW IN V5.6
-=================
-- Ok Button Detection Rework: Scanner now OCRs the entire Roblox window and looks for the text "Ok" directly, then clicks it with smooth movement. Clicks twice with a 1 second gap to ensure the popup registers.
-- Post-Ok Recovery: After dismissing the Ok popup, the library macro automatically re-runs the approach movement (D/S/W) so the character gets back to the correct position without the cycle failing.
-- Roblox Window Scoping: All popup detection now scopes to the Roblox window bounds specifically rather than the full monitor, preventing false detections from other windows.
-- pixel_search_raw Utility: Added raw pixel coordinate search method to SpatialUtils for dense pixel-level detection independent of contour filtering.
-
-WHAT'S NEW IN V5.5.2
-=================
-- Reset to Defaults Fix: Clover color reset now saves colors as lists instead of tuples, preventing JSON round-trip mismatches that caused the reset to silently fail for some users.
-- Unified Color Defaults: Bronze clover default color was mismatched between the GUI and the detection logic. Both now use the same value so reset produces colors that actually work.
-- Correct Tolerance Defaults: Reset now restores tolerances to the values the detection logic is tuned for (Gold: 33, Silver: 30, Bronze: 40) instead of the incorrect flat 25 across all types.
-
-WHAT'S NEW IN V5.5.1
-=================
-- Statistics Fix: Training statistics (total gold and per-move counts) were not updating after each cycle. The update block is now correctly placed at the end of the scoring phase and always runs regardless of how the minigame ends.
-- Input Box Live Save: Move name entries now save on every keystroke instead of only on focus loss. Clicking Test or starting the macro immediately after typing will always use the latest value.
-- Test Interruptibility: All test functions (Test White, Test Movement, Test Color, etc.) now run in daemon threads and respect a stop flag. Pressing F7 (Reload) during any test immediately cancels it and releases any held keys.
+- NEW Skill Macro: auto uses your skills when they're ready, in the order you pick
+- Skill Combo: press one key to do a chain of moves
+- Item auto-use: uses an item (hotkey + M1) when a message like "Obtained Copper!" shows up
+- Loadouts: save different skill setups and switch between them
+- NEW Event Notifier: sends server events from chat to your Discord (works in every macro or on its own)
+- Mouse aim: make moves aim at a spot on the screen before casting
+- added Setup Guides with pictures for every macro, Events and OK Popup (click "How to Setup" or "? Help")
+- Library Macro: new ways to find the wisp's buttons if the auto one doesn't work
+- Library Macro: new minigame detector, it knows when to click clovers and when to walk
+- Library Macro: Test Path button works now (also on F3)
+- Mining Macro: routes now use however many ores you record
+- cleaner and faster menus, with the same big ON/OFF buttons everywhere
+- Library Macro: can hide the chat during the minigame so it isn't clicked as a clover
+- Library Macro: train up to 9 moves; it scrolls the wisp's list to find each move by name or picture
+- Library Macro: gold clovers are found automatically from your hotbar (no more small boxes per move)
+- Library, Mining and Fishing: Start and Stop are now one button on F6 (same as the Skill Macro, no more F7)
+- NEW keyboard layout option in the main menu (Auto, QWERTY, AZERTY, QWERTZ, Other) so the macros press the right keys on any keyboard
+- nicer YouTube, Discord and Donate buttons in the main menu
+- Items: pick the key from a list, and each item can have a cooldown (seconds) before it can be used again
+- fixed the macro window not coming back when you press Esc while selecting an area, spot or color

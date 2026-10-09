@@ -1,9 +1,26 @@
 @echo off
 setlocal enabledelayedexpansion
-title VunVun's Macro Loader - V5.5.1
+title VunVun's Macro Loader - V6
 echo ========================================
 echo   Spatial Macro Launcher - Initializing
 echo ========================================
+
+REM Always work from the folder this launcher is in ("Run as administrator" starts in System32)
+cd /d "%~dp0"
+if not exist "requirements.txt" (
+    echo.
+    echo [ERROR] requirements.txt was not found next to this launcher.
+    echo.
+    echo   1. UNZIP the download first: right-click the .zip, "Extract All...",
+    echo      then open the extracted folder and run Windows_Launcher.bat from there.
+    echo      Running it from inside the .zip does NOT work.
+    echo   2. Do NOT use "Run as administrator" - just double-click the launcher.
+    echo.
+    echo   Current folder: %CD%
+    echo.
+    pause
+    exit /b 1
+)
 
 
 set "PY_EXE="
@@ -124,7 +141,7 @@ echo [INFO] Using: !PY_EXE! (Python %PY_VER%)
 
 
 echo.
-echo [INFO] Performing V5.5.1 Cleanup...
+echo [INFO] Performing V6 Cleanup...
 
 
 if exist "%LocalAppData%\Python\pythoncore-3.14-64\python.exe" (
@@ -148,11 +165,29 @@ echo [INFO] RapidOCR is now the default engine.
 echo [INFO] No external software (like Tesseract) is required anymore!
 
 
+REM The text reader (RapidOCR / onnxruntime) needs the Microsoft Visual C++ Redistributable (x64)
+set "VC_OK=1"
+if not exist "%SystemRoot%\System32\vcruntime140_1.dll" set "VC_OK=0"
+if not exist "%SystemRoot%\System32\msvcp140.dll" set "VC_OK=0"
+if "!VC_OK!"=="0" (
+    echo.
+    echo [WARNING] Microsoft Visual C++ Redistributable x64 was NOT found.
+    echo   The macro needs it to read text on screen - OCR, events, items, OK popups.
+    echo   Download and install it: https://aka.ms/vs/17/release/vc_redist.x64.exe
+    echo   Then run this launcher again.
+    echo.
+    pause
+)
+
 echo.
 echo [1/2] Syncing dependencies...
 "!PY_EXE!" -m pip install -r requirements.txt --no-warn-script-location
 if !errorlevel! neq 0 (
     echo [ERROR] Failed to install requirements.
+    echo   Common fixes:
+    echo   - Install Microsoft Visual C++ Redistributable x64: https://aka.ms/vs/17/release/vc_redist.x64.exe
+    echo   - Check your internet connection, then run the launcher again
+    echo   - Do not run it as administrator, and run it from the UNZIPPED folder
     pause
     exit
 )
@@ -160,13 +195,15 @@ if !errorlevel! neq 0 (
 
 echo.
 echo [2/2] Starting Spatial Macro...
-echo [NOTICE] If this is your first time using V5.5.1, it may take a 
+echo [NOTICE] If this is your first time using V6, it may take a 
 echo moment to initialize the RapidOCR engine. Please wait!
 echo.
 "!PY_EXE!" main.py
 if !errorlevel! neq 0 (
     echo.
     echo [CRASH] The macro has stopped unexpectedly.
+    echo   If the error above mentions "DLL load failed" or onnxruntime, install
+    echo   Microsoft Visual C++ Redistributable x64: https://aka.ms/vs/17/release/vc_redist.x64.exe
     pause
 )
 exit

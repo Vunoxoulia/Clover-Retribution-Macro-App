@@ -1,467 +1,608 @@
+import os
 import time
-import random
-import numpy as np
+import threading
 import math
 import keyboard
-import threading
+import numpy as np
 import cv2
-import re
-import customtkinter as ctk
-from logic_base import BaseLogic
+from route_nav import RouteNav
 from utils import RobloxInputDriver
+from settings import get_base_path
 
-class LibraryLogic(BaseLogic):
+DIALOG_TEMPLATE_DIR = os.path.join(get_base_path(), "library_templates")
+DIALOG_MODES = ("auto", "image", "manual")
+# Settings key per dialogue button (manual spots reuse the old "positions" entries)
+MAX_MOVES = 9          # one per hotbar slot; the wisp's list is these 9 + Nevermind (always last)
+DIALOG_BUTTONS = {"clover_training": "Clover Training", **{f"move_{i}": f"Move {i}" for i in range(1, MAX_MOVES + 1)}}
+
+
+class LibraryLogic(RouteNav):
+    """Spatial Library clover training.
+
+    1. Walk to the wisp with a recorded route (Ctrl+P), or the old D/S/W walk.
+    2. Open the dialogue and pick options BY POSITION (works in any language):
+       first menu -> 2nd button (Clover Training), move menu -> button N for move N.
+    3. Wait for the minigame (its captured snapshot shows up) and click clovers until it ends."""
+
+    ROUTES_DIRNAME = "routes_library"
+    ACTIVE_ROUTE_KEY = "library_active_route"
+    USE_ALIGNMENT = False      # normal 3rd-person camera: no snapshot walking
+    ROUTE_TARGET = "wisp"      # the recording's one E tap = arriving at the wisp
+
     def __init__(self, app):
         super().__init__(app)
-        
         self.current_move_idx = 0
-        self.click_history = [] 
-        
-        self.SCORE_COLOR = (0, 0, 0)             
-        self.GOLD_CLOVER_COLOR = (250, 171, 33)  
-        
-        self.DEFAULT_CLOVER_COLORS = {
-            "gold": (251, 198, 108),
-            "silver": (187, 197, 197),
-            "bronze": (219, 151, 139)
-        }
-        
-        self.DEFAULT_CLOVER_TOLERANCES = {
-            "gold": 33,
-            "silver": 30,
-            "bronze": 40
-        }
-        
-        self.ocr_cache = {}
-        self.on_ok_clicked = self._recover_after_ok
+        self.click_history = []
+        self.GOLD_CLOVER_COLOR = (250, 171, 33)
+        self.DEFAULT_CLOVER_COLORS = {"gold": (255, 180, 51), "silver": (164, 178, 178), "bronze": (198, 62, 37)}
+        self.DEFAULT_CLOVER_TOLERANCES = {"gold": 20, "silver": 20, "bronze": 20}
 
-    def _recover_after_ok(self):
-        if not self.running:
+    # ================= Which moves to train =================
+    def _nine(self, key, fill):
+        """Settings list padded to MAX_MOVES (older setups had 3)."""
+        st = self.app.settings.settings
+        lst = list(st.get(key) or [])
+        for i in range(len(lst), MAX_MOVES):
+            lst.append(fill(i) if callable(fill) else fill)
+        st[key] = lst[:MAX_MOVES]
+        return st[key]
+
+    def move_names(self):
+        return self._nine("move_names", "")
+
+    def train_flags(self):
+        if not self.app.settings.get("train_moves"):
+            names = self.move_names()
+            self.app.settings.settings["train_moves"] = ([bool(n) for n in names] if any(names)
+                                                         else [i < 3 for i in range(MAX_MOVES)])
+        return list(self._nine("train_moves", False))
+
+    def move_label(self, i):
+        name = self.move_names()[i]
+        return f"Move {i + 1}" + (f" ({name})" if name else "")
+
+    # ---------- Gold clover: automatic (from the hotbar) or manual boxes ----------
+    # The 3 clovers sit in a row on top of each hotbar icon; the 3rd is always in the same spot:
+    # measured at ~78% across the icon (the 2nd is at ~46%), in the top part of a box that starts
+    # at the top of the clovers (top ~18% = above the clover row line). A move is trained once that spot is gold.
+    THIRD_X = (0.68, 0.90)
+    THIRD_Y = (0.0, 0.18)                       # just the clover row, not the gold icon border below it
+    GOLD_SHARE = 0.15                               # empty spot reads ~0, a gold clover ~0.2-0.25
+
+    def gold_mode(self):
+        return "manual" if self.app.settings.get("gold_mode") == "manual" else "auto"
+
+    def gold_hotbar(self):
+        hb = self.app.settings.get("gold_hotbar") or {}
+        r = hb.get("region", [0, 0, 0, 0])
+        return (r, max(1, int(hb.get("slots", 6)))) if r[2] > r[0] and r[3] > r[1] else (None, 0)
+
+    def move_slot(self, i):
+        return int(self._nine("gold_move_slots", lambda k: k + 1)[i])
+
+    def third_clover_rect(self, slot):
+        """Screen box of the 3rd-clover spot of hotbar slot 1..n (None if the hotbar isn't set)."""
+        r, n = self.gold_hotbar()
+        if not r or not 1 <= slot <= n:
+            return None
+        sw, h = (r[2] - r[0]) / n, r[3] - r[1]
+        x = r[0] + (slot - 1) * sw
+        return [int(x + self.THIRD_X[0] * sw), int(r[1] + self.THIRD_Y[0] * h),
+                int(x + self.THIRD_X[1] * sw), int(r[1] + self.THIRD_Y[1] * h)]
+
+    def third_clover_share(self, slot):
+        """How much of the 3rd-clover spot is gold (0..1), or None if it can't be checked."""
+        rect = self.third_clover_rect(slot)
+        if not rect:
+            return None
+        img = self.utils.capture_screen_bgr(rect)
+        if img is None or not img.size:
+            return None
+        gold = cv2.inRange(cv2.cvtColor(img, cv2.COLOR_BGR2HSV), (10, 120, 150), (30, 255, 255))
+        return float((gold > 0).mean())
+
+    def move_is_gold(self, i):
+        if self.gold_mode() == "auto":
+            share = self.third_clover_share(self.move_slot(i))
+            return share is not None and share >= self.GOLD_SHARE
+        area = self.app.settings.get("regions", {}).get(f"gold_clover_{i + 1}", [0, 0, 0, 0])
+        return any(v != 0 for v in area) and self.utils.check_pixel_area(area, self.GOLD_CLOVER_COLOR, tolerance=25)
+
+    def check_trained_status(self):
+        """A move is done when its 3rd clover is gold (automatic: read from the hotbar; manual: its own box)."""
+        flags = self.train_flags()
+        trained = [not f for f in flags]
+        for i in range(MAX_MOVES):
+            if trained[i]:
+                continue
+            if self.move_is_gold(i):
+                self.app.log(f"{self.move_label(i)} is already trained (Gold Clover detected).")
+                trained[i] = True
+        return trained
+
+    # ================= Getting to the wisp =================
+    def go_to_wisp(self):
+        route = self.load_route()
+        if not route:
+            self.app.log("No recorded route to the wisp - using the old D/S/W walk. (Record one with Ctrl+P.)")
+            self.perform_approach_movement()
             return
-        self.app.log("Ok popup dismissed — redoing approach movement to recover position...")
-        time.sleep(1.0)
-        self.perform_approach_movement()
+        seg = route["segments"][0] if route["segments"] else route["return"]
+        self.align_home()
+        self.app.log(f"Walking to the wisp (route '{self.active_route()}')...")
+        self.play_segment(seg, label="wisp")
+        self._wait_still()
 
+    def perform_approach_movement(self):
+        """Legacy walk for users without a recording."""
+        for key, secs in (("d", 2.0), ("s", 2.0), ("w", 3.0)):
+            if not self.running:
+                return
+            self.app.log(f"Approaching NPC area (Holding {key.upper()})...")
+            self.hold_key(key, secs)
+
+    # ================= Dialogue (language independent) =================
+    @staticmethod
+    def find_dialog(img):
+        """Find the dialogue panel and the option buttons to its right, by shape.
+        Returns (panel, buttons) in image coords; buttons top-to-bottom."""
+        H, W = img.shape[:2]
+        y0 = int(H * 0.55)
+        g = cv2.cvtColor(img[y0:], cv2.COLOR_BGR2GRAY)
+        bgr = img[y0:].astype(np.int16)
+        hovered = (bgr[..., 1] > bgr[..., 2] + 25) & (bgr[..., 1] > bgr[..., 0] + 15)  # green = mouse over it
+        dark = ((g < 75) | hovered).astype(np.uint8) * 255
+        # remove thin dark lines (e.g. the mouse cursor's outline) that would glue buttons together
+        dark = cv2.morphologyEx(dark, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
+        n, _, st, _ = cv2.connectedComponentsWithStats(dark)
+        panel = None
+        for i in range(1, n):
+            x, y, w, h, a = st[i]
+            if w > W * 0.2 and h > H * 0.12 and a > w * h * 0.5:
+                panel = (x, y + y0, w, h)
+        if not panel:
+            return None, []
+        px, py, pw, ph = panel
+        buttons = []
+        for i in range(1, n):
+            x, y, w, h, a = st[i]
+            y += y0
+            if px + pw < x < px + pw + W * 0.08 and W * 0.06 < w < W * 0.16 and H * 0.02 < h < H * 0.07 and a > w * h * 0.5:
+                buttons.append((x, y, w, h))
+        return panel, sorted(buttons, key=lambda b: b[1])
+
+    def read_dialog(self, with_text=False):
+        """(dialogue open?, button centres) - plus a small image of the panel's text
+        when with_text, used to tell menus apart without reading any words."""
+        win = self.get_roblox_window_region()
+        img = self._screen()
+        panel, buttons = self.find_dialog(img)
+        centers = [(win[0] + x + w // 2, win[1] + y + h // 2) for x, y, w, h in buttons]
+        if not with_text:
+            return panel is not None, centers
+        sig = None
+        if panel:
+            x, y, w, h = panel
+            top = cv2.cvtColor(img[y + int(h * .05):y + int(h * .45), x + int(w * .03):x + int(w * .97)],
+                               cv2.COLOR_BGR2GRAY)
+            text = cv2.dilate((top > 110).astype(np.uint8) * 255, np.ones((5, 5), np.uint8))
+            sig = cv2.resize(text, (120, 24), interpolation=cv2.INTER_AREA) > 64
+        return panel is not None, centers, sig
+
+    # ---------- Minigame detector: a snapshot of something only shown in the minigame ----------
+    MINIGAME_TEMPLATE = os.path.join(DIALOG_TEMPLATE_DIR, "minigame.png")
+
+    def minigame_mode(self):
+        return "snapshot"                         # the old black-bar check didn't work, so it was removed
+
+    def has_minigame_snapshot(self):
+        return os.path.exists(self.MINIGAME_TEMPLATE) and any(self.app.settings.get("regions", {}).get("minigame_marker", [0]))
+
+    def save_minigame_snapshot(self, img_bgr, region):
+        """img_bgr = the cropped marker taken DURING a minigame; region = where it sits on screen."""
+        if img_bgr is None or img_bgr.size == 0 or min(img_bgr.shape[:2]) < 6:
+            return False
+        os.makedirs(DIALOG_TEMPLATE_DIR, exist_ok=True)
+        self.app.settings.settings.setdefault("regions", {})["minigame_marker"] = list(region)
+        self.app.settings.save()
+        self._mg_tpl = None
+        return cv2.imwrite(self.MINIGAME_TEMPLATE, img_bgr)
+
+    def minigame_score(self):
+        """0..1 how much the marker area looks like the snapshot (None if no snapshot)."""
+        if not self.has_minigame_snapshot():
+            return None
+        if getattr(self, "_mg_tpl", None) is None:
+            self._mg_tpl = cv2.imread(self.MINIGAME_TEMPLATE)
+        tpl = self._mg_tpl
+        now = self.utils.capture_screen_bgr(self.app.settings.get("regions")["minigame_marker"])
+        if tpl is None or now is None or now.size == 0:
+            return None
+        if now.shape[:2] != tpl.shape[:2]:
+            now = cv2.resize(now, (tpl.shape[1], tpl.shape[0]))
+        a = cv2.cvtColor(now, cv2.COLOR_BGR2GRAY).astype(np.float32)
+        b = cv2.cvtColor(tpl, cv2.COLOR_BGR2GRAY).astype(np.float32)
+        if a.std() < 1 or b.std() < 1:                   # flat area: compare brightness only
+            return 1.0 - min(1.0, abs(a.mean() - b.mean()) / 64.0)
+        corr = float(cv2.matchTemplate(a, b, cv2.TM_CCOEFF_NORMED)[0][0])
+        bright = 1.0 - min(1.0, abs(a.mean() - b.mean()) / max(b.mean(), 1.0))
+        return max(0.0, min(corr, bright))
+
+    # ---------- hide Roblox chat during the minigame ----------
+    # Its white "Here / Global / Friends" tabs look like silver clovers to the clicker.
+    def toggle_chat(self, why):
+        """Click the chat button (top bar) set in Areas. 'hide' when a minigame starts, 'show' after it,
+        so the Event Notifier can still read chat between minigames."""
+        pos = self.app.settings.get("regions", {}).get("chat_button", [0, 0])
+        if not self.app.settings.get("hide_chat_in_minigame") or not any(pos):
+            return
+        if why == "hide":
+            self._chat_hidden = True
+        elif not getattr(self, "_chat_hidden", False):
+            return                                   # only re-open what we closed
+        else:
+            self._chat_hidden = False
+        self.human_click(*pos, duration=0.12)
+        self._park_mouse()
+        self.app.log("Chat hidden for the minigame." if why == "hide" else "Chat shown again.")
+        time.sleep(0.3)
+
+    def in_minigame(self):
+        s = self.minigame_score()
+        if s is None:
+            if not getattr(self, "_warned_no_mg", False):
+                self.app.log("Minigame detector: no snapshot yet — Areas tab → 🎮 Minigame detector → Capture.")
+                self._warned_no_mg = True
+            return False
+        return s >= float(self.app.settings.get("minigame_threshold", 0.8))
+
+    # ---------- Image / Manual dialogue modes ----------
+    def dialog_mode(self):
+        mode = self.app.settings.get("dialog_mode", "auto")
+        return mode if mode in DIALOG_MODES else "auto"
+
+    @staticmethod
+    def dialog_template_path(key):
+        return os.path.join(DIALOG_TEMPLATE_DIR, f"{key}.png")
+
+    def has_dialog_template(self, key):
+        return os.path.exists(self.dialog_template_path(key))
+
+    def capture_dialog_button(self, key, region):
+        """Save a snapshot of one dialogue button (drag a box around it while it's on screen)."""
+        img = self.utils.capture_screen_bgr(region)
+        if img is None or img.size == 0 or min(img.shape[:2]) < 8:
+            return False
+        os.makedirs(DIALOG_TEMPLATE_DIR, exist_ok=True)
+        return cv2.imwrite(self.dialog_template_path(key), img)
+
+    def find_dialog_button(self, key, threshold=0.8):
+        """Screen position of a captured button, or None."""
+        if not self.has_dialog_template(key):
+            return None
+        return self.utils.image_search(self.dialog_template_path(key), self.get_roblox_window_region(), threshold)
+
+    def manual_point(self, key):
+        pt = self.app.settings.get("positions", {}).get(key, [0, 0])
+        return tuple(pt) if pt and any(pt) else None
+
+    def _skip_typing(self, seconds):
+        """Wait, clicking the dialogue's Skip button if the text is still typing (auto shape check)."""
+        end = time.time() + seconds
+        while self.running and time.time() < end:
+            has_panel, btns = self.read_dialog()
+            if has_panel and len(btns) == 1:
+                self.human_click(*btns[0], duration=0.12)
+                self._park_mouse()
+                time.sleep(0.6)
+            time.sleep(0.15)
+
+    def run_dialogue_fixed(self, move_idx):
+        """Image / Manual mode: click Clover Training, then the move's button."""
+        mode = self.dialog_mode()
+        wait = float(self.app.settings.get("dialog_wait", 1.5))
+        steps = [("clover_training", "Clover Training"), (f"move_{move_idx + 1}", self.move_label(move_idx))]
+        self._park_mouse()
+        for n, (key, label) in enumerate(steps, start=1):
+            if n == 2 and mode == "image":
+                self._skip_typing(0.6)
+                return self.pick_move_button(move_idx)
+            if mode == "manual":
+                pt = self.manual_point(key)
+                if not pt:
+                    self.app.log(f"-> No click spot set for {label}. Set it in Settings > Wisp dialogue.")
+                    return False
+                self._skip_typing(wait)
+            else:
+                if not self.has_dialog_template(key):
+                    self.app.log(f"-> No snapshot of the {label} button. Capture it in Settings > Wisp dialogue.")
+                    return False
+                pt, deadline = None, time.time() + 15
+                while self.running and time.time() < deadline and not pt:
+                    pt = self.find_dialog_button(key)
+                    if not pt:
+                        self._skip_typing(0.3)
+                if not pt:
+                    self.app.log(f"-> Couldn't find the {label} button on screen.")
+                    return False
+                time.sleep(0.3)                          # let the menu finish fading in
+                pt = self.find_dialog_button(key) or pt
+            if not self.running:
+                return False
+            self.app.log(f"[{n}/2] Clicking {label} ({mode})")
+            self.human_click(*pt, duration=0.15)
+            self._park_mouse()
+        return True
+
+    # ---------- the move list: 9 moves + Nevermind, only ~4 visible, scrolls with the mouse wheel ----------
+    def dialog_buttons(self):
+        """[(x, y, text)] of the option buttons on screen, top to bottom (text read with OCR)."""
+        win = self.get_roblox_window_region()
+        img = self._screen()
+        panel, boxes = self.find_dialog(img)
+        if not boxes:
+            return []
+        x1 = min(b[0] for b in boxes); y1 = min(b[1] for b in boxes)
+        x2 = max(b[0] + b[2] for b in boxes); y2 = max(b[1] + b[3] for b in boxes)
+        found = self.utils.get_text_from_region([win[0] + x1, win[1] + y1, win[0] + x2, win[1] + y2])
+        out = []
+        for x, y, w, h in boxes:
+            cy = y + h / 2 - y1
+            text = " ".join(t for bb, t, c in found if abs((bb[0][1] + bb[2][1]) / 2 - cy) < h * 0.6)
+            out.append((win[0] + x + w // 2, win[1] + y + h // 2, text))
+        return out
+
+    @staticmethod
+    def _same_name(a, b):
+        a = "".join(ch for ch in a.lower() if ch.isalnum())
+        b = "".join(ch for ch in b.lower() if ch.isalnum())
+        if not a or not b:
+            return False
+        import difflib
+        return a in b or b in a or difflib.SequenceMatcher(None, a, b).ratio() >= 0.8
+
+    def _scroll_list(self, buttons, notches=-1):
+        """One mouse-wheel notch down over the button column."""
+        from pynput.mouse import Controller as MouseController
+        x, y = buttons[len(buttons) // 2][:2]
+        with self.input_lock:
+            self.utils.mouse_move(x, y)
+            time.sleep(0.1)
+            MouseController().scroll(0, notches)
+        time.sleep(0.6)                                 # let the list settle
+        self._park_mouse()
+        time.sleep(0.2)
+
+    def pick_move_button(self, move_idx):
+        """In the move menu: find the move by its captured picture or its name; if it isn't visible,
+        scroll ONE notch down and look again. Nevermind is always last: seeing it = end of the list."""
+        key, name = f"move_{move_idx + 1}", self.move_names()[move_idx]
+        label = self.move_label(move_idx)
+        has_pic = self.has_dialog_template(key)
+        for step in range(MAX_MOVES + 3):
+            if not self.running:
+                return False
+            if has_pic:
+                pt = self.find_dialog_button(key)
+                if pt:
+                    self.app.log(f"[2/2] Found {label} (picture) - clicking")
+                    self.human_click(*pt, duration=0.15)
+                    return True
+            buttons = self.dialog_buttons()
+            if not buttons:
+                time.sleep(0.4)
+                continue
+            if name:
+                hit = next((b for b in buttons if self._same_name(name, b[2])), None)
+                if hit:
+                    self.app.log(f"[2/2] Found {label} (name) - clicking")
+                    self.human_click(hit[0], hit[1], duration=0.15)
+                    return True
+            elif not has_pic and step == 0:
+                # nothing to recognise it by: count down the buttons that are showing
+                moves = [b for b in buttons if "never" not in b[2].lower()]
+                if move_idx < len(moves):
+                    self.app.log(f"[2/2] Clicking button {move_idx + 1} = {label} (no name/picture set)")
+                    self.human_click(moves[move_idx][0], moves[move_idx][1], duration=0.15)
+                    return True
+            never = next((b for b in buttons if "never" in b[2].lower()), None)
+            if never:
+                self.app.log(f"-> Reached the end of the list without finding {label}. "
+                             f"Check its name / picture in Settings.")
+                self.human_click(never[0], never[1], duration=0.15)
+                return False
+            self.app.log(f"   {label} not visible yet - scrolling down")
+            self._scroll_list(buttons)
+        self.app.log(f"-> Couldn't find {label} in the move list.")
+        return False
+
+    def dialogue_visible(self):
+        if self.read_dialog()[0]:
+            return True
+        return self.dialog_mode() == "image" and self.find_dialog_button("clover_training") is not None
+
+    def open_dialogue(self):
+        """Press E at the wisp until the dialogue panel appears."""
+        if self.dialog_mode() == "manual":
+            # Manual mode is for setups where detection fails, so don't wait for it.
+            if not self.wait_for_roblox_focus():
+                return False
+            self.utils.send_key('e')
+            self.app.log("Dialogue: pressed E (manual mode).")
+            return True
+        for attempt in range(1, 9):
+            if not self.wait_for_roblox_focus():
+                return False
+            if attempt > 1 and not self.prompt_near_player():
+                self.confirm_arrival("wisp")      # nudge around to find the Interact prompt
+            if attempt % 3 == 0:
+                self.utils.send_key('space')      # unstick / stand up
+                time.sleep(0.4)
+            self.utils.send_key('e')
+            end = time.time() + 2.0
+            while self.running and time.time() < end:
+                if self.dialogue_visible():
+                    self.app.log("Dialogue opened.")
+                    return True
+                time.sleep(0.15)
+        return False
+
+    def _park_mouse(self):
+        """Keep the cursor off the option buttons (it changes how they look)."""
+        l, t, r, b = self.get_roblox_window_region()
+        self.utils.mouse_move((l + r) // 2, t + int((b - t) * 0.3))
+
+    def run_dialogue(self, move_idx):
+        """Click through the dialogue by button position. Returns True once the move was picked.
+        Only acts on a menu once it has looked the same for STABLE_SECS (skips fade-in frames).
+        Menus are told apart by their text's shape (same text ~0.0-0.08 apart, new text 0.19+)."""
+        if self.dialog_mode() != "auto":
+            return self.run_dialogue_fixed(move_idx)
+        STABLE_SECS = 1.0
+        stage, last_skip, menu1_text = "training", 0.0, None
+        no_panel_since, seen, seen_since = None, None, 0.0
+        deadline = time.time() + 30
+        self._park_mouse()
+        while self.running and time.time() < deadline:
+            has_panel, btns, text_img = self.read_dialog(with_text=True)
+            if not has_panel:
+                no_panel_since = no_panel_since or time.time()
+                if time.time() - no_panel_since > 3:
+                    self.app.log("-> Dialogue closed unexpectedly.")
+                    return False
+                time.sleep(0.15)
+                continue
+            no_panel_since = None
+            layout = tuple(y // 8 for _, y in btns)
+            if layout != seen:
+                seen, seen_since = layout, time.time()
+            n = len(btns)
+            if time.time() - seen_since < STABLE_SECS:
+                time.sleep(0.1)
+                continue
+            if n <= 1:
+                if n == 1 and time.time() - last_skip > 0.8:
+                    self.human_click(*btns[0], duration=0.12)   # Skip (text still typing)
+                    last_skip = time.time()
+                    self._park_mouse()
+            elif stage == "moves" and float(np.mean(text_img ^ menu1_text)) < 0.12:
+                pass                                    # same text as the first menu: not changed yet
+            elif stage == "training":
+                pick = n - 2                            # Clover Training sits just above Nevermind
+                self.app.log(f"[1/2] First menu ({n} buttons): clicking button {pick + 1} (Clover Training)")
+                self.human_click(*btns[pick], duration=0.15)
+                self._park_mouse()
+                stage, menu1_text = "moves", text_img
+            else:
+                return self.pick_move_button(move_idx)     # picture / name, scrolling if needed
+            time.sleep(0.15)
+        self.app.log("-> Dialogue timed out.")
+        return False
+
+    # ================= Main loop =================
     def main_loop(self):
+        from logic_events import WATCHER
+        WATCHER.hold("Library")             # event checks only after each minigame
+        try:
+            self._library_loop()
+        finally:
+            WATCHER.release("Library")
+
+    def _library_loop(self):
+        from logic_events import WATCHER
         while self.running:
             if not self.wait_for_roblox_focus():
                 break
-
-            settings = self.app.settings.settings
-            move_names = settings.get("move_names", ["", "", ""])
-            
             trained = self.check_trained_status()
-            to_train = [i for i, name in enumerate(move_names) if name and not trained[i]]
-            
+            to_train = [i for i in range(MAX_MOVES) if not trained[i]]
             if not to_train:
-                has_any_names = any(name for name in move_names)
-                if has_any_names:
-                    self.app.log("All moves trained! Stopping macro.")
-                else:
-                    self.app.log("No move names set in Settings. Stopping.")
-                
+                self.app.log("All selected moves are trained! Stopping macro.")
                 self.running = False
                 self.app.root.after(1000, self.app.exit_app)
                 break
-
-            self.app.log(f"Talking to NPC... (Training Move {to_train[0] + 1})")
             self.current_move_idx = to_train[0]
-
-            self.perform_approach_movement()
-            dialogue_fail_count = 0
-
-            while self.running:
-                if not self.initiate_dialogue():
-                    dialogue_fail_count += 1
-                    self.app.log("Quest and Guide didn't detect properly! NPC dialogue didn't open. Retrying...")
-                    if dialogue_fail_count >= 3:
-                        self.app.log("Dialogue failed 3 times in a row. Re-approaching NPC to reset character position...")
-                        self.perform_approach_movement()
-                        dialogue_fail_count = 0
-                    time.sleep(1.0)
-                    continue
-
-                dialogue_fail_count = 0
-                time.sleep(2)
-
-                if not self.handle_dialogue_sequence(to_train[0]):
-                    self.app.log("Quest and Guide didn't detect properly! Dialogue sequence failed. Retrying...")
-                    time.sleep(1.0)
-                    continue
-
-                time.sleep(2.5)
+            if self.in_minigame():
+                # Still (or already) in a minigame: play it instead of walking off
+                self.app.log("Minigame is running — clicking clovers before walking.")
                 self.perform_clover_scoring()
-
-                self.app.log("Cycle Complete")
-                self.handle_ok_popup()
+                WATCHER.checkpoint("Library")
                 time.sleep(1.0)
-                break
-
-    def check_trained_status(self):
-        settings = self.app.settings.settings
-        move_names = settings.get("move_names", ["", "", ""])
-        trained = [False, False, False]
-
-        for i in range(3):
-            if not move_names[i]:
-                trained[i] = True 
                 continue
-                
-            icon_region = settings["regions"].get(f"gold_clover_{i+1}", [0, 0, 0, 0])
-            if all(v == 0 for v in icon_region):
-                continue
-            
-            if self.utils.check_pixel_area(icon_region, self.GOLD_CLOVER_COLOR, tolerance=25):
-                self.app.log(f"Move {i+1} ({move_names[i]}) is already trained (Gold Clover detected).")
-                trained[i] = True
-                
-        return trained
+            self.app.log(f"Training {self.move_label(self.current_move_idx)}")
 
-    def perform_approach_movement(self):
-        self.app.log("Approaching NPC area (Holding D)...")
-        keyboard.press('d')
-        start_hold = time.time()
-        while self.running and (time.time() - start_hold < 2.0):
-            if not self.check_focus():
-                keyboard.release('d')
-                self.wait_for_roblox_focus()
-                keyboard.press('d')
-            time.sleep(0.1)
-        keyboard.release('d')
-        self.app.log("Approaching NPC area (Holding S)...")
-        keyboard.press('s')
-        start_hold = time.time()
-        while self.running and (time.time() - start_hold < 2.0):
-            if not self.check_focus():
-                keyboard.release('s')
-                self.wait_for_roblox_focus()
-                keyboard.press('s')
-            time.sleep(0.1)
-        keyboard.release('s')
-        self.app.log("Approaching NPC area (Holding W)...")
-        keyboard.press('w')
-        start_hold = time.time()
-        while self.running and (time.time() - start_hold < 3.0):
-            if not self.check_focus():
-                keyboard.release('w')
-                self.wait_for_roblox_focus()
-                keyboard.press('w')
-            time.sleep(0.1)
-        keyboard.release('w')
-
-    def initiate_dialogue(self):
-        self.app.log("Attempting to open dialogue...")
-        time.sleep(0.5)
-        
-        start_time = time.time()
-        move_menu_region = self.app.settings.get("regions").get("move_menu")
-        
-        while self.running:
-            if not self.wait_for_roblox_focus():
-                return False
-                
-            self.utils.send_key('space')
-            time.sleep(0.184)
-            self.utils.send_key('space')
-            time.sleep(0.159)
-            self.utils.send_key('e')
-            time.sleep(0.08)
-            self.utils.send_key('e')
-            time.sleep(0.08)
-            self.utils.send_key('e')
-            time.sleep(0.08)
-            self.utils.send_key('e')
-            time.sleep(0.5)
-
-            ocr_results = self.utils.get_text_from_region(move_menu_region)
-            for bounding_box, text, confidence in ocr_results:
-                text_lower = text.lower()
-                if "research" in text_lower or "training" in text_lower:
-                    self.app.log("Dialogue menu detected successfully via OCR!")
-                    return True
-            
-            if time.time() - start_time > 20:
-                self.app.log("Quest & Guide Dialogue Error: NPC dialogue menu didn't open or 'Research'/'Training' was not detected. Please verify your Move Selection Area in Settings tab.")
-                return False
-
-            time.sleep(0.1)
-        return False
-
-    def _is_move_match(self, target_name, ocr_text, exact=False):
-        """Match target_name against ocr_text.
-        exact=True  → full string equality (used when a lock is set)
-        exact=False → substring match (used for raw/partial names)
-        """
-        t = target_name.lower().strip()
-        o = ocr_text.lower().strip()
-        if exact:
-            return t == o
-        return t in o
-
-    def handle_dialogue_sequence(self, target_idx):
-        settings = self.app.settings.settings
-        menu_region = settings["regions"].get("move_menu", [0, 0, 0, 0])
-
-        if all(v == 0 for v in menu_region):
-            self.app.log("Calibration Warning: Move Selection Area is set to [0,0,0,0]. Please set 'Move Selection Area' in Settings tab.")
-            return False
-
-        self.app.log("[1/3] Scanning for Quest and Guide dialogue menu via OCR...")
-        clover_menu_clicked = False
-        dialogue_start_time = time.time()
-        
-        while time.time() - dialogue_start_time < 6.0:
+            self.go_to_wisp()
             if not self.running:
-                return False
-                
-            results = self.utils.get_text_from_region(menu_region)
-            combined_text = " ".join([res[1].lower() for res in results])
-            
-            if "research" in combined_text or "training" in combined_text:
-                for bbox, text, conf in results:
-                    if "research" in text.lower() or "training" in text.lower():
-                        click_x = menu_region[0] + int(np.mean([p[0] for p in bbox]))
-                        click_y = menu_region[1] + int(np.mean([p[1] for p in bbox]))
-                        
-                        self.app.log(f"-> Found dialogue option! Clicking at ({click_x}, {click_y})")
-                        self.human_click(click_x, click_y, duration=0.15)
-                        clover_menu_clicked = True
-                        break
-            if clover_menu_clicked:
                 break
-            time.sleep(0.15)
+            if not self.open_dialogue():
+                self.app.log("Couldn't open the wisp dialogue. Trying again from the start...")
+                time.sleep(1.0)
+                continue
+            if not self.run_dialogue(self.current_move_idx):
+                time.sleep(1.0)
+                continue
+            self.perform_clover_scoring()
+            self.app.log("Cycle Complete")
+            WATCHER.checkpoint("Library")   # minigame done: safe moment to check chat
+            self.handle_ok_popup()
+            time.sleep(1.0)
 
-        if not clover_menu_clicked:
-            self.app.log("-> ERROR: Failed to detect 'research' or 'training' option in time.")
-            return False
-        
-        self.app.log("[2/3] Waiting 1.5s for menu to settle...")
-        time.sleep(1.5)
-
-        move_name = settings.get("move_names")[target_idx]
-        if not move_name:
-            self.app.log("No move name specified in configurations.")
-            return False
-
-        resolved_names = self.app.settings.settings.get("resolved_move_names", ["", "", ""])
-        resolved_positions = self.app.settings.settings.get("resolved_move_positions", [None, None, None])
-        resolved = resolved_names[target_idx]
-        resolved_pos = resolved_positions[target_idx]
-
-        if resolved and resolved_pos:
-            self.app.log(f"[3/3] Waiting for '{move_name}' to appear, then clicking locked position {resolved_pos}...")
-            lock_start = time.time()
-            while time.time() - lock_start < 8.0:
-                if not self.running:
-                    return False
-                results = self.utils.get_text_from_region(menu_region)
-                for _, text, _ in results:
-                    if self._is_move_match(move_name, text, exact=False):
-                        self.app.log(f"-> Detected '{text}' — clicking saved position {resolved_pos}.")
-                        self.human_click(resolved_pos[0], resolved_pos[1], duration=0.2)
-                        return True
-                time.sleep(0.2)
-            self.app.log(f"-> ERROR: '{move_name}' never appeared in menu within timeout.")
-            return False
-
-        if resolved:
-            search_name = resolved
-            use_exact = True
-        else:
-            search_name = move_name
-            use_exact = False
-
-        self.app.log(f"[3/3] Searching menu layout for move: '{search_name}'" +
-                     (" (exact)" if use_exact else " (partial)"))
-        
-        self.last_move_candidates = []
-        move_clicked = False
-        move_start_time = time.time()
-        while time.time() - move_start_time < 8.0:
-            if not self.running:
-                return False
-            
-            results = self.utils.get_text_from_region(menu_region)
-            for bbox, text, conf in results:
-                cx = int(np.mean([p[0] for p in bbox]))
-                cy = int(np.mean([p[1] for p in bbox]))
-                if self._is_move_match(search_name, text, exact=use_exact):
-                    is_dup = any(
-                        abs(cx - c["x"]) < 30 and abs(cy - c["y"]) < 30
-                        for c in self.last_move_candidates
-                    )
-                    if not is_dup:
-                        self.last_move_candidates.append({
-                            "text": text,
-                            "x": cx,
-                            "y": cy,
-                            "bbox": bbox
-                        })
-            
-            if self.last_move_candidates:
-                if len(self.last_move_candidates) == 1:
-                    cand = self.last_move_candidates[0]
-                    absolute_x = menu_region[0] + cand["x"]
-                    absolute_y = menu_region[1] + cand["y"]
-                    self.human_click(absolute_x, absolute_y, duration=0.2)
-                    self.app.log(f"-> Successfully selected move: {search_name} (Detected as '{cand['text']}')")
-                    self._save_resolved_name(target_idx, cand["text"], abs_pos=[absolute_x, absolute_y])
-                    move_clicked = True
-                    break
-                else:
-                                                                                               
-                    self.app.log(
-                        f"-> ERROR: '{search_name}' matched {len(self.last_move_candidates)} items. "
-                        f"Use the Test button in Settings to lock the exact move first."
-                    )
-                    return False
-            time.sleep(0.2)
-        
-        if not move_clicked:
-            self.app.log(f"-> ERROR: OCR failed to find '{move_name}' in menu area. Trying 'Nevermind'...")
-            nevermind_clicked = False
-            nevermind_results = self.utils.get_text_from_region(menu_region)
-            for bbox, text, conf in nevermind_results:
-                if "nevermind" in text.lower() or "never" in text.lower():
-                    center_x = menu_region[0] + int(np.mean([p[0] for p in bbox]))
-                    center_y = menu_region[1] + int(np.mean([p[1] for p in bbox]))
-                    self.human_click(center_x, center_y, duration=0.15)
-                    self.app.log(f"-> Clicked 'Nevermind' at ({center_x}, {center_y})")
-                    nevermind_clicked = True
-                    break
-            
-            if not nevermind_clicked:
-                self.app.log("-> ERROR: 'Nevermind' option not found.")
-            return False
-        
-        return True
-
+    # ================= Tests =================
     def test_detection(self):
-        self.app.log("Testing Ok popup detection...")
-        win = self.get_roblox_window_region()
-        self.app.log(f"Scanning Roblox window: {win}")
-        results = self.utils.get_text_from_region(win, upscale=1)
-        self.app.log(f"OCR saw: [{', '.join([r[1] for r in results]) if results else 'nothing'}]")
-        for bbox, text, conf in results:
-            if text.strip().lower() == "ok":
-                cx = win[0] + int(np.mean([p[0] for p in bbox]))
-                cy = win[1] + int(np.mean([p[1] for p in bbox]))
-                self.app.log(f"Test: Found 'Ok' at ({cx}, {cy}). Moving and clicking.")
-                self.utils.mouse_move(cx, cy)
-                time.sleep(0.5)
-                RobloxInputDriver.click_at(cx, cy, duration=0.035)
-                return
-        self.app.log("Test: 'Ok' not found in Roblox window.")
-
-    def _save_resolved_name(self, idx, text, abs_pos=None):
-        """Persist the resolved move name and optional absolute screen position for slot idx."""
-        resolved = list(self.app.settings.get("resolved_move_names", ["", "", ""]))
-        resolved[idx] = text.strip()
-        self.app.settings.set("resolved_move_names", resolved)
-
-        positions = list(self.app.settings.get("resolved_move_positions", [None, None, None]))
-        positions[idx] = abs_pos                  
-        self.app.settings.set("resolved_move_positions", positions)
-
-        if hasattr(self.app, "refresh_resolved_label"):
-            self.app.root.after(0, lambda: self.app.refresh_resolved_label(idx))
-
-    def test_move_ocr(self, idx):
-        settings = self.app.settings.settings
-        move_name = settings.get("move_names")[idx]
-        menu_region = settings["regions"].get("move_menu", [0, 0, 0, 0])
-        
-        if not move_name:
-            self.app.log(f"Test: Move {idx+1} name is empty!")
-            return
-            
-        if all(v == 0 for v in menu_region):
-            self.app.log("Test: Move Selection Area not set!")
-            return
-
-        resolved_names = settings.get("resolved_move_names", ["", "", ""])
-        resolved_positions = settings.get("resolved_move_positions", [None, None, None])
-        current_resolved = resolved_names[idx]
-        current_pos = resolved_positions[idx]
-
-        if current_resolved and current_pos:
-            self.app.log(
-                f"Test: Already locked to '{current_resolved}' at {current_pos}. "
-                f"Moving cursor to confirm."
-            )
-            time.sleep(0.5)
-            self.utils.mouse_move(current_pos[0], current_pos[1])
-            return
-
-        if current_resolved:
-            self.app.log(f"Testing OCR for: {move_name}  [locked to: '{current_resolved}']")
+        """F1: what the macro sees right now (dialogue buttons / prompt / minigame)."""
+        mode = self.dialog_mode()
+        flags = self.train_flags()
+        keys = {k: v for k, v in DIALOG_BUTTONS.items() if not k.startswith("move_") or flags[int(k[5:]) - 1]}
+        if mode == "image":
+            found = [f"{label}: {'FOUND' if self.find_dialog_button(k) else ('not on screen' if self.has_dialog_template(k) else 'no snapshot')}"
+                     for k, label in keys.items()]
+            self.app.log("Image mode -> " + " | ".join(found))
+        elif mode == "manual":
+            self.app.log("Manual mode -> " + " | ".join(
+                f"{label}: {self.manual_point(k) or 'not set'}" for k, label in keys.items()))
+        has_panel, btns = self.read_dialog()
+        if has_panel:
+            texts = [b[2] or "?" for b in self.dialog_buttons()]
+            self.app.log(f"Dialogue open, {len(btns)} button(s) showing: " + " | ".join(texts)
+                         + ("   (Nevermind is further down — the list scrolls)" if not any("never" in t.lower() for t in texts) else ""))
         else:
-            self.app.log(f"Testing OCR for: {move_name}  (no lock set)")
+            self.app.log("No dialogue open.")
+        self.app.log(f"Interact prompt near character: {'yes' if self.prompt_near_player() else 'no'}")
+        s = self.minigame_score()
+        self.app.log("Minigame: " + ("no snapshot captured yet (Areas tab)" if s is None else
+                     f"{'YES' if s >= float(self.app.settings.get('minigame_threshold', 0.8)) else 'no'} (match {s:.2f})"))
 
-        results = self.utils.get_text_from_region(menu_region)
-        
-        all_detected = []
-        for bbox, text, conf in results:
-            cx = int(np.mean([p[0] for p in bbox]))
-            cy = int(np.mean([p[1] for p in bbox]))
-            all_detected.append({"text": text, "x": cx, "y": cy, "bbox": bbox})
-            self.app.log(f"Detected item: '{text}' at {cx}, {cy}")
-
-        search_name = current_resolved if current_resolved else move_name
-        use_exact = bool(current_resolved)
-        matches = []
-        for item in all_detected:
-            if self._is_move_match(search_name, item["text"], exact=use_exact):
-                matches.append(item)
-                self.app.log(f"Test: MATCH -> '{item['text']}' at ({item['x']}, {item['y']})")
-
-        if not matches:
-            detected = ", ".join([res[1] for res in results])
-            self.app.log(f"Test: FAILED. Saw: [{detected}]")
+    def test_scroll(self):
+        """With the wisp's move list open: read the buttons, scroll ONE notch, read them again."""
+        if not self.wait_focus_for_test():
             return
-
-        if len(matches) == 1:
-            chosen = matches[0]
-        else:
-            self.app.log(f"Test: Found {len(matches)} matches — pick one to lock.")
-            self.last_move_candidates = matches
-            chosen = self.prompt_user_for_move()
-            if not chosen:
-                self.app.log("Test: No selection made, lock unchanged.")
-                return
-
-        abs_x = menu_region[0] + chosen["x"]
-        abs_y = menu_region[1] + chosen["y"]
-        self._save_resolved_name(idx, chosen["text"], abs_pos=[abs_x, abs_y])
-        self.app.log(f"Test: Locked to '{chosen['text']}' at ({abs_x}, {abs_y}).")
-        time.sleep(0.5)
-        self.utils.mouse_move(abs_x, abs_y)
-
-    def test_quest_ocr(self):
-        settings = self.app.settings.settings
-        quest_region = settings["regions"].get("quest_region", [0, 0, 0, 0])
-        
-        if all(v == 0 for v in quest_region):
-            self.app.log("Test: Quest/Guide region is not set!")
+        before = self.dialog_buttons()
+        if not before:
+            self.app.log("Test scroll: no dialogue buttons on screen — open the wisp's move list first.")
             return
-            
-        self.app.log(f"Testing OCR in Quest/Guide region: {quest_region}")
-        results = self.utils.get_text_from_region(quest_region)
-        
-        if not results:
-            self.app.log("Test: No text detected in region.")
-            return
+        names = lambda bs: " | ".join(b[2] or "?" for b in bs)
+        self._scroll_list(before)
+        after = self.dialog_buttons()
+        moved = [b[2] for b in before] != [b[2] for b in after]
+        self.app.log(f"Test scroll: before: {names(before)}  →  after: {names(after)}  "
+                     + ("✔ the list scrolled" if moved else "✖ nothing changed (already at the bottom, or scrolling "
+                                                           "doesn't reach the list)"))
 
-        detected_words = [res[1] for res in results]
-        combined = " ".join(detected_words).lower()
-        
-        self.app.log(f"Test: Detected text: [{', '.join(detected_words)}]")
-        
-        white_found = self.utils.check_pixel_area(quest_region, (255, 255, 255), tolerance=25)
-        if white_found:
-            self.app.log("Test: SUCCESS! Quest/Guide region contains white text.")
-        else:
-            self.app.log("Test: Quest/Guide region does not contain white text.")
+    def test_path(self):
+        """Walk to the wisp only (no dialogue)."""
+        if self.running:
+            self.app.log("Stop the macro before testing the path.")
+            return
+        if not self.wait_focus_for_test():
+            return
+        self.app.log(f"--- Test Path: walking to the wisp (route '{self.active_route() or 'none'}') ---")
+        self.running = True
+        try:
+            self.go_to_wisp()
+            self.app.log(f"Arrived. Interact prompt visible: {'yes' if self.prompt_near_player() else 'no'}")
+        except Exception as e:
+            self.app.log(f"Test Path error: {e}")
+        finally:
+            self.running = False
 
     def test_color_detection(self):
         settings = self.app.settings.settings
@@ -503,7 +644,6 @@ class LibraryLogic(BaseLogic):
     def perform_clover_scoring(self):
         settings = self.app.settings.settings
         region = settings["regions"]["score"]  
-        quest_region = settings["regions"].get("quest_region", [0, 0, 0, 0])
         clover_colors = settings.get("clover_colors", self.DEFAULT_CLOVER_COLORS)
         global_tolerance = settings.get("color_tolerance", 15)
         clover_tols = settings.get("clover_tolerances", {})
@@ -511,35 +651,40 @@ class LibraryLogic(BaseLogic):
         session_stats = {"gold": 0, "silver": 0, "bronze": 0, "total_clicks": 0}
         self.minigame_running = True
         
-        if all(v == 0 for v in quest_region):
-            screen_w, screen_h = self.get_screen_size()
-            quest_region = [0, 0, screen_w, screen_h]
-            self.app.log("Quest region not set, defaulting to full screen OCR.")
+        if all(v == 0 for v in region):
+            # No Clover Region set: use the middle of the game view
+            l, t, r, b = self.get_roblox_window_region()
+            h = b - t
+            region = [l, t + int(h * 0.10), r, t + int(h * 0.90)]
 
-        self.app.log("Waiting for Quest/Guide white text to vanish...")
-        
+        self.app.log("Waiting for the minigame to start...")
         start_wait = time.time()
         while self.running:
             if not self.wait_for_roblox_focus(): return
-            white_found = self.utils.check_pixel_area(quest_region, (255, 255, 255), tolerance=30)
-            if not white_found:
-                self.app.log("Minigame started (Quest/Guide UI vanished).")
+            if self.in_minigame():
+                self.app.log("Minigame started.")
+                self.toggle_chat("hide")
                 break
-            if time.time() - start_wait > 15:
+            if time.time() - start_wait > 20:
                 self.app.log("Timeout waiting for minigame start.")
                 return
-            time.sleep(0.1)
+            time.sleep(0.15)
 
         def end_detector():
+            gone_since = None
             while self.running and self.minigame_running:
-                time.sleep(0.5)
+                time.sleep(0.25)
                 try:
-                    white_found = self.utils.check_pixel_area(quest_region, (255, 255, 255), tolerance=30)
-                    if white_found:
-                        self.app.log("End detected via white Quest/Guide text.")
+                    if self.in_minigame():
+                        gone_since = None
+                    elif gone_since is None:
+                        gone_since = time.time()
+                    elif time.time() - gone_since >= 2.0:   # snapshot gone for 2s (ignores flashes)
+                        self.app.log("Minigame ended.")
                         self.minigame_running = False
                         break
-                except: pass
+                except Exception:
+                    pass
 
         threading.Thread(target=end_detector, daemon=True).start()
 
@@ -614,61 +759,14 @@ class LibraryLogic(BaseLogic):
             self.app.log(f"Minigame error: {e}")
 
         self.minigame_running = False
+        self.toggle_chat("show")
         new_gold = self.app.settings.get("total_gold", 0) + 250
         self.app.settings.set("total_gold", new_gold)
-        move_stats = self.app.settings.get("move_stats", [0, 0, 0])
+        move_stats = self._nine("move_stats", 0)
         if hasattr(self, "current_move_idx"):
             move_stats[self.current_move_idx] += 250
             self.app.settings.set("move_stats", move_stats)
         self.app.root.after(0, self.app.update_gold_display)
-        
-    def prompt_user_for_move(self):
-        """Show a customtkinter popup for the user to pick among multiple move candidates.
-        Returns the selected candidate dict, or None if cancelled.
-        """
-        if not hasattr(self, "last_move_candidates") or not self.last_move_candidates:
-            return None
-
-        self.app.log("Multiple move candidates found – prompting user...")
-        selected = [None]
-
-        popup = ctk.CTkToplevel(self.app.root)
-        popup.title("Select Move")
-        popup.geometry("340x300")
-        popup.grab_set()
-        popup.focus_force()
-
-        ctk.CTkLabel(
-            popup,
-            text="Multiple matches found.\nChoose the correct move:",
-            font=("Arial", 13)
-        ).pack(pady=(18, 8), padx=16)
-
-        btn_frame = ctk.CTkScrollableFrame(popup, height=160)
-        btn_frame.pack(fill="both", expand=True, padx=16, pady=4)
-
-        def make_handler(cand):
-            def handler():
-                selected[0] = cand
-                popup.destroy()
-            return handler
-
-        for cand in self.last_move_candidates:
-            label = f"{cand['text']}  ({cand['x']}, {cand['y']})"
-            ctk.CTkButton(btn_frame, text=label, command=make_handler(cand)).pack(
-                fill="x", pady=3
-            )
-
-        ctk.CTkButton(popup, text="Cancel", fg_color="gray40", command=popup.destroy).pack(
-            pady=(6, 14)
-        )
-
-        popup.wait_window()
-        if selected[0] is None:
-            self.app.log("User cancelled move selection.")
-        else:
-            self.app.log(f"User selected: '{selected[0]['text']}'")
-        return selected[0]
 
     def test_active_movement(self):
         """Tests the 5-pixel toggle movement"""

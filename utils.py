@@ -54,6 +54,59 @@ if IS_WINDOWS:
     MOUSEEVENTF_RIGHTUP = 0x0010
     MOUSEEVENTF_VIRTUALDESK = 0x4000
 
+# ---------------- Keyboard layout ----------------
+# Roblox reads keys by their PHYSICAL position (an AZERTY player walks with ZQSD, the game sees WASD).
+# Every key the macros send is named the way Roblox names it (QWERTY positions). On a non-QWERTY
+# layout we send the physical scan code instead, so W is always the key "where W is on QWERTY".
+LAYOUTS = ["Auto", "QWERTY", "AZERTY", "QWERTZ", "Other"]
+_QWERTY_SC = {c: i for i, c in enumerate("1234567890-=", start=2)}
+_QWERTY_SC.update({c: i for i, c in enumerate("qwertyuiop[]", start=16)})
+_QWERTY_SC.update({c: i for i, c in enumerate("asdfghjkl;'`", start=30)})
+_QWERTY_SC.update({c: i for i, c in enumerate(r"\zxcvbnm,./", start=43)})
+_layout_choice = None
+
+
+def detect_layout():
+    """Guess the Windows keyboard layout from its language id."""
+    try:
+        hwnd = ctypes.windll.user32.GetForegroundWindow()
+        tid = ctypes.windll.user32.GetWindowThreadProcessId(hwnd, None)
+        lang = ctypes.windll.user32.GetKeyboardLayout(tid) & 0xFFFF
+    except Exception:
+        return "QWERTY"
+    if lang in (0x040C, 0x080C, 0x140C, 0x180C):      # French, Belgian, Luxembourg, Monaco
+        return "AZERTY"
+    if lang in (0x0407, 0x0807, 0x0C07, 0x1007, 0x1407, 0x0405, 0x041B, 0x040E, 0x0424, 0x041A):
+        return "QWERTZ"                                # German / Swiss / Austrian / Czech / Slovak / Hungarian / Slovene / Croatian
+    return "QWERTY"
+
+
+def set_layout(choice):
+    global _layout_choice
+    _layout_choice = choice if choice in LAYOUTS else "Auto"
+
+
+def get_layout():
+    """The layout in use: the saved choice, or the detected one when set to Auto."""
+    global _layout_choice
+    if _layout_choice is None:
+        try:
+            from settings import SpatialSettings
+            set_layout(SpatialSettings().get("keyboard_layout", "Auto"))
+        except Exception:
+            _layout_choice = "Auto"
+    return detect_layout() if _layout_choice == "Auto" else _layout_choice
+
+
+def game_key(key):
+    """Turn a Roblox key name (QWERTY position) into what to press on this keyboard."""
+    if isinstance(key, str) and get_layout() != "QWERTY":
+        sc = _QWERTY_SC.get(key.lower())
+        if sc:
+            return sc
+    return key
+
+
 class RobloxInputDriver:
     _mouse = MouseController()
     _lock = threading.RLock()
@@ -117,7 +170,12 @@ class RobloxInputDriver:
                 time.sleep(duration)
                 cls._mouse.release(pynput_button)
 
+OCR_HELP = ("Text reading (OCR) couldn't start. Install the Microsoft Visual C++ Redistributable (x64): "
+            "https://aka.ms/vs/17/release/vc_redist.x64.exe  then restart the macro.")
+
+
 class SpatialUtils:
+    ocr_error = ""          # set when OCR can't start, so pages can tell the user why nothing is read
     def __init__(self):
         self._thread_local = threading.local()
         self._key_lock = threading.RLock()
@@ -148,6 +206,7 @@ class SpatialUtils:
                 print(f"✅ RapidOCR initialized on {system}")
             except Exception as e:
                 print(f"OCR (RapidOCR) Initialization error: {e}")
+                SpatialUtils.ocr_error = OCR_HELP
                 self.ocr_reader = False
 
     def get_text_from_region(self, region, upscale=2):
@@ -361,9 +420,10 @@ class SpatialUtils:
     def send_key(self, key, duration=0.05):
         """Send a keyboard key press with optional duration, thread‑safe."""
         with self._key_lock:
-            keyboard.press(key)
+            k = game_key(key)
+            keyboard.press(k)
             time.sleep(duration)
-            keyboard.release(key)
+            keyboard.release(k)
 
     def find_color_x(self, region, target_color, tolerance=25, min_area=0):
         """Finds the average X coordinate of a color within a region, with optional size filtering."""
