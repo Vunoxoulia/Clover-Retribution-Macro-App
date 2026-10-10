@@ -10,6 +10,7 @@ from overlay import Overlay, PointSelector, PersistentOverlay
 from logic_smart import SmartMacroLogic
 from gui_guide import SetupGuide
 from gui import SidebarNav, NAV_ICONS
+from ui_style import save_while_typing
 
 NAV_ICONS.update({"Rotation": "🔁", "Skill Combo": "⚔", "Items": "🧪", "Settings": "⚙"})
 
@@ -163,6 +164,8 @@ class SmartMacroGUI:
                 on_save()
         e.bind("<FocusOut>", commit)
         e.bind("<Return>", commit)
+        if key not in ("hotkey", "trigger"):          # a half-typed hotkey must not be used
+            save_while_typing(e, lambda: self._set(d, key, e.get().strip(), cast))
         return e
 
     def _xy_text(self, d):
@@ -245,6 +248,8 @@ class SmartMacroGUI:
             combo = ctk.CTkComboBox(parent, values=values, width=width, height=26, command=commit)
             combo._entry.bind("<FocusOut>", lambda e: commit())
             combo._entry.bind("<Return>", lambda e: commit())
+            save_while_typing(combo._entry, lambda: (lambda v: self._set(d, key, 0 if v in ("off", "—") else v, cast))(
+                combo.get().strip()))
         else:
             combo = ctk.CTkOptionMenu(parent, values=values, width=width, height=26, command=commit)
         combo.set(cur)
@@ -750,6 +755,7 @@ class SmartMacroGUI:
             self._set(step, "delay", v or 0, float)
         wait.configure(command=set_wait)
         wait._entry.bind("<FocusOut>", lambda e: set_wait()); wait._entry.bind("<Return>", lambda e: set_wait())
+        save_while_typing(wait._entry, set_wait)
         wait.set(f"{float(step.get('delay') or 0):g} s")
         wait.pack(side="left")
 

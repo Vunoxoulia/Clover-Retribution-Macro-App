@@ -12,6 +12,31 @@ BTN_BLUE = dict(height=30, font=("Arial", 12), fg_color=BLUE, hover_color=BLUE_H
 TITLE_FONT = ("Arial", 16, "bold")
 
 
+def save_while_typing(widget, save, delay=400):
+    """Save a text box shortly after you stop typing, so you don't have to press Enter or click
+    somewhere else first (closing the window right after typing used to lose the text)."""
+    def later(event=None):
+        if event is not None and event.keysym in ("Return", "Tab", "Escape"):
+            return                                   # those have their own handlers
+        job = getattr(widget, "_save_job", None)
+        if job:
+            try:
+                widget.after_cancel(job)
+            except Exception:
+                pass
+
+        def run():
+            widget._save_job = None
+            try:
+                if widget.winfo_exists():
+                    save()
+            except Exception:
+                pass
+        widget._save_job = widget.after(delay, run)
+    widget.bind("<KeyRelease>", later, add="+")
+    widget.bind("<<Paste>>", lambda e: widget.after(50, later), add="+")
+
+
 def big_toggle(parent, command):
     """The main ON/OFF switch of a page (Always Click OK, Event alerts...): full width and easy to hit."""
     return ctk.CTkButton(parent, text="", height=40, corner_radius=8, font=("Arial", 13, "bold"),

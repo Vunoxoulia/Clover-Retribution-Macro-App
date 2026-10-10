@@ -5,7 +5,7 @@ import customtkinter as ctk
 from overlay import Overlay
 from logic_events import WATCHER, roblox_windows
 from logic_base import BaseLogic
-from ui_style import big_toggle, style_toggle
+from ui_style import big_toggle, style_toggle, save_while_typing
 
 CARD = dict(fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
 BTN = dict(height=28, font=("Arial", 12), fg_color="#495057", hover_color="#343a40")
@@ -55,13 +55,17 @@ class EventsPage:
         if d.get(key):
             e.insert(0, str(d[key]))
 
-        def commit(_=None):
+        def store():
             d[key] = e.get().strip()
             self._save()
+
+        def commit(_=None):
+            store()
             if on_save:
                 on_save(d[key])
         e.bind("<FocusOut>", commit)
         e.bind("<Return>", commit)
+        save_while_typing(e, store)                  # saved while you type, no click-away needed
         return e
 
     # ---------- layout ----------
@@ -419,7 +423,8 @@ class EventsPage:
             if sent == len(msgs):
                 self._log(f"Sent {sent} test message(s): " + " | ".join(m.splitlines()[0] for m in msgs))
             else:
-                self._log(f"Only {sent}/{len(msgs)} sent — check the webhook.")
+                why = getattr(WATCHER, "last_post_error", "") or "check the webhook"
+                self._log(f"Only {sent}/{len(msgs)} sent — {why}.")
         threading.Thread(target=run, daemon=True).start()
 
 

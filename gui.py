@@ -8,7 +8,7 @@ from logic_mining import MiningLogic
 from logic_fishing import FishingLogic
 from logic_devil_union import DevilUnionLogic
 import keyboard
-from ui_style import big_toggle, style_toggle
+from ui_style import big_toggle, style_toggle, save_while_typing
 import os
 import sys
 import webbrowser
@@ -413,6 +413,7 @@ class SpatialGUI:
             if names[i]: e.insert(0, names[i])
             e.pack(side="left", fill="x", expand=True, padx=(4, 0))
             e.bind("<FocusOut>", lambda ev, idx=i: self.update_move_name(idx))
+            save_while_typing(e, lambda idx=i: self.update_move_name(idx))
             self.train_vars.append(var); self.move_entries.append(e)
         ctk.CTkLabel(mc, text="", height=4).pack()
         self.dialog_card = ctk.CTkFrame(tab, fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
@@ -621,6 +622,7 @@ class SpatialGUI:
                     e.insert(0, f"{float(seg.get(field, 3.0 if field == 'mine_hold' else 1.75)):.2f}")
                     e.pack(side="left", padx=(0, 10))
                     e.bind("<FocusOut>", lambda ev, k=key, f=field, w=e: self._save_seg_value(k, f, w.get()))
+                    save_while_typing(e, lambda k=key, f=field, w=e: self._save_seg_value(k, f, w.get()))
             ctk.CTkLabel(body, text="Walk (key · starts at · hold secs):", font=("Arial", 12, "bold")).pack(anchor="w")
             for h in self._holds(seg):
                 r = ctk.CTkFrame(body, fg_color="#2b3035", corner_radius=6); r.pack(fill="x", pady=1)
@@ -628,6 +630,7 @@ class SpatialGUI:
                 ctk.CTkLabel(r, text=f"at {h['start']:.2f}s", width=80, font=("Arial", 12), text_color="#ced4da").pack(side="left")
                 e = ctk.CTkEntry(r, width=60, font=("Arial", 12)); e.insert(0, f"{h['dur']:.2f}"); e.pack(side="left", padx=6, pady=3)
                 e.bind("<FocusOut>", lambda ev, k=key, h=h, w=e: self._save_hold(k, h, w.get()))
+                save_while_typing(e, lambda k=key, h=h, w=e: self._save_hold(k, h, w.get()))
 
     def _route_seg(self, route, key):
         return route["return"] if key == "return" else route["segments"][key]

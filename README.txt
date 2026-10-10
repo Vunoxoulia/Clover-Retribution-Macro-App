@@ -1,6 +1,11 @@
 HOW TO RUN SPATIAL MACRO
 ========================
 
+WHAT'S NEW IN V6.2.3
+=====================
+- fixed text boxes (webhook, PS codes, names, delays...) only saving after pressing Enter or clicking somewhere else - they now save as you type
+- Event Notifier: Send test now says WHY a message wasn't sent (no webhook, deleted webhook, wrong link, no internet...) and waits/retries when Discord rate-limits
+
 WHAT'S NEW IN V6.2.2
 =====================
 - fixed Skill Macro loadouts (and other settings) sometimes disappearing after opening or updating the app; settings are now saved safely with a backup (settings.json.bak)

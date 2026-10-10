@@ -344,19 +344,53 @@ class EventWatcher:
             msg += " " + " ".join(p for p in pings if p)
         return msg
 
+    WEBHOOK_ERRORS = {
+        400: "Discord rejected the message (bad format)",
+        401: "the webhook link is wrong (unauthorized) - copy it again from Discord",
+        403: "this webhook isn't allowed to post in that channel",
+        404: "the webhook was deleted or the link is wrong - make a new one in Discord and paste it again",
+    }
+
     def post(self, text):
+        """Send one message to the Discord webhook. Retries when Discord says 'slow down' (429).
+        On failure the reason is kept in self.last_post_error (shown by Send test)."""
+        self.last_post_error = ""
         url = self.cfg.get("webhook", "").strip()
         if not url:
+            self.last_post_error = "no Discord webhook set"
             self.log("No Discord webhook set — not sent.")
             return False
-        try:
-            r = requests.post(url, json={"content": text, "allowed_mentions": {"parse": ["users", "roles", "everyone"]}},
-                              timeout=8)
+        if not url.startswith(("https://discord.com/api/webhooks/", "https://discordapp.com/api/webhooks/",
+                               "https://ptb.discord.com/api/webhooks/", "https://canary.discord.com/api/webhooks/")):
+            self.last_post_error = "that isn't a Discord webhook link (it should start with https://discord.com/api/webhooks/)"
+            self.log(f"Not sent: {self.last_post_error}")
+            return False
+        if len(text) > 1990:                              # Discord's limit is 2000 characters
+            text = text[:1987] + "..."
+        for attempt in range(3):
+            try:
+                r = requests.post(url, json={"content": text,
+                                             "allowed_mentions": {"parse": ["users", "roles", "everyone"]}},
+                                  timeout=8)
+            except Exception as e:
+                self.last_post_error = f"couldn't reach Discord ({type(e).__name__}) - check your internet"
+                self.log(f"Not sent: {self.last_post_error}")
+                return False
             if r.status_code in (200, 204):
                 return True
-            self.log(f"Discord said {r.status_code}: {r.text[:120]}")
-        except Exception as e:
-            self.log(f"Couldn't reach Discord: {e}")
+            if r.status_code == 429 and attempt < 2:      # rate limited: wait as long as Discord asks
+                try:
+                    wait = float(r.json().get("retry_after", 1.0))
+                except Exception:
+                    wait = 1.0
+                time.sleep(min(10.0, max(0.5, wait)))
+                continue
+            reason = self.WEBHOOK_ERRORS.get(r.status_code, "Discord refused it")
+            if r.status_code == 429:
+                reason = "Discord is rate-limiting this webhook - try again in a minute"
+            self.last_post_error = f"{reason} (error {r.status_code})"
+            self.log(f"Not sent: {self.last_post_error}. Discord said: {r.text[:120]}")
+            return False
         return False
 
     @staticmethod
