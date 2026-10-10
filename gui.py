@@ -1246,7 +1246,7 @@ class SpatialGUI:
         self.root.after(400, self._sync_start_btn)
 
     def refresh_macro(self):
-        self.logic.stop(); self.settings.load(); self.register_hotkeys(); self.log("Macro stopped")
+        self.logic.stop(); self.register_hotkeys(); self.log("Macro stopped")   # no settings.load(): every page shares the live settings, a reload would detach them
 
     def _run_test(self, fn):
         import threading

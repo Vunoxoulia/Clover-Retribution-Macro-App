@@ -1,6 +1,11 @@
 HOW TO RUN SPATIAL MACRO
 ========================
 
+WHAT'S NEW IN V6.2.4
+=====================
+- fixed changing the Discord webhook (and other Events settings) not taking effect after a macro had been stopped with F6
+- fixed Skill Macro Settings (like match strictness) not saving after switching or creating a loadout
+
 WHAT'S NEW IN V6.2.3
 =====================
 - fixed text boxes (webhook, PS codes, names, delays...) only saving after pressing Enter or clicking somewhere else - they now save as you type

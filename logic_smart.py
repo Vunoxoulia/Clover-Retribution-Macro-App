@@ -95,6 +95,16 @@ class SmartMacroLogic:
             self.app.settings.save()
         return st["skill_loadouts"]
 
+    def _fill_section(self, k, v):
+        """Put a loadout's section into the live config IN PLACE (same dict object), so every page that
+        holds on to it (e.g. Settings → match strictness) keeps editing the live one, not a dropped copy."""
+        cur = self.cfg.get(k)
+        if isinstance(cur, dict) and isinstance(v, dict):
+            cur.clear()
+            cur.update(v)
+        else:
+            self.cfg[k] = v
+
     def active_loadout(self):
         names = self.loadouts()
         active = self.app.settings.settings.get("skill_active_loadout")
@@ -111,7 +121,7 @@ class SmartMacroLogic:
             return False
         self._store_active()
         for k, v in copy.deepcopy(self.loadouts()[name]).items():
-            self.cfg[k] = v
+            self._fill_section(k, v)
         self.app.settings.settings["skill_active_loadout"] = name
         self._templates.clear()
         self.app.settings.save()
@@ -126,7 +136,7 @@ class SmartMacroLogic:
         fresh = {k: copy.deepcopy(DEFAULT_SMART[k]) for k in LOADOUT_SECTIONS}
         self.loadouts()[name] = copy.deepcopy(fresh)
         for k, v in fresh.items():
-            self.cfg[k] = v
+            self._fill_section(k, v)
         dst = loadout_dir(name)
         if os.path.isdir(dst):                           # leftovers from an old loadout with this name
             shutil.rmtree(dst, ignore_errors=True)
@@ -160,7 +170,7 @@ class SmartMacroLogic:
         if was_active:                               # load the next one without saving the deleted one
             first = next(iter(lo))
             for k, v in copy.deepcopy(lo[first]).items():
-                self.cfg[k] = v
+                self._fill_section(k, v)
             self.app.settings.settings["skill_active_loadout"] = first
             self._templates.clear()
         self.app.settings.save()
