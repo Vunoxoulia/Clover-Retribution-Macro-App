@@ -1,8 +1,13 @@
+WHAT'S NEW IN V6.2.2
+=====================
+- fixed Skill Macro loadouts (and other settings) sometimes disappearing after opening or updating the app; settings are now saved safely with a backup (settings.json.bak)
+- fixed hotbar auto-detect (Library Auto and Skill Macro Auto-tune) failing in small Roblox windows or with a bright floor behind the hotbar
+- Skill Combo: the step's own wait box is now the wait before M1 (press → wait → M1), new steps start at 0.3 s
+
 WHAT'S NEW IN V6.2.1
 =====================
 - Library: new 🪄 Auto button for Gold Clover detection - finds the hotbar and your filled slots by itself
-- fixed hotbar auto-detect (Library Auto and Skill Macro Auto-tune) failing in small Roblox windows or with a bright floor behind the hotbar
-- Skill Macro: "then M1" delay is now adjustable (default 0.3 s): in Rotation it's the "after" box next to then M1, in Skill Combo it's the step's own wait box (press → wait → M1); Items also wait 0.3 s before M1
+- Skill Macro: "then M1" has its own delay (how long to wait after the key before clicking, default 0.3 s), in Rotation and Skill Combo; Items also wait 0.3 s before M1
 - fixed the 'OK detection not set up' message pointing to the old main tab (it's on the OK Popup page)
 
 WHAT'S NEW IN V6.2

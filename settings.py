@@ -7,10 +7,18 @@ def get_base_path():
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.abspath(__file__))
 
+# Every part of the app (hub, each macro, Skill Macro, Event Notifier) gets the SAME settings dict.
+# Before, each had its own copy and saving an older copy wiped newer changes (e.g. Skill Macro loadouts).
+_SHARED = {}
+
+
 class SpatialSettings:
     def __init__(self, filename="settings.json"):
         self.base_path = get_base_path()
         self.filename = os.path.join(self.base_path, filename)
+        if self.filename in _SHARED:
+            self.settings = _SHARED[self.filename]
+            return
         self.settings = {
             "use_ocr": False,
             "move_names": ["", "", ""],
@@ -105,23 +113,52 @@ class SpatialSettings:
                     {"key": "a", "seconds": 0.15}, {"key": "w", "seconds": 1.0}, {"key": "a", "seconds": 0.15}]}
             }
         }
+        _SHARED[self.filename] = self.settings
         self.load()
 
+    def _read(self, path):
+        with open(path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+
     def load(self):
-        if os.path.exists(self.filename):
+        """Read settings.json into the shared dict (in place, so every part of the app sees it).
+        If the file is broken (e.g. the PC shut down mid-save), use the backup instead of starting
+        empty - an empty start would overwrite everything on the next save."""
+        if not os.path.exists(self.filename):
+            return
+        try:
+            data = self._read(self.filename)
+        except Exception as e:
+            print(f"Error loading settings: {e}")
+            data = None
             try:
-                with open(self.filename, 'r') as f:
-                    data = json.load(f)
-                    self.settings.update(data)
-                    # hotkeys are replaced as a whole on load: re-add actions added since that file was saved
-                    self.settings["hotkeys"].setdefault("test_path", "f3")
-            except Exception as e:
-                print(f"Error loading settings: {e}")
+                os.replace(self.filename, self.filename + ".broken")      # keep it, don't overwrite it
+            except OSError:
+                pass
+            if os.path.exists(self.filename + ".bak"):
+                try:
+                    data = self._read(self.filename + ".bak")
+                    print("Loaded the settings backup (settings.json.bak) instead.")
+                except Exception as e2:
+                    print(f"Backup couldn't be read either: {e2}")
+        if data:
+            self.settings.update(data)
+            # hotkeys are replaced as a whole on load: re-add actions added since that file was saved
+            self.settings["hotkeys"].setdefault("test_path", "f3")
 
     def save(self):
+        """Write to a temp file, then swap it in: a crash can't leave a half-written settings.json.
+        The previous good file is kept as settings.json.bak."""
+        tmp = self.filename + ".tmp"
         try:
-            with open(self.filename, 'w') as f:
+            with open(tmp, 'w', encoding='utf-8') as f:
                 json.dump(self.settings, f, indent=4)
+            if os.path.exists(self.filename):
+                try:
+                    os.replace(self.filename, self.filename + ".bak")
+                except OSError:
+                    pass
+            os.replace(tmp, self.filename)
         except Exception as e:
             print(f"Error saving settings: {e}")
 

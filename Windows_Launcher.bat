@@ -1,6 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
-title VunVun's Macro Loader - V6.2.1
+title VunVun's Macro Loader - V6.2.2
 echo ========================================
 echo   Spatial Macro Launcher - Initializing
 echo ========================================

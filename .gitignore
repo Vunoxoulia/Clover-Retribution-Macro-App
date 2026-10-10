@@ -113,6 +113,9 @@ Thumbs.db
 # Per-user macro save data (calibrated regions, hotkeys, progress) -
 # must never be distributed to other users or overwritten on update.
 settings.json
+settings.json.bak
+settings.json.tmp
+settings.json.broken
 
 # More per-user save data (recorded routes, snapshots, captured buttons/pictures) -
 # also never published; the updater keeps them on the user's PC.
