@@ -132,32 +132,42 @@ def real_card(c, y, rank, name, key, expanded=True, status=("no img", "#ea868f")
     r2 = y + 40
     small(c, 60, r2 + 11, "⏱ Delay before (s)"); drop(c, 166, r2, 54, "0.1")
     small(c, 232, r2 + 11, "⏱ Delay after (s)"); drop(c, 330, r2, 54, "0.5")
-    label(c, 400, r2 + 11, "mouse → before → key → M1 → after", "#6c757d", 8, "w")
+    label(c, 400, r2 + 11, "mouse move → before → key → M2 → after", "#6c757d", 8, "w")
     r3 = y + 76
     small(c, 60, r3 + 11, "Repeat"); drop(c, 104, r3, 44, "3", blue=True)
     rrect(c, 222, r3 + 3, 238, r3 + 19, 3, fill=BLUE, outline=""); label(c, 230, r3 + 11, "✔", "#ffffff", 8, bold=True)
-    small(c, 244, r3 + 11, "then M1")
+    small(c, 244, r3 + 11, "Click after the key: M2 | M1")
     small(c, 310, r3 + 11, "Cooldown (s)"); drop(c, 388, r3, 52, "off")
 
 
 def draw_tune(c):
-    label(c, W / 2, 16, "A move that's READY but Test says 'cd'? Auto-tune it", YELLOW, 11, bold=True)
-    rrect(c, 330, 34, 430, 60, 6, fill=BLUE, outline=""); label(c, 380, 47, "🪄 Auto-tune", "#ffffff", 10, bold=True)
-    rrect(c, 438, 34, 494, 60, 6, fill="#495057", outline=""); label(c, 466, 47, "Test", "#ffffff", 10)
-    marker(c, 330, 30, 1); marker(c, 438, 30, 2)
-    # before / after
-    label(c, 150, 80, "Before", "#adb5bd", 10, bold=True)
-    label(c, 450, 80, "After Auto-tune", GREEN, 10, bold=True)
-    arrow(c, 262, 120, 338, 120, DIM)
-    for i, (name, before, after) in enumerate([("Mana Lance", ("cd 0.78/0.85", YELLOW), ("ready 0.78/0.62", GREEN)),
-                                               ("Chrono Burst", ("ready 0.97/0.85", GREEN), ("ready 0.97/0.71", GREEN))]):
-        y = 98 + i * 34
-        for x, (t, col) in ((40, before), (340, after)):
-            rrect(c, x, y, x + 220, y + 26, 6, fill="#212529", outline="#343a40")
-            label(c, x + 10, y + 13, name, "#ffffff", 9, "w", True)
-            label(c, x + 210, y + 13, t, col, 9, "e", True)
-    label(c, W / 2, 178, "score / its line:  READY when the score is at or above the line", TXT, 10)
-    label(c, W / 2, 200, "Or set a slot's line yourself: its ⚙ → Ready at  (off = the global one in Settings)", DIM, 9)
+    label(c, W / 2, 16, "🪄 Find hotbar: puts the hotbar region on your slots by itself", YELLOW, 11, bold=True)
+    rrect(c, 300, 34, 410, 60, 6, fill=BLUE, outline=""); label(c, 355, 47, "🪄 Find hotbar", "#ffffff", 10, bold=True)
+    rrect(c, 418, 34, 474, 60, 6, fill="#495057", outline=""); label(c, 446, 47, "Test", "#ffffff", 10)
+    marker(c, 300, 30, 1); marker(c, 418, 30, 2)
+    x0, size, gap = 70, 52, 8
+    for i in range(8):
+        x = x0 + i * (size + gap)
+        filled = i < 5
+        rrect(c, x, 80, x + size, 80 + size, 5, fill="#2b2f33" if filled else "#202326", outline="#565b5e")
+        if filled:
+            label(c, x + size / 2, 106, f"Skill {i + 1}", "#dce4ee", 8)
+            c.create_rectangle(x - 2, 78, x + size + 2, 82 + size, outline=CYAN, width=2)
+    label(c, W / 2, 152, "cyan = the slots it found (only the FILLED ones; empty slots are left out)", CYAN, 9)
+    label(c, W / 2, 176, "It doesn't cast anything or retake snapshots - press ③ 📸 Snapshot all if your skills changed.", TXT, 9)
+    label(c, W / 2, 200, "Ready but Test says 'cd'? Open that move's ⚙ → Ready at, and lower it a little.", DIM, 9)
+def draw_meditation(c):
+    label(c, W / 2, 16, "Meditation: refill mana when the light-blue bar runs out", YELLOW, 11, bold=True)
+    for i, (name, fill, col) in enumerate([("full", 1.0, GREEN), ("in use", 0.6, TXT), ("EMPTY → meditate", 0.0, YELLOW)]):
+        y = 40 + i * 36
+        rrect(c, 40, y, 360, y + 20, 4, fill="#2f2b33", outline="#565b5e")
+        if fill:
+            c.create_rectangle(42, y + 2, 42 + int(316 * fill), y + 18, fill="#5a9cc1", outline="")
+        label(c, 372, y + 10, name, col, 10, "w", True)
+    c.create_rectangle(36, 36, 364, 136, outline=RED, width=2, dash=(6, 3))
+    label(c, 200, 150, "red = drag 🔲 Mana bar over the whole light-blue bar", TXT, 9)
+    label(c, W / 2, 178, "Weapon out:  R → N … mana full … N → R        Grimoire out:  G → N … N → G", TXT, 10)
+    label(c, W / 2, 200, "Both out:  R, G → N … N → G, R          (keys can be changed)", DIM, 9)
 
 
 def draw_priority(c):
@@ -183,14 +193,14 @@ def draw_anim(c):
     label(c, W / 2, 20, "One cast, left to right", YELLOW, 11, bold=True)
     y = 70
     blocks = [(20, 120, "#0dcaf0", "move mouse", "#000000"), (120, 210, "#343a40", "delay before", "#dce4ee"),
-              (210, 275, BLUE, "press 7", "#ffffff"), (275, 330, "#6f42c1", "M1", "#ffffff"),
+              (210, 275, BLUE, "press 7", "#ffffff"), (275, 330, "#6f42c1", "M2", "#ffffff"),
               (330, 490, "#664d03", "delay after  1.5 s", "#ffda6a"), (490, 580, GREEN, "next move", "#000000")]
     for x1, x2, fill, text, col in blocks:
         c.create_rectangle(x1, y, x2, y + 32, fill=fill, outline="#1e2124")
         label(c, (x1 + x2) / 2, y + 16, text, col, 10, bold=True)
     label(c, 70, y + 54, "only if the move\nhas a Mouse aim", DIM, 9)
     label(c, 165, y + 46, "Delay before (s)", YELLOW, 9)
-    label(c, 302, y + 54, "only if\n'then M1'", DIM, 9)
+    label(c, 302, y + 54, "only if\n'then M2/M1'", DIM, 9)
     label(c, 410, y + 46, "Delay after (s)", YELLOW, 9)
     arrow(c, 30, 160, 570, 160, DIM); label(c, 570, 174, "time", DIM, 9, "e")
     label(c, W / 2, 200, "Two waits, both in each move's ⚙: one BEFORE the key, one AFTER it.", TXT, 10)
@@ -295,11 +305,10 @@ PAGES = [
     ("Rotation", "3. Snapshot the ready icons", draw_snapshot,
      "Wait until EVERY move shows its name (no timer), then press 📸 Snapshot All. "
      "Fix a single slot later with its 📸 button. Press Test to see READY / cooldown for each slot."),
-    ("Rotation", "4. Slot stuck on cooldown? Auto-tune", draw_tune,
-     "1 🪄 Auto-tune (macro stopped): click into the Roblox window within 3 s. It finds the hotbar "
-     "by itself (only your FILLED slots), waits for each move to be ready, snapshots it, then casts it once to learn its 'ready' line. 2 Test shows score/line for each slot.\n"
-     "Still wrong? Open the move's ⚙ and pick 'Ready at' yourself (lower = counts as ready sooner). "
-     "If Auto-tune says nothing changed after the key, the move didn't cast (no target?) - give it a manual Cooldown."),
+    ("Rotation", "4. Find the hotbar by itself", draw_tune,
+     "1 🪄 Find hotbar (macro stopped): click into the Roblox window within 3 s. It finds the hotbar and moves the "
+     "hotbar region onto your FILLED slots, then flashes them. It doesn't cast anything or change your snapshots.   "
+     "2 Test shows each slot's score / ready line. A ready move showing 'cd'? Lower its 'Ready at' in the move's ⚙."),
     ("Rotation", "5. Set the priority order", draw_priority,
      "The macro always casts the highest move in the list that is READY. "
      "Cooldown reductions from other moves are picked up automatically because it reads the screen."),
@@ -307,28 +316,32 @@ PAGES = [
      "1 On/off   2 Name (optional)   3 Key   9 ⚙ – open / close the extra options below\n"
      "4 Delay before – wait after the mouse moves, before the key   5 Delay after – wait after the key (lets slow moves finish)\n"
      "6 Repeat – multi-use moves: 4 every 0.25 s = 4 presses, 0.25 s apart (set it just above the move's lockout)\n"
-     "7 then M1 – one left click after the key, 'after' = how long to wait first (default 0.3 s)   8 Cooldown – only for slots with no snapshot   Ready at – this slot's own 'ready' line (Auto-tune sets it)"),
+     "7 Click after the key [M2 | M1] – one click after the key, M2 (right) by default or M1 (left); 'after' = how long to wait first (default 0.3 s), 'then wait' = mouse stays still after the click so it casts where it aimed (default 0.1 s)   8 Cooldown – only for slots with no snapshot   Ready at – this slot's own 'ready' line (lower it if a ready move shows 'cd')"),
     ("Rotation", "7. Mouse aim (optional)", draw_aim,
      "1 Tick the slots that should aim at the same spot   2 Pick spot: click where on screen (the mouse moves "
-     "there before the key; tick 'then M1' on the move to also click)   3 Clear: ticked slots go back to 'wherever the mouse is'   "
+     "there before the key; tick 'Click after the key' on the move to also click)   3 Clear: ticked slots go back to 'wherever the mouse is'   "
      "4 The list shows which slots aim where. Pick again with other slots ticked for a different spot."),
-    ("Rotation", "8. The order of one cast", draw_anim,
-     "Move mouse → Delay before → press → M1 (if ticked) → Delay after → next move. Delay before gives the game "
+    ("Rotation", "8. Meditation (optional)", draw_meditation,
+     "Turn it on and press ⚙ Settings (its own window): 🔲 Mana bar = drag over the light-blue mana bar, then pick what you fight with: Weapon, "
+     "Grimoire or Both. Meditate at = how low the mana may get first (5% = basically empty). Once it's that low, it puts them away (R / G), meditates (N) until "
+     "the bar is full again, stops (N) and takes them back out. Every key has its own wait box (Start / When full lines) so animations can finish; 'All waits' sets them all at once. 'Give up after' = longest it meditates. Test shows the mana it reads."),
+    ("Rotation", "9. The order of one cast", draw_anim,
+     "Move mouse → Delay before → press → M2 or M1 (if ticked) → Delay after → next move. Delay before gives the game "
      "time to turn toward the mouse before the key. Delay after lets slow moves finish before the next cast."),
-    ("Skill Combo", "9. Skill Combos", draw_combo,
+    ("Skill Combo", "10. Skill Combos", draw_combo,
      "Skill Combo page → + Add Combo, set the trigger key, then + Step. Each step reads like a sentence: "
-     "Press [key] [1 time] then wait [0.2 s]; with 2+ times it waits after each press. The step's ⚙ adds 'then M1' (the row then reads 'then M1 after [s]': press → wait → M1) or mouse aim. Works while the macro is running."),
-    ("Items", "10. Item auto-use (optional)", draw_items,
+     "Press [key] [1 time] then wait [0.2 s]; with 2+ times it waits after each press. The step's ⚙ adds 'Click after the key' [M2 | M1] (M2 by default; the row then reads 'then M2 after [s]': press → wait → click) or mouse aim. Works while the macro is running."),
+    ("Items", "11. Item auto-use (optional)", draw_items,
      "Items page → Set Scan Area over the pickup messages, then + Add Item: \"When [Copper] shows up, press [9] ☑ then M1\". "
      "It presses the key, then left-clicks to use the item — once per message. Test OCR (while a message is on screen) shows what it reads."),
-    ("Settings", "11. Events & OK Popup pages", draw_skill_extras,
+    ("Settings", "12. Events & OK Popup pages", draw_skill_extras,
      "The Skill Macro also has the 📣 Events and 🔔 OK Popup pages (same as every macro), each with its own ? Help. "
      "Turn on their big bars to post events to Discord or click OK popups while the rotation runs."),
-    ("Settings", "12. Loadouts (saved builds)", draw_loadouts,
+    ("Settings", "13. Loadouts (saved builds)", draw_loadouts,
      "The 🎒 Loadout bar at the top saves a whole build: hotbar region, snapshots, move order and options, mouse aim, "
-     "combos and items. New = a fresh empty save (your current one stays as it is); use Auto-tune to set it up. "
+     "combos and items. New = a fresh empty save (your current one stays as it is); use 🪄 Find hotbar and 📸 Snapshot all to set it up. "
      "Switching applies instantly, even while running. The hotkey and focus setting are shared by all loadouts."),
-    ("Settings", "13. Start it", draw_start,
+    ("Settings", "14. Start it", draw_start,
      "Press Start or F6 (change it in Settings). Press again to stop."),
 ]
 
@@ -548,7 +561,7 @@ LIBRARY_PAGES = [
      "It's clicked to close chat when a minigame starts and again after it. Start with chat open."),
     ("Start", "11. Start it", draw_lib_start,
      "Press Start (F6). Turn on Always Click OK if reward popups block the screen. "
-     "The macro stops by itself once every ticked move shows its gold clover."),
+     "The macro stops by itself once every ticked move shows its gold clover (tick 🔊 on Main for a sound)."),
 ]
 
 
@@ -645,13 +658,15 @@ EVENTS_PAGES = [
      "Roles go in an event's Role box instead (role needs 'Allow anyone to @mention' on)."),
     ("Windows", "3. Roblox windows", draw_ev_windows,
      "For every Roblox window: pick Clover Kingdom or Jungle, press 🔲 Chat and drag over that window's chat, "
-     "and type its PS code. 👁 Show checks the yellow chat box sits on the chat."),
+     "and type its PS code. 👁 Show checks the yellow chat box sits on the chat. 'Set Here / Global tabs': click that window's "
+     "Here tab, then its Global tab (used by /clear in Global)."),
     ("Events", "4. The event list", draw_ev_events,
      "Untick events you don't care about. + Add event for new ones: the keyword only needs to be part of the chat "
      "message, spaces and capitals don't matter."),
     ("Start", "5. Turn it on", draw_ev_on,
      "Click the big Event alerts bar. It keeps running when you switch macros. Test read shows what each window "
-     "reads right now."),
+     "reads right now. '/clear chat after an alert' empties the chat after posting: pick /clear or /cls, and keep "
+     "'in the Global tab' on (it clicks Global, clears, then clicks Here again - /clear doesn't always work in Here; set them with 'Set Here / Global tabs' per window)."),
 ]
 
 

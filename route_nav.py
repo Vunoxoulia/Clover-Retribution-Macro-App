@@ -23,7 +23,7 @@ class RouteNav(BaseLogic):
     """Shared recorded-route navigation (used by the Mining and Library macros).
 
     Record a walk once (Ctrl+P to start/stop), tapping E at each target. Playback
-    replays your keys (lag-aware), and with a locked top-down camera
+    replays your keys, and with a locked top-down camera
     (USE_ALIGNMENT) also lines up on snapshots at checkpoints and targets.
     Routes live in <ROUTES_DIRNAME>/<name>/."""
 
@@ -34,7 +34,7 @@ class RouteNav(BaseLogic):
 
     RECORD_KEYS = {"w", "a", "s", "d", "space", "shift", "left shift"}
     CHECKPOINT_IDLE = 0.5   # stand still this long while recording -> checkpoint
-    LAG_PAUSE_CAP = 1.5     # max seconds a walk's clock may pause for lag
+    MIN_TAP = 0.05          # playback: a key is held at least this long, or Roblox can miss a quick tap
 
     # Snapshot matching (fractions of the window): skip top bar, HUD and minimap.
     SNAP_TEMPLATE = (0.29, 0.15, 0.71, 0.70)
@@ -117,9 +117,6 @@ class RouteNav(BaseLogic):
 
 
     # ================= Screen helpers =================
-    def _smart(self):
-        return bool(self.app.settings.get("smart_movement", True))
-
     def _screen(self):
         return self.utils.capture_screen_bgr(self.get_roblox_window_region())
 
@@ -164,27 +161,7 @@ class RouteNav(BaseLogic):
         self.app.log(f"   !! {os.path.basename(path)} not saved: game was covered")
         return False
 
-    # ================= Motion sensing / walking =================
-    def _motion_probe(self):
-        """Cheap snapshot of two strips at the sides of the Roblox view (avoids the
-        character in the middle, the HUD at the bottom and the minimap).
-        The camera follows the player, so these strips change while we walk."""
-        if self._probe_region is None:
-            l, t, r, b = self.get_roblox_window_region()
-            w, h = r - l, b - t
-            self._probe_region = [
-                [l + int(w * 0.05), t + int(h * 0.30), l + int(w * 0.25), t + int(h * 0.60)],
-                [l + int(w * 0.68), t + int(h * 0.30), l + int(w * 0.85), t + int(h * 0.60)],
-            ]
-        parts = []
-        for reg in self._probe_region:
-            g = cv2.cvtColor(self.utils.capture_screen_bgr(reg), cv2.COLOR_BGR2GRAY)
-            parts.append(cv2.resize(g, (g.shape[1] // 4, g.shape[0] // 4), interpolation=cv2.INTER_AREA))
-        return np.hstack(parts).astype(np.int16)
-
-    def _motion_amount(self, a, b):
-        return float(np.mean(np.abs(a - b)))
-
+    # ================= Walking =================
     def _ok_pause(self, held, alive):
         """An OK popup is being clicked (it freezes the character): let go of the held keys, wait
         until it's handled, then press them again. Returns the seconds spent, so the walk can resume
@@ -203,66 +180,29 @@ class RouteNav(BaseLogic):
         return time.perf_counter() - t0
 
     def hold_key(self, key, seconds, alive=None):
-        """Hold a key for `seconds` of actual movement (Smart Movement: the clock
-        pauses while the screen is frozen; capped so a wall can't hang it)."""
+        """Hold a key for `seconds` (an 'Ok' popup pauses the clock while it's being clicked)."""
         key = game_key(key)                              # WASD by position (AZERTY / QWERTZ)
         alive = alive or (lambda: self.running)
         if seconds <= 0:
             return alive()
-        if not self._smart():
-            self.walking = True
-            keyboard.press(key)
-            end = time.perf_counter() + seconds
-            try:
-                while alive() and time.perf_counter() < end:
-                    end += self._ok_pause([key], alive)
-                    time.sleep(min(0.02, max(0.0, end - time.perf_counter())))
-            finally:
-                keyboard.release(key)
-                self.walking = False
-            return alive()
-        threshold = float(self.app.settings.get("motion_threshold", 2.5))
-        cap = seconds * 1.6 + 1.5
-        moved, prev = 0.0, self._motion_probe()
-        start = last = time.perf_counter()
         self.walking = True
         keyboard.press(key)
+        end = time.perf_counter() + seconds
         try:
-            while alive() and moved < seconds and (last - start) < cap:
-                paused = self._ok_pause([key], alive)
-                if paused:
-                    cap += paused
-                    start += paused
-                    last, prev = time.perf_counter(), self._motion_probe()
-                    continue
-                time.sleep(0.04)
-                now = time.perf_counter()
-                dt, last = now - last, now
-                cur = self._motion_probe()
-                if (now - start) < 0.15 or self._motion_amount(prev, cur) >= threshold:
-                    moved += dt
-                prev = cur
+            while alive() and time.perf_counter() < end:
+                end += self._ok_pause([key], alive)
+                time.sleep(min(0.02, max(0.0, end - time.perf_counter())))
         finally:
             keyboard.release(key)
             self.walking = False
         return alive()
 
-    def _wait_still(self, max_wait=1.0, alive=None):
-        """Wait until the character has stopped sliding (screen settles)."""
+    def _wait_still(self, max_wait=0.5, alive=None):
+        """Short pause so the character stops sliding before a snapshot is compared."""
         alive = alive or (lambda: self.running)
-        if not self._smart():
-            time.sleep(0.5)
-            return
-        threshold = float(self.app.settings.get("motion_threshold", 2.5))
-        end = time.perf_counter() + max_wait
-        prev = self._motion_probe()
-        time.sleep(0.08)
+        end = time.perf_counter() + min(max_wait, 0.5)
         while alive() and time.perf_counter() < end:
-            cur = self._motion_probe()
-            if self._motion_amount(prev, cur) < threshold:
-                return
-            prev = cur
-            time.sleep(0.08)
+            time.sleep(0.02)
 
     # ================= Interact prompt =================
     def route_checks(self):
@@ -308,7 +248,7 @@ class RouteNav(BaseLogic):
         return (reg[0] + hit[0], reg[1] + hit[1]) if hit else None
 
     def confirm_arrival(self, ore_idx):
-        """Check the Interact prompt is up; if not, wait out lag, then try small
+        """Check the Interact prompt is up; if not, wait a moment, then try small
         nudges around the spot (each undone if it doesn't help)."""
         wait = float(self.app.settings.get("arrival_wait", 1.5))
         end = time.perf_counter() + wait
@@ -429,6 +369,19 @@ class RouteNav(BaseLogic):
         return alive()                                   # never stops the macro by itself
 
     # ================= Recording (Ctrl+P) =================
+    _VK = {"space": 0x20, "shift": 0x10, "left shift": 0xA0, "right shift": 0xA1}
+
+    @classmethod
+    def _key_is_down(cls, name):
+        """Is this key physically held right now (asks Windows, not the keyboard hook)?"""
+        vk = cls._VK.get(name) or (ord(name.upper()) if len(name) == 1 else None)
+        if vk is None:
+            return True                                  # unknown key: trust the hook
+        try:
+            import ctypes
+            return bool(ctypes.windll.user32.GetAsyncKeyState(vk) & 0x8000)
+        except Exception:
+            return True
     def is_recording(self):
         return self._rec_thread is not None and self._rec_thread.is_alive()
 
@@ -531,6 +484,14 @@ class RouteNav(BaseLogic):
             while not self._rec_stop:
                 time.sleep(0.05)
                 with lock:
+                    # A key-up the hook missed would leave the key 'held' forever, and every later tap of it
+                    # (10 jumps -> 2) would be ignored. Ask Windows for the real state and close it here.
+                    now = time.perf_counter()
+                    for k in [k for k in held if not self._key_is_down(k)]:
+                        held.discard(k)
+                        events.append([round(now - st["seg_start"], 3), k, "up"])
+                        if not held:
+                            st["idle_since"], st["idle_t"] = now, round(now - st["seg_start"], 3)
                     ready = (self.USE_ALIGNMENT and not held and not st["cp_taken"]
                              and time.perf_counter() - st["idle_since"] >= self.CHECKPOINT_IDLE)
                     if ready:
@@ -565,52 +526,40 @@ class RouteNav(BaseLogic):
     # ================= Playback =================
     def play_segment(self, seg, label="", alive=None):
         """Replay recorded key presses with their original timing.
-        - Lag-aware (Smart Movement on): while keys are held but the screen isn't
-          moving, the replay clock pauses (capped), so freezes don't shorten walks.
-        - At each checkpoint it lines up on the checkpoint snapshot, then continues."""
+        At each checkpoint it lines up on the checkpoint snapshot, then continues."""
         alive = alive or (lambda: self.running)
         events = sorted(seg["events"], key=lambda e: e[0])
         cps = (sorted(seg.get("checkpoints", []), key=lambda c: c["t"])
                if self.USE_ALIGNMENT and self.route_checks() else [])
         folder = self.route_dir()
-        smart = self._smart()
-        threshold = float(self.app.settings.get("motion_threshold", 2.5))
-        motion = {"moving": True, "stop": False}
-
-        def sampler():
-            prev = self._motion_probe()
-            while not motion["stop"]:
-                time.sleep(0.05)
-                cur = self._motion_probe()
-                motion["moving"] = self._motion_amount(prev, cur) >= threshold
-                prev = cur
-
-        if smart:
-            threading.Thread(target=sampler, daemon=True).start()
         start = time.perf_counter()
-        shift, lag_used, last = 0.0, 0.0, start
+        shift = 0.0
         down, ei, ci = set(), 0, 0
+        pressed_at = {}                                  # key -> when it went down (for the minimum tap)
         self.walking = True
         try:
             while alive():
                 paused = self._ok_pause(list(down), alive)
                 if paused:
                     shift += paused
-                    last = time.perf_counter()
                     continue
                 now = time.perf_counter()
-                dt, last = now - last, now
-                lagging = smart and down and not motion["moving"] and (now - start - shift) > 0.2
-                if lagging and lag_used < self.LAG_PAUSE_CAP:
-                    shift += dt
-                    lag_used += dt
                 t = now - start - shift
                 while ei < len(events) and events[ei][0] <= t:
                     _, key, kind = events[ei]
                     ei += 1
                     if kind == "down":
+                        if key in down:                  # pressed again without a release: re-tap it
+                            keyboard.release(key)
+                            time.sleep(0.02)
                         keyboard.press(key); down.add(key)
+                        pressed_at[key] = time.perf_counter()
                     else:
+                        # quick taps (jumps): keep the key down long enough for Roblox to see it
+                        held_for = time.perf_counter() - pressed_at.get(key, 0)
+                        if held_for < self.MIN_TAP:
+                            time.sleep(self.MIN_TAP - held_for)
+                            shift += self.MIN_TAP - held_for
                         keyboard.release(key); down.discard(key)
                 if ci < len(cps) and cps[ci]["t"] <= t and not down:
                     cp = cps[ci]
@@ -623,15 +572,11 @@ class RouteNav(BaseLogic):
                         if res == "lost":
                             self.app.log(f"   checkpoint {label}.{ci}: not recognised, carrying on")
                         shift += time.perf_counter() - t0
-                        last = time.perf_counter()
                     continue
                 if ei >= len(events) and ci >= len(cps) and t >= seg["duration"]:
                     break
                 time.sleep(0.004)
-            if lag_used > 0.3:
-                self.app.log(f"   ~ lag compensated: +{lag_used:.2f}s")
         finally:
-            motion["stop"] = True
             self.walking = False
             for k in down:
                 keyboard.release(k)
@@ -662,18 +607,3 @@ class RouteNav(BaseLogic):
     # ================= Tests =================
 
 
-    def test_motion_sensor(self):
-        """Log the live motion reading for ~6s: stand still, then walk around."""
-        self._probe_region = None
-        thr = float(self.app.settings.get("motion_threshold", 2.5))
-        self.app.log(f"Motion sensor test (threshold {thr:.1f}): stand still, then walk...")
-        prev = self._motion_probe()
-        for _ in range(12):
-            if not self.test_running:
-                return
-            time.sleep(0.5)
-            cur = self._motion_probe()
-            amt = self._motion_amount(prev, cur)
-            self.app.log(f"   motion {amt:5.1f}  {'MOVING' if amt >= thr else 'still'}")
-            prev = cur
-        self.app.log("Set the threshold between your 'still' and 'moving' numbers.")

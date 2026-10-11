@@ -8,7 +8,7 @@ from logic_mining import MiningLogic
 from logic_fishing import FishingLogic
 from logic_devil_union import DevilUnionLogic
 import keyboard
-from ui_style import big_toggle, style_toggle, save_while_typing
+from ui_style import big_toggle, style_toggle, save_while_typing, sound_picker
 import os
 import sys
 import webbrowser
@@ -294,6 +294,20 @@ class SpatialGUI:
                                text_color="#ced4da", cursor="hand2")
         ok_hint.pack(pady=(0, 8))
         ok_hint.bind("<Button-1>", lambda e: self.tabview.set("OK Popup"))
+        if "Library" in self.root.title():
+            sound_row = ctk.CTkFrame(tab, fg_color="transparent")
+
+            def flip_sound():
+                self.settings.set("sound_when_done", bool(snd.get()))
+                sound_row.pack(pady=(0, 8), after=snd) if snd.get() else sound_row.pack_forget()
+            snd = ctk.CTkCheckBox(tab, text="🔊 Play a sound when every move is trained (the macro stops)",
+                                  font=("Arial", 12), command=flip_sound)
+            if self.settings.get("sound_when_done", False):
+                snd.select()
+            snd.pack(pady=(0, 2))
+            sound_picker(sound_row, "done").pack()
+            if snd.get():
+                sound_row.pack(pady=(0, 8), after=snd)
 
         tutorial_link = ctk.CTkLabel(tab, text="Video Tutorial", font=("Arial", 14, "underline"), text_color="#0dcaf0", cursor="hand2")
         tutorial_link.pack(side="bottom", pady=10)
@@ -311,28 +325,8 @@ class SpatialGUI:
 
         # Movement / alignment
         mc = card(); mc.pack(fill="x", padx=15, pady=4)
-        row = ctk.CTkFrame(mc, fg_color="transparent"); row.pack(fill="x", padx=6, pady=(6, 2))
-        self.smart_switch = ctk.CTkSwitch(row, text="🧠 Smart Movement (lag-aware)", font=("Arial", 12, "bold"),
-                                          command=lambda: self.settings.set("smart_movement", bool(self.smart_switch.get())))
-        if self.settings.get("smart_movement", True): self.smart_switch.select()
-        self.smart_switch.pack(side="left")
-        ctk.CTkButton(row, text="Test Sensor", width=90, command=lambda: self._run_test(self.logic.test_motion_sensor),
-                      **btn).pack(side="right")
-        row = ctk.CTkFrame(mc, fg_color="transparent"); row.pack(fill="x", padx=6, pady=(2, 6))
-
-        def slider(parent, label, key, default, lo, hi, steps, fmt):
-            ctk.CTkLabel(parent, text=label, font=("Arial", 12)).pack(side="left")
-            val = ctk.CTkLabel(parent, text=fmt(self.settings.get(key, default)), width=44, font=("Arial", 12, "bold"))
-            def on(v):
-                v = round(float(v), 1) if isinstance(default, float) else int(v)
-                self.settings.set(key, v); val.configure(text=fmt(v))
-            sl = ctk.CTkSlider(parent, from_=lo, to=hi, number_of_steps=steps, width=95, command=on)
-            sl.set(self.settings.get(key, default)); sl.pack(side="left", padx=3); val.pack(side="left", padx=(0, 10))
-
-        slider(row, "Motion:", "motion_threshold", 2.5, 0.5, 10, 95, lambda v: f"{float(v):.1f}")
-
         # No checks = just follow the recorded path
-        row = ctk.CTkFrame(mc, fg_color="transparent"); row.pack(fill="x", padx=6, pady=(2, 2))
+        row = ctk.CTkFrame(mc, fg_color="transparent"); row.pack(fill="x", padx=6, pady=(6, 2))
         self.checks_switch = ctk.CTkSwitch(row, text="📍 Line-up checks", font=("Arial", 12, "bold"),
                                            command=lambda: self.settings.set("mining_checks", bool(self.checks_switch.get())))
         if self.settings.get("mining_checks", True): self.checks_switch.select()

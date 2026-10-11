@@ -80,7 +80,7 @@ class LibraryLogic(RouteNav):
     CLOVER_ROW = 1.13        # box height = icon height × this (adds the row of clovers above the icons)
 
     def auto_find_gold_hotbar(self):
-        """Find the hotbar in the Roblox window that's in front (same search as the Skill Macro's Auto-tune)
+        """Find the hotbar in the Roblox window that's in front (same search as the Skill Macro's Find hotbar)
         and set the gold-clover box over the FILLED slots, clovers included. Returns slot count or None."""
         from logic_smart import SmartMacroLogic
         try:
@@ -298,10 +298,13 @@ class LibraryLogic(RouteNav):
             return                                   # only re-open what we closed
         else:
             self._chat_hidden = False
-        self.human_click(*pos, duration=0.12)
-        self._park_mouse()
+        # Holds the shared input lock until the chat has finished closing/opening, so no clover click
+        # (or OK / event check) can land in between and undo it.
+        with RobloxInputDriver._lock:
+            self.human_click(*pos, duration=0.12)
+            self._park_mouse()
+            time.sleep(0.6)
         self.app.log("Chat hidden for the minigame." if why == "hide" else "Chat shown again.")
-        time.sleep(0.3)
 
     def in_minigame(self):
         s = self.minigame_score()
@@ -572,9 +575,12 @@ class LibraryLogic(RouteNav):
             trained = self.check_trained_status()
             to_train = [i for i in range(MAX_MOVES) if not trained[i]]
             if not to_train:
-                self.app.log("All selected moves are trained! Stopping macro.")
+                # Everything selected is maxed: stop the macro (the app stays open) and play a sound
+                self.app.log("All selected moves are trained! Macro stopped.")
                 self.running = False
-                self.app.root.after(1000, self.app.exit_app)
+                if self.app.settings.get("sound_when_done", False):
+                    from utils import play_sound
+                    play_sound("done")
                 break
             self.current_move_idx = to_train[0]
             if self.in_minigame():

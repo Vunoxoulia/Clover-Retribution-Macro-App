@@ -20,9 +20,22 @@ DEFAULT_MOVE = {
     "enabled": True, "name": "", "key": "", "priority": 1,
     "repeat": 1, "repeat_delay": 0.15, "cooldown": 0.0,
     "mouse_mode": "none", "x": 0, "y": 0, "click": False, "m1_delay": 0.3,
-    # one cast:  move mouse -> delay_before -> press key -> M1 (if ticked) -> delay_after -> next move
+    # one cast:  move mouse -> delay_before -> press key -> M2/M1 click (if ticked) -> delay_after -> next move
+    "click_btn": "m2",        # which mouse button 'then click' uses (Items always use M1)
+    "after_click": 0.1,       # keep the mouse still this long after the click, so the cast lands where it was aimed
     "delay_before": 0.0, "delay_after": 0.0,
     "ready_at": 0.0,          # this slot's own match level for READY (0 = use the global one); Auto-tune sets it
+}
+
+# Meditation: when the mana bar runs out, put the weapon / grimoire away, meditate until it's full, take them out again
+MEDITATION_DEFAULT = {
+    "enabled": False, "region": [0, 0, 0, 0],   # region = the light-blue mana bar
+    "out": "weapon",                            # what you fight with: weapon / grimoire / both
+    "weapon_key": "r", "grimoire_key": "g", "key": "n", "max_wait": 90,
+    "below": 5,                                 # meditate once mana is at or under this % (5 = basically empty)
+    "key_delay": 1.0,                           # 'All waits' - the default for every step below
+    # each step's own wait (missing = key_delay): before the first key, after each key
+    "waits": {},
 }
 
 DEFAULT_SMART = {
@@ -555,6 +568,7 @@ class SmartMacroLogic:
         if d.get("mouse_mode") == "click":
             d["mouse_mode"] = "move"
         d.pop("hold_click", None)
+        d.setdefault("click_btn", "m2")                  # the click after the key: M2 by default, M1 optional
         # The M1 delay's default went from 0.15 to 0.3 s: move settings still on the old default (once)
         if not d.get("m1_v2"):
             if float(d.get("m1_delay", 0.15) or 0) == 0.15:
@@ -573,18 +587,25 @@ class SmartMacroLogic:
             self._wait(float(wait))
 
     def _m1_after(self, d):
-        """'then M1': wait the move's M1 delay after the key (default 0.3 s, like Items), then one left click."""
+        """'then click': wait the move's delay after the key (default 0.3 s), then one M2 (or M1) click."""
         if self.migrate_click(d).get("click"):
             time.sleep(max(0.0, float(d.get("m1_delay", 0.3) or 0)))
-            self._click()
+            self._click(d.get("click_btn", "m2"))
+            # mouse stays put a moment so the game casts at THIS move's spot, not the next move's aim
+            time.sleep(max(0.0, float(d.get("after_click", 0.1) or 0)))
 
-    def _click(self):
-        """One left click (M1) wherever the mouse is."""
+    @staticmethod
+    def click_name(d):
+        return "M1" if d.get("click_btn", "m2") == "m1" else "M2"
+
+    def _click(self, btn="m1"):
+        """One click wherever the mouse is: M1 = left (Items), M2 = right (Rotation / Combo default)."""
+        button = Button.right if btn == "m2" else Button.left
         mouse = MouseController()
         with RobloxInputDriver._lock:
-            mouse.press(Button.left)
+            mouse.press(button)
             time.sleep(0.04)
-            mouse.release(Button.left)
+            mouse.release(button)
 
     def use_item(self, item):
         """Item use = press its hotkey (equips it), short pause, then M1 to use it."""
@@ -598,6 +619,100 @@ class SmartMacroLogic:
     def _press(self, key):
         if key:
             self.utils.send_key(key, 0.04)
+
+    # ---------- meditation (refill mana) ----------
+    def med(self):
+        d = self.cfg["rotation"].setdefault("meditation", {})
+        for k, v in MEDITATION_DEFAULT.items():
+            d.setdefault(k, copy.deepcopy(v))            # own copy: lists / dicts must not be shared
+        return d
+
+    def mana_reading(self):
+        """(fill 0..1, left end blue, right end blue) of the mana bar, or None if no bar is set.
+        Mana is light blue; the used part turns dark grey from the right, so an EMPTY bar is grey at
+        its left end and a FULL bar is light blue at its right end."""
+        r = self.med()["region"]
+        if not (r[2] > r[0] and r[3] > r[1]):
+            return None
+        img = self.utils.capture_screen_bgr(r)
+        if img is None or not img.size:
+            return None
+        h = img.shape[0]
+        band = cv2.cvtColor(img[int(h * 0.3):max(int(h * 0.3) + 1, int(h * 0.7))], cv2.COLOR_BGR2HSV)
+        blue = ((band[:, :, 0] >= 95) & (band[:, :, 0] <= 112) & (band[:, :, 1] >= 70) & (band[:, :, 2] >= 140))
+        cols = blue.mean(axis=0) >= 0.5                  # a column counts as mana if most of it is light blue
+        n = len(cols)
+        edge = max(1, n // 20)
+        # Mana % = where the light blue ends (the grey grows from the right). The white "4010/4035" text in
+        # the middle isn't blue, so look for the LAST blue column instead of counting blue columns.
+        idx = np.where(cols)[0]
+        fill = float(idx[-1] + 1) / n if idx.size else 0.0
+        return fill, bool(cols[:edge].mean() >= 0.5), bool(cols[-edge:].mean() >= 0.5)
+
+    def mana_empty(self):
+        """Time to meditate: mana at or under the 'Meditate at' % (or the bar's left end already grey)."""
+        r = self.mana_reading()
+        if not r:
+            return False
+        below = max(0.0, float(self.med().get("below", 5) or 0)) / 100.0
+        return (not r[1]) or r[0] <= below
+
+    def mana_full(self):
+        r = self.mana_reading()
+        return bool(r) and r[2]
+
+    def meditation_steps(self):
+        """The keys in order, each with the name of the wait that follows it."""
+        d = self.med()
+        out = d.get("out", "weapon")
+        away, back = [], []
+        if out in ("weapon", "both"):
+            away.append((d["weapon_key"], "store_weapon"))
+        if out in ("grimoire", "both"):
+            away.append((d["grimoire_key"], "store_grimoire"))
+        if out in ("grimoire", "both"):
+            back.append((d["grimoire_key"], "draw_grimoire"))
+        if out in ("weapon", "both"):
+            back.append((d["weapon_key"], "draw_weapon"))
+        return {"away": away, "back": back}
+
+    def med_wait(self, name):
+        d = self.med()
+        v = d.get("waits", {}).get(name)
+        return max(0.0, float(v if v not in (None, "") else d.get("key_delay", 1.0)))
+
+    def meditate(self):
+        """Weapon out: R → N … full … N → R.  Grimoire out: G → N … N → G.  Both: R, G → N … N → G, R."""
+        d = self.med()
+        out = d.get("out", "weapon")
+        away = ([d["weapon_key"]] if out in ("weapon", "both") else []) + \
+               ([d["grimoire_key"]] if out in ("grimoire", "both") else [])
+        steps = self.meditation_steps()
+        gap = lambda name: self.med_wait(name)           # every step waits for its animation (own value or 'All')
+        self.app.log("Mana empty → meditating…")
+        self._wait(gap("start"))                         # let the last skill finish before putting things away
+        for k, name in steps["away"]:                    # put them away, one at a time
+            with RobloxInputDriver._lock:
+                self._press(k)
+            self._wait(gap(name))
+        with RobloxInputDriver._lock:
+            self._press(d["key"])                        # start meditating
+        self._wait(gap("sit"))
+        end = time.time() + float(d.get("max_wait", 90) or 90)
+        while self.running and time.time() < end and not self.mana_full():
+            self._wait(0.3)
+        if not self.running:
+            return
+        full = self.mana_full()
+        with RobloxInputDriver._lock:
+            self._press(d["key"])                        # stop meditating
+        self._wait(gap("stand"))
+        for k, name in steps["back"]:                    # take them out again
+            with RobloxInputDriver._lock:
+                self._press(k)
+            self._wait(gap(name))
+        self.app.log("Mana full - back to the rotation." if full else
+                     f"Meditation stopped after {int(float(d.get('max_wait', 90)))} s (mana didn't read as full).")
 
     # ---------- rotation ----------
     def pick_move(self, scores):
@@ -619,6 +734,9 @@ class SmartMacroLogic:
                 rot = self.cfg["rotation"]
                 if not self._focused():
                     self._wait(0.3); continue
+                if self.med()["enabled"] and self.mana_empty():
+                    self.meditate()
+                    continue
                 pick = self.pick_move(self.read_slots())
                 if not pick:
                     self._wait(float(rot["tick"])); continue
@@ -632,7 +750,7 @@ class SmartMacroLogic:
                         self._aim(m["mouse_mode"], m["x"], m["y"], 0)        # 1. move mouse (if it aims)
                         self._wait(float(m.get("delay_before") or 0))        # 2. delay before
                         self._press(m["key"])                                # 3. press
-                        self._m1_after(m)                                    # 4. M1 (if ticked)
+                        self._m1_after(m)                                    # 4. M2/M1 (if ticked)
                     if n < int(m["repeat"]) - 1:
                         # gap between presses of a multi-use move (e.g. its 0.2 s anti-spam lockout)
                         self._wait(max(0.05, float(m.get("repeat_delay") or 0.15)))
@@ -706,9 +824,9 @@ class SmartMacroLogic:
                     self.app.log(f"Combo [{trig}]: step {num} pressed {step.get('key', '')}" + (f" ({i + 1}/{n})" if n > 1 else ""))
                     self._wait(wait)
                     if self.migrate_click(step).get("click") and self.running:
-                        # 'then M1': the step's wait box is the wait BEFORE the click (key → wait → M1 → next)
-                        self._click()
-                        self._wait(0.08)
+                        # 'then click': the step's wait box is the wait BEFORE the click (key → wait → M2/M1 → next)
+                        self._click(step.get("click_btn", "m2"))
+                        self._wait(max(0.02, float(step.get("after_click", 0.1) or 0)))   # mouse still after the click
         except Exception as e:
             self.app.log(f"Combo error: {e}")
         finally:

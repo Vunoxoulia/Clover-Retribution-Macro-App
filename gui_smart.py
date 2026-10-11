@@ -192,21 +192,36 @@ class SmartMacroGUI:
         return om, pick, lbl
 
     def _m1_box(self, parent, d, on_save=None, with_delay=True):
-        """'then M1' tick box + its delay: key → wait [M1 delay] → one left click (like Items)."""
+        """'then [M2|M1]' tick box + its delay: key → wait [delay] → one click. M2 is the default."""
         from logic_smart import SmartMacroLogic
         SmartMacroLogic.migrate_click(d)
         f = ctk.CTkFrame(parent, fg_color="transparent")
-        box = ctk.CTkCheckBox(f, text="then M1", width=80, font=("Arial", 12))
+        box = ctk.CTkCheckBox(f, text="Click after the key", width=150, font=("Arial", 12))
         box.pack(side="left")
+        btn = ctk.CTkSegmentedButton(f, values=["M2", "M1"], width=76, height=24, font=("Arial", 12, "bold"),
+                                     command=lambda v: (self._set(d, "click_btn", v.lower()), on_save and on_save()))
+        btn.set(SmartMacroLogic.click_name(d))
         delay = ctk.CTkFrame(f, fg_color="transparent")
         ctk.CTkLabel(delay, text="after", font=("Arial", 12)).pack(side="left", padx=(0, 2))
         d.setdefault("m1_delay", 0.3)
         self._pick(delay, d, "m1_delay", ["0", "0.05", "0.1", "0.15", "0.2", "0.3", "0.5", "1"], 60,
                    on_save=on_save).pack(side="left")
         ctk.CTkLabel(delay, text="s", font=("Arial", 12)).pack(side="left", padx=(2, 0))
+        hold = ctk.CTkFrame(f, fg_color="transparent")       # keep the mouse still after the click
+        ctk.CTkLabel(hold, text="then wait", font=("Arial", 12)).pack(side="left", padx=(6, 2))
+        d.setdefault("after_click", 0.1)
+        self._pick(hold, d, "after_click", ["0", "0.05", "0.1", "0.15", "0.2", "0.3", "0.5"], 60,
+                   on_save=on_save).pack(side="left")
+        ctk.CTkLabel(hold, text="s", font=("Arial", 12)).pack(side="left", padx=(2, 0))
 
         def show():
-            delay.pack(side="left", padx=(2, 0)) if d.get("click") and with_delay else delay.pack_forget()
+            for w in (btn, delay, hold):
+                w.pack_forget()
+            if d.get("click"):                           # in order: [M2|M1] after [s] then wait [s]
+                btn.pack(side="left", padx=(0, 4))
+                if with_delay:
+                    delay.pack(side="left", padx=(2, 0))
+                hold.pack(side="left")
 
         def flip():
             self._set(d, "click", bool(box.get()))
@@ -296,13 +311,182 @@ class SmartMacroGUI:
                       command=self.snapshot_all).pack(side="left", padx=(10, 3))
         ctk.CTkButton(row, text="Show", width=56, **BTN, command=self.flash_slots).pack(side="right", padx=3)
         ctk.CTkButton(row, text="Test", width=56, **BTN, command=self.test_rotation).pack(side="right", padx=3)
-        ctk.CTkButton(row, text="🪄 Auto-tune", width=100, height=28, **BLUE,
+        ctk.CTkButton(row, text="🪄 Find hotbar", width=110, height=28, **BLUE,
                       command=self.auto_tune).pack(side="right", padx=3)
 
         self.build_aim_panel(p)
+        self.build_meditation(p)
         self.cards_box = ctk.CTkFrame(p, fg_color="transparent")
         self.cards_box.pack(fill="x", pady=(4, 0))
         self.build_cards()
+
+    # ---------- meditation ----------
+    def build_meditation(self, parent):
+        """Optional: when the mana bar is empty, put weapon/grimoire away, meditate until full, take them out.
+        The page only shows a one-line card; all settings are in their own pop-up (⚙ Settings)."""
+        d = self.logic.med()
+        card = ctk.CTkFrame(parent, **CARD); card.pack(fill="x", pady=4)
+        head = ctk.CTkFrame(card, fg_color="transparent"); head.pack(fill="x", padx=10, pady=8)
+        ctk.CTkLabel(head, text="🧘 Meditation", font=("Arial", 13, "bold")).pack(side="left")
+        sw = ctk.CTkSwitch(head, text="", width=40, command=lambda: self._set(d, "enabled", bool(sw.get())))
+        if d["enabled"]:
+            sw.select()
+        sw.pack(side="left", padx=8)
+        ctk.CTkButton(head, text="⚙ Settings", width=96, height=28, **BLUE,
+                      command=self.open_meditation).pack(side="right")
+        self._med_summary = ctk.CTkLabel(head, text="", font=("Arial", 12), text_color="#adb5bd")
+        self._med_summary.pack(side="left", padx=4)
+        self._update_med_summary()
+        self._med_card = card
+
+    def _update_med_summary(self):
+        lbl = getattr(self, "_med_summary", None)
+        if lbl is None or not lbl.winfo_exists():
+            return
+        d = self.logic.med()
+        if not d["region"][2] > d["region"][0]:
+            lbl.configure(text="refills mana when it runs out — set the mana bar in ⚙ Settings", text_color="#ffc107")
+            return
+        out = {"weapon": "Weapon", "grimoire": "Grimoire", "both": "Weapon + Grimoire"}.get(d["out"], "Weapon")
+        lbl.configure(text=f"at {float(d.get('below', 5)):g}% mana · {out} out · keys "
+                           f"{'/'.join(k.upper() for k, _ in self.logic.meditation_steps()['away'])} + {d['key'].upper()}",
+                      text_color="#adb5bd")
+
+    def open_meditation(self):
+        """The Meditation settings in their own window."""
+        old = getattr(self, "_med_win", None)
+        if old is not None and old.winfo_exists():
+            old.lift(); old.focus_force()
+            return
+        d = self.logic.med()
+        win = ctk.CTkToplevel(self.root)
+        win.title("Meditation settings")
+        win.geometry("700x330")
+        win.resizable(False, False)
+        win.transient(self.root)
+        win.after(150, win.lift)
+        self._med_win = win
+        win.protocol("WM_DELETE_WINDOW", lambda: (self._update_med_summary(), win.destroy()))
+        body = ctk.CTkFrame(win, fg_color="transparent"); body.pack(fill="both", expand=True, padx=12, pady=10)
+
+        def section(title):
+            ctk.CTkLabel(body, text=title, font=("Arial", 13, "bold")).pack(anchor="w", pady=(6, 2))
+
+        # -- when
+        section("When to meditate")
+        row = ctk.CTkFrame(body, fg_color="transparent"); row.pack(fill="x", pady=2)
+        has = d["region"][2] > d["region"][0]
+
+        def pick_bar():
+            win.withdraw()
+
+            def after():
+                self._update_med_summary()
+                win.deiconify(); win.lift()
+                self._fill_med_bar_btn(bar_btn)
+            self.pick_region(d, "region", after=after)
+        bar_btn = ctk.CTkButton(row, text="", width=120, height=28, command=pick_bar)
+        bar_btn.pack(side="left")
+        self._fill_med_bar_btn(bar_btn)
+        ctk.CTkLabel(row, text="Meditate at", font=("Arial", 12)).pack(side="left", padx=(12, 2))
+        self._pick(row, d, "below", ["5", "10", "15", "20", "25", "30", "40", "50"], 58,
+                   on_save=self._update_med_summary).pack(side="left")
+        ctk.CTkLabel(row, text="% mana or less", font=("Arial", 12)).pack(side="left", padx=(2, 0))
+        ctk.CTkButton(row, text="Test", width=56, **BTN, command=self.test_mana).pack(side="right")
+        self.mana_lbl = ctk.CTkLabel(body, text="", font=("Arial", 12))
+        self.mana_lbl.pack(anchor="w")
+
+        # -- what you fight with + keys
+        section("What you fight with")
+        row = ctk.CTkFrame(body, fg_color="transparent"); row.pack(fill="x", pady=2)
+        names = {"weapon": "Weapon", "grimoire": "Grimoire", "both": "Both"}
+        seg = ctk.CTkSegmentedButton(row, values=list(names.values()), height=26, font=("Arial", 12),
+                                     command=lambda v: (self._set(d, "out", {n: k for k, n in names.items()}[v]),
+                                                        self._med_steps_ui(), self._update_med_summary()))
+        seg.set(names.get(d["out"], "Weapon"))
+        seg.pack(side="left")
+        for label, key in (("weapon", "weapon_key"), ("grimoire", "grimoire_key"), ("meditate", "key")):
+            ctk.CTkLabel(row, text=label, font=("Arial", 12)).pack(side="left", padx=(12, 2))
+            self._entry(row, d, key, 34, lambda v: v.lower(),
+                        on_save=lambda: (self._med_steps_ui(), self._update_med_summary())).pack(side="left")
+
+        # -- timing
+        section("Timing")
+        row = ctk.CTkFrame(body, fg_color="transparent"); row.pack(fill="x", pady=2)
+        ctk.CTkLabel(row, text="All waits", font=("Arial", 12, "bold")).pack(side="left", padx=(0, 4))
+        self._pick(row, d, "key_delay", ["0.5", "0.75", "1", "1.5", "2", "3"], 60,
+                   on_save=lambda: (d.__setitem__("waits", {}), self.save(), self._med_steps_ui())).pack(side="left")
+        ctk.CTkLabel(row, text="s (sets every wait below)", font=("Arial", 12), text_color="#adb5bd").pack(side="left", padx=4)
+        ctk.CTkLabel(row, text="Give up after", font=("Arial", 12)).pack(side="left", padx=(16, 2))
+        self._pick(row, d, "max_wait", ["30", "60", "90", "120", "180", "300"], 60, float).pack(side="left")
+        ctk.CTkLabel(row, text="s", font=("Arial", 12)).pack(side="left", padx=(2, 0))
+        self._med_steps = ctk.CTkFrame(body, fg_color="transparent"); self._med_steps.pack(fill="x", pady=(4, 0))
+        self._med_steps_ui()
+
+    def _fill_med_bar_btn(self, btn):
+        d = self.logic.med()
+        has = d["region"][2] > d["region"][0]
+        btn.configure(text="✔ Mana bar" if has else "🔲 Mana bar",
+                      fg_color="#198754" if has else "#0d6efd", hover_color="#157347" if has else "#0b5ed7")
+
+    def _med_steps_ui(self):
+        """The sequence with a wait box after every key, e.g.  [1] → R [1] → G [1] → N … full … N [1] → G [1] → R [1]."""
+        box = getattr(self, "_med_steps", None)
+        if box is None or not box.winfo_exists():
+            return
+        for w in box.winfo_children():
+            w.destroy()
+        d = self.logic.med()
+        waits = d.setdefault("waits", {})
+        steps = self.logic.meditation_steps()
+        opts = ["0", "0.25", "0.5", "0.75", "1", "1.5", "2", "3"]
+
+        def wait_box(parent, name):
+            if name not in waits:
+                waits[name] = float(d.get("key_delay", 1.0))
+            self._pick(parent, waits, name, opts, 52).pack(side="left")
+            ctk.CTkLabel(parent, text="s", font=("Arial", 11), text_color="#adb5bd").pack(side="left", padx=(1, 2))
+
+        def key(parent, k, color="#9ec5fe"):
+            ctk.CTkLabel(parent, text=f"→ {k.upper()}", font=("Arial", 12, "bold"), text_color=color).pack(side="left", padx=(2, 6))
+
+        r1 = ctk.CTkFrame(box, fg_color="transparent"); r1.pack(fill="x", pady=1)
+        ctk.CTkLabel(r1, text="Start:", width=70, anchor="w", font=("Arial", 12)).pack(side="left", padx=(3, 0))
+        wait_box(r1, "start")
+        for k, name in steps["away"]:
+            key(r1, k); wait_box(r1, name)
+        key(r1, d["key"], "#75b798"); wait_box(r1, "sit")
+        ctk.CTkLabel(r1, text="… until mana is full", font=("Arial", 12), text_color="#adb5bd").pack(side="left", padx=4)
+        r2 = ctk.CTkFrame(box, fg_color="transparent"); r2.pack(fill="x", pady=1)
+        ctk.CTkLabel(r2, text="When full:", width=70, anchor="w", font=("Arial", 12)).pack(side="left", padx=(3, 0))
+        key(r2, d["key"], "#75b798"); wait_box(r2, "stand")
+        for k, name in steps["back"]:
+            key(r2, k); wait_box(r2, name)
+
+    def _rebuild_meditation(self):
+        old = getattr(self, "_med_card", None)
+        if old is not None:
+            nxt = None
+            try:
+                kids = old.master.pack_slaves()
+                nxt = kids[kids.index(old) + 1] if old in kids and kids.index(old) + 1 < len(kids) else None
+            except Exception:
+                pass
+            old.destroy()
+            self.build_meditation(old.master)
+            if nxt is not None:
+                self._med_card.pack_configure(before=nxt)
+
+    def test_mana(self):
+        r = self.logic.mana_reading()
+        if r is None:
+            self.mana_lbl.configure(text="set the mana bar first", text_color="#ea868f")
+            return
+        fill, left, right = r
+        low = self.logic.mana_empty()
+        state = "FULL" if right else ("would meditate" if low else "in use")
+        self.mana_lbl.configure(text=f"mana {fill * 100:.0f}% · {state}",
+                                text_color="#75b798" if right else ("#ffc107" if low else "#ced4da"))
 
     # ---------- shared mouse aim ----------
     def build_aim_panel(self, parent):
@@ -312,7 +496,7 @@ class SmartMacroGUI:
         card = ctk.CTkFrame(parent, **CARD); card.pack(fill="x", pady=4)
         head = ctk.CTkFrame(card, fg_color="transparent"); head.pack(fill="x", padx=10, pady=(6, 0))
         ctk.CTkLabel(head, text="🎯 Mouse aim", font=("Arial", 13, "bold")).pack(side="left")
-        ctk.CTkLabel(head, text="optional — tick slots, then Pick spot. Order: move mouse → delay before → press → M1 (if ticked) → delay after.",
+        ctk.CTkLabel(head, text="optional — tick slots, then Pick spot. Order: move mouse → delay before → press → M2/M1 (if ticked) → delay after.",
                      font=("Arial", 12), text_color="#ced4da").pack(side="left", padx=8)
         row = ctk.CTkFrame(card, fg_color="transparent"); row.pack(fill="x", padx=8, pady=4)
         self.aim_chips_box = ctk.CTkFrame(row, fg_color="transparent", width=1, height=1)
@@ -475,7 +659,7 @@ class SmartMacroGUI:
         if int(m.get("repeat") or 1) > 1:
             parts.append(f"×{m['repeat']} every {float(m.get('repeat_delay', 0.15)):g}s")
         if m.get("click"):
-            parts.append(f"+ M1 after {float(m.get('m1_delay', 0.3)):g}s")
+            parts.append(f"+ {SmartMacroLogic.click_name(m)} after {float(m.get('m1_delay', 0.3)):g}s")
         if has_snapshot and float(m.get("ready_at") or 0):
             parts.append(f"ready at {float(m['ready_at']):g}")
         if m.get("mouse_mode", "none") != "none":
@@ -534,7 +718,7 @@ class SmartMacroGUI:
         self._pick(r1, m, "delay_before", delays, 64, on_save=refresh).pack(side="left")
         lab(r1, "⏱ Delay after (s)")
         self._pick(r1, m, "delay_after", delays, 64, on_save=refresh).pack(side="left")
-        ctk.CTkLabel(r1, text="mouse → before → key → M1 → after", font=("Arial", 11),
+        ctk.CTkLabel(r1, text="mouse move → before → key → click → after", font=("Arial", 11),
                      text_color="#ced4da").pack(side="left", padx=10)
         r2 = ctk.CTkFrame(box, fg_color="transparent"); r2.pack(fill="x", pady=(2, 0))
         lab(r2, "Repeat")
@@ -552,7 +736,9 @@ class SmartMacroGUI:
                    on_save=lambda: (fill_gap(), refresh())).pack(side="left")
         gap.pack(side="left")
         fill_gap()
-        self._m1_box(r2, m, on_save=refresh).pack(side="left", padx=(12, 0))
+        r3 = ctk.CTkFrame(box, fg_color="transparent"); r3.pack(fill="x", pady=(2, 0))   # the click after the key
+        ctk.CTkLabel(r3, text="", width=14).pack(side="left")
+        self._m1_box(r3, m, on_save=refresh).pack(side="left")
         if self.logic.has_template(slot):
             lab(r2, "Ready at")
             self._pick(r2, m, "ready_at", ["off", "0.5", "0.6", "0.7", "0.75", "0.8", "0.85", "0.9", "0.95"], 64,
@@ -617,36 +803,24 @@ class SmartMacroGUI:
         self.log(f"Would cast: {pick[1]['name'] or 'slot ' + str(pick[0])}" if pick else "Nothing ready.")
 
     def auto_tune(self):
-        """One button: find the hotbar in the Roblox window you click into (filled slots only),
-        snapshot it, then cast each move once (ready → cooldown) to learn its own 'Ready at'."""
+        """🪄 Find hotbar: find the hotbar in the Roblox window you click into and move the hotbar region onto
+        your FILLED slots. Nothing is cast and the snapshots aren't touched."""
         if self.logic.running:
-            self.log("Stop the macro first (F6), then Auto-tune.")
+            self.log("Stop the macro first (F6), then Find hotbar.")
             return
-        self.log("Auto-tune: click into the Roblox window you'll AFK in - starts in 3 s. It finds the hotbar, "
-                 "waits for each move to be ready, snapshots it and casts it once.")
+        self.log("Find hotbar: click into the Roblox window you'll AFK in - it looks in 3 s.")
 
         def run():
             time.sleep(3)
             if not self.logic._focused():
-                self.log("Auto-tune cancelled: Roblox wasn't the focused window.")
+                self.log("Find hotbar cancelled: Roblox wasn't the focused window.")
                 return
-            found = self.logic.auto_find_hotbar()
-            if not found:
-                # don't tune a region that may be wrong: that would overwrite good snapshots
-                self.log("Auto-tune stopped: couldn't find the hotbar in this Roblox window. "
-                         "Set it with ① 🔲 Hotbar region, then Auto-tune again.")
+            if not self.logic.auto_find_hotbar():
+                self.log("Couldn't find the hotbar in this Roblox window - set it with ① 🔲 Hotbar region.")
                 return
-            self.root.after(0, lambda: (self.build_cards(), self.flash_slots()))   # show where it found the slots
-            time.sleep(1.0)
-            time.sleep(0.5)
-            res = self.logic.auto_tune(alive=lambda: not self.logic.running)
-            ok = [s for s, (r, _) in res.items() if r == "ok"]
-            why = {"busy": "icon never stopped changing", "same": "nothing changed after its key (did it cast?)",
-                   "skip": "no key"}
-            bad = [f"slot {s}: {why.get(r, r)}" for s, (r, _) in res.items() if r != "ok"]
-            self.log(f"Auto-tune done: {len(ok)}/{len(res)} slot(s) tuned"
-                     + (f" ({'; '.join(bad)})" if bad else "") + ". Press Test to check.")
-            self.root.after(300, lambda: [self._refresh_snapshot(s) for s in res if s in self._cards])
+            self.root.after(0, lambda: (self.build_cards(), self.flash_slots()))   # show where it put the slots
+            self.log("Hotbar region moved onto your slots. If your skills changed, press ③ 📸 Snapshot all "
+                     "while they're all ready.")
         threading.Thread(target=run, daemon=True).start()
 
     def flash_slots(self):
@@ -720,7 +894,7 @@ class SmartMacroGUI:
         ctk.CTkButton(c, text="+ Step", width=70, **BTN, command=add_step).pack(anchor="w", padx=10, pady=6)
 
     def _step_row(self, box, combo, step):
-        """One step, read as a sentence: Press [key] [N times], then wait [s] (or 'then M1 after [s]').  ⚙ = M1 / mouse."""
+        """One step, read as a sentence: Press [key] [N times], then wait [s] (or 'then M2 after [s]').  ⚙ = click / mouse."""
         s = ctk.CTkFrame(box, fg_color="#1a1d20", corner_radius=6); s.pack(fill="x", padx=10, pady=2)
         line = ctk.CTkFrame(s, fg_color="transparent"); line.pack(fill="x")
         s.num = ctk.CTkLabel(line, text=f"Step {index_obj(combo['steps'], step) + 1}", width=52, font=("Arial", 12, "bold"))
@@ -733,7 +907,8 @@ class SmartMacroGUI:
         def wait_text(n=None):
             n = int(step.get("repeat") or 1) if n is None else n
             if step.get("click"):
-                return "M1 after each" if n > 1 else "then M1 after"   # the wait box = wait before the M1
+                c = SmartMacroLogic.click_name(step)
+                return f"{c} after each" if n > 1 else f"then {c} after"   # the wait box = wait before the click
             return "wait after each" if n > 1 else "then wait"
 
         def set_times(v):
@@ -888,7 +1063,7 @@ class SmartMacroGUI:
         r2 = ctk.CTkFrame(c, fg_color="transparent"); r2.pack(fill="x", padx=8, pady=(0, 6))
         ctk.CTkLabel(r2, text="Rotation match strictness", font=("Arial", 12, "bold")).pack(side="left", padx=4)
         self._pick(r2, self.cfg["rotation"], "threshold", ["0.75", "0.8", "0.85", "0.9", "0.95"], 70).pack(side="left")
-        ctk.CTkLabel(r2, text="used by slots without their own 'Ready at' (Auto-tune sets those)", font=("Arial", 12),
+        ctk.CTkLabel(r2, text="used by slots without their own 'Ready at'", font=("Arial", 12),
                      text_color="#ced4da").pack(side="left", padx=6)
         ctk.CTkLabel(c, text="The hotkey starts every feature whose 'Enabled' switch is on. Rotation and Skill Combo "
                              "can't both be on — enabling one turns the other off. Items works with either.",
@@ -951,7 +1126,7 @@ class SmartMacroGUI:
             return
         self.logic.new_loadout(name)
         self._loadout_switched()
-        self.log(f"Loadout '{name}' created (empty) — press 🪄 Auto-tune or set the hotbar and snapshot for this build.")
+        self.log(f"Loadout '{name}' created (empty) — press 🪄 Find hotbar, then ③ 📸 Snapshot all.")
 
     def rename_loadout(self):
         old = self.logic.active_loadout()

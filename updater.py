@@ -104,7 +104,7 @@ class SpatialUpdater:
                 # The user's own saved data: never deleted or overwritten by an update.
                 # (recorded routes, Skill Macro snapshots, captured dialogue / minigame / OK pictures)
                 USER_DATA = {"routes", "routes_library", "smart_templates", "library_templates",
-                             "ok_template.png", "event_roles_import.json"}
+                             "ok_template.png", "event_roles_import.json", "sounds"}
 
                 incoming_names = set(os.listdir(extracted_folder))
 

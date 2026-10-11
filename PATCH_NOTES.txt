@@ -1,3 +1,18 @@
+WHAT'S NEW IN V6.2.5
+=====================
+- Skill Macro: 'Auto-tune' is now 🪄 Find hotbar - it only moves the hotbar region onto your filled slots (no more casting your skills or retaking snapshots)
+- Skill Macro: new optional 🧘 Meditation - when the mana bar runs out it puts your weapon/grimoire away, meditates until mana is full, then takes them back out ('Meditate at' sets how low mana may get first, default 5%; every key has its own adjustable wait so animations finish - 'All waits' sets them all, default 1 s; 'Give up after' is adjustable)
+- fixed route recordings losing quick repeated key presses (e.g. 10 jumps playing back as 2); every tap is now held long enough for Roblox to see it
+- removed lag compensation (Smart Movement, Motion slider, Test Sensor) from Mining and routes: walks now follow the recorded timing exactly
+- Event Notifier: /clear can now be typed in the Global tab and then go back to Here - set each window's tabs with 'Set Here / Global tabs' (click Here, then Global); you can also pick /clear or /cls
+- fixed Library's 'hide chat' click sometimes being undone by a clover click - it now finishes first before anything else clicks
+- Skill Macro: the click after a key can now be M2 or M1 (M2 is the default) in Rotation and Skill Combo; Items still use M1
+- Skill Macro: new 'then wait' after the M2/M1 click (default 0.1 s, adjustable) so a skill casts where it was aimed instead of at the next move's spot
+- cleaner Event Notifier page: Discord, Checking and Clear chat sections, and each window's buttons are clearly labelled
+- Library now just stops (instead of closing the app) when every selected move is trained, with an optional sound (Main tab)
+- Event Notifier: optional sound when an event is posted (Checking the chat section)
+- sounds: pick your own sound file (mp3, wav, m4a, mp4...) with 🎵 Choose sound… for both alert sounds
+
 WHAT'S NEW IN V6.2.4
 =====================
 - fixed changing the Discord webhook (and other Events settings) not taking effect after a macro had been stopped with F6

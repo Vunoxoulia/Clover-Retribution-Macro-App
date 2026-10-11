@@ -2,10 +2,10 @@ import time
 import webbrowser
 import threading
 import customtkinter as ctk
-from overlay import Overlay
+from overlay import Overlay, PointSelector
 from logic_events import WATCHER, roblox_windows
 from logic_base import BaseLogic
-from ui_style import big_toggle, style_toggle, save_while_typing
+from ui_style import big_toggle, style_toggle, save_while_typing, sound_picker
 
 CARD = dict(fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
 BTN = dict(height=28, font=("Arial", 12), fg_color="#495057", hover_color="#343a40")
@@ -79,33 +79,31 @@ class EventsPage:
         ctk.CTkButton(head, text="▶ Video", width=64, height=24, font=("Arial", 11, "bold"), fg_color="#343a40",
                       hover_color="#495057", text_color="#ff6b6b",
                       command=lambda: webbrowser.open("https://youtu.be/Ye4gGTp7fzE")).pack(side="right", padx=(0, 6))
-        ctk.CTkLabel(top, text="Reads the chat of every Roblox window. When an [Event] from your list shows up, it posts "
-                               "\"Event - World - PS code @people\" to Discord. Keeps running while you use the other macros.",
+        ctk.CTkLabel(top, text="Posts the [Event]s from every Roblox window's chat to Discord. Keeps running in every macro.",
                      font=("Arial", 12), text_color="#ced4da", wraplength=420, justify="left").pack(anchor="w", padx=10)
         self.toggle = big_toggle(top, self.flip)
         self.toggle.pack(fill="x", padx=10, pady=(8, 4))
         self._style_toggle()
 
-        row = ctk.CTkFrame(top, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(6, 2))
-        ctk.CTkLabel(row, text="Webhook", width=80, anchor="w", font=("Arial", 12, "bold")).pack(side="left")
+        ctk.CTkLabel(top, text="", height=2).pack()
+
+        # ---- Discord ----
+        dc = self._section(p, "💬 Discord")
+        row = ctk.CTkFrame(dc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(2, 2))
+        ctk.CTkLabel(row, text="Webhook", width=70, anchor="w", font=("Arial", 12, "bold")).pack(side="left")
         ctk.CTkButton(row, text="Send test", width=80, command=self.send_test, **BTN).pack(side="right", padx=(6, 0))
         self._entry(row, cfg, "webhook", 200, "https://discord.com/api/webhooks/...", show="•").pack(side="left", fill="x", expand=True)
-        row = ctk.CTkFrame(top, fg_color="transparent"); row.pack(fill="x", padx=8, pady=2)
-        ctk.CTkLabel(row, text="Ping", width=80, anchor="w", font=("Arial", 12, "bold")).pack(side="left")
+        row = ctk.CTkFrame(dc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=2)
+        ctk.CTkLabel(row, text="Ping", width=70, anchor="w", font=("Arial", 12, "bold")).pack(side="left")
         self._people_button(row, cfg, "mention", "every alert", wide=True).pack(side="left", fill="x", expand=True)
-        self.mention_hint = ctk.CTkLabel(top, text="Who gets pinged on every alert. An event's own 👥 replaces this.",
+        self.mention_hint = ctk.CTkLabel(dc, text="",
                                          font=("Arial", 12), text_color="#ced4da", wraplength=340, justify="left",
                                          anchor="w")
-        self.mention_hint.pack(fill="x", padx=(98, 8))
+        self.mention_hint.pack(fill="x", padx=(86, 8), pady=(0, 4))
 
-        row = ctk.CTkFrame(top, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(6, 2))
-        ctk.CTkButton(row, text="Test read", width=80, command=self.test_read, **BTN).pack(side="left")
-        self.win_lbl = ctk.CTkLabel(row, text="", font=("Arial", 12), text_color="#ced4da")
-        self.win_lbl.pack(side="left", padx=8)
-        ctk.CTkButton(row, text="↻ Refresh", width=80, command=self.build_windows, **BTN).pack(side="left")
-        self._refresh_area()
-
-        row = ctk.CTkFrame(top, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(4, 2))
+        # ---- Checking ----
+        ck = self._section(p, "⏱ Checking the chat")
+        row = ctk.CTkFrame(ck, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(2, 2))
         ctk.CTkLabel(row, text="Check every", font=("Arial", 12)).pack(side="left")
         iv_opts = {"15 s": 15, "30 s": 30, "1 min": 60, "2 min": 120, "5 min": 300}
         iv = ctk.CTkOptionMenu(row, values=list(iv_opts), width=78, height=26,
@@ -116,44 +114,73 @@ class EventsPage:
         cd = ctk.CTkOptionMenu(row, values=["1 min", "2 min", "5 min", "10 min"], width=84, height=26,
                                command=lambda v: (self.cfg.__setitem__("cooldown", int(v.split()[0]) * 60), self._save()))
         cd.set(f"{int(cfg.get('cooldown', 120)) // 60} min")
-        cd.pack(side="left", padx=(4, 12))
-        row = ctk.CTkFrame(top, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(0, 8))
-        only = ctk.CTkCheckBox(row, text="[Event] lines only", font=("Arial", 12),
+        cd.pack(side="left", padx=(4, 0))
+        only = ctk.CTkCheckBox(ck, text="Only [Event] lines (ignore player chat)", font=("Arial", 12),
                                command=lambda: (self.cfg.__setitem__("event_lines_only", bool(only.get())), self._save()))
         if cfg.get("event_lines_only", True):
             only.select()
-        only.pack(side="left", padx=(0, 6))
-        clr = ctk.CTkCheckBox(row, text="/clear chat after an alert", font=("Arial", 12),
-                              command=lambda: (self.cfg.__setitem__("clear_chat", bool(clr.get())), self._save()))
-        if cfg.get("clear_chat"):
-            clr.select()
-        clr.pack(side="left", padx=6)
-        row = ctk.CTkFrame(top, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(0, 8))
-        hov = ctk.CTkCheckBox(row, text="Move the mouse onto the chat before reading (chat fades out otherwise)",
+        only.pack(anchor="w", padx=10, pady=(6, 2))
+        hov = ctk.CTkCheckBox(ck, text="Move the mouse onto the chat before reading (it fades out otherwise)",
                               font=("Arial", 12),
                               command=lambda: (self.cfg.__setitem__("hover_chat", bool(hov.get())), self._save()))
         if cfg.get("hover_chat", True):
             hov.select()
-        hov.pack(side="left")
-        ctk.CTkLabel(top, text="While a macro runs, 'Check every' is paused and it checks at a safe moment instead: "
-                               "Library after each minigame · Mining after each full lap · Fishing after each catch "
-                               "(before recasting). Skill Macro / Event Notifier alone use the timer.",
-                     font=("Arial", 12), text_color="#ced4da", justify="left", wraplength=420
-                     ).pack(anchor="w", padx=10, pady=(0, 8))
+        hov.pack(anchor="w", padx=10, pady=2)
+        sound_row = ctk.CTkFrame(ck, fg_color="transparent")
+
+        def flip_sound():
+            self.cfg["sound_on_alert"] = bool(snd.get()); self._save()
+            sound_row.pack(anchor="w", padx=38, pady=(0, 2), after=snd) if snd.get() else sound_row.pack_forget()
+        snd = ctk.CTkCheckBox(ck, text="🔊 Play a sound when an event is posted", font=("Arial", 12), command=flip_sound)
+        if cfg.get("sound_on_alert", False):
+            snd.select()
+        snd.pack(anchor="w", padx=10, pady=2)
+        sound_picker(sound_row, "event").pack(anchor="w")
+        if snd.get():
+            sound_row.pack(anchor="w", padx=38, pady=(0, 2), after=snd)
+        row = ctk.CTkFrame(ck, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(6, 2))
+        ctk.CTkButton(row, text="Test read", width=80, command=self.test_read, **BTN).pack(side="left")
+        self.win_lbl = ctk.CTkLabel(row, text="", font=("Arial", 12), text_color="#ced4da")
+        self.win_lbl.pack(side="left", padx=8)
+        self._refresh_area()
+        ctk.CTkLabel(ck, text="", height=4).pack()
+
+        # ---- Clear chat ----
+        cc = self._section(p, "🧹 Clear the chat after an alert")
+        row = ctk.CTkFrame(cc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(2, 2))
+        clr = ctk.CTkCheckBox(row, text="Clear it, using", font=("Arial", 12),
+                              command=lambda: (self.cfg.__setitem__("clear_chat", bool(clr.get())), self._save(),
+                                               self._show_clear_options()))
+        if cfg.get("clear_chat"):
+            clr.select()
+        clr.pack(side="left")
+        cmd = ctk.CTkOptionMenu(row, values=["/clear", "/cls"], width=80, height=26,
+                                command=lambda v: (self.cfg.__setitem__("clear_cmd", v), self._save()))
+        cmd.set(cfg.get("clear_cmd", "/clear"))
+        cmd.pack(side="left", padx=6)
+        # only shown while clearing is on
+        self._clear_opts = ctk.CTkFrame(cc, fg_color="transparent")
+        glb = ctk.CTkCheckBox(self._clear_opts, text="Type it in the Global tab, then go back to Here", font=("Arial", 12),
+                              command=lambda: (self.cfg.__setitem__("clear_in_global", bool(glb.get())), self._save(),
+                                               self._show_clear_options()))
+        if cfg.get("clear_in_global", True):
+            glb.select()
+        glb.pack(anchor="w", padx=2, pady=(4, 2))
+        self._tabs_hint = ctk.CTkLabel(self._clear_opts, text="Set each window's tabs below (Here / Global tabs).",
+                                       font=("Arial", 12), text_color="#adb5bd")
+        ctk.CTkLabel(cc, text="", height=4).pack(side="bottom")
 
         # ---- one PS code per Roblox window ----
         wc = ctk.CTkFrame(p, **CARD); wc.pack(fill="x", pady=4)
         wh = ctk.CTkFrame(wc, fg_color="transparent"); wh.pack(fill="x", padx=10, pady=(8, 0))
-        ctk.CTkLabel(wh, text="🖥 Roblox windows → PS code", font=("Arial", 13, "bold")).pack(side="left")
+        ctk.CTkLabel(wh, text="🖥 Roblox windows", font=("Arial", 13, "bold")).pack(side="left")
         ctk.CTkButton(wh, text="↻ Refresh", width=80, command=self.build_windows, **BTN).pack(side="right")
         ctk.CTkButton(wh, text="👁 Show all", width=90, command=self.show_all_windows,
                       **{**BTN, **BLUE}).pack(side="right", padx=6)
-        ctk.CTkLabel(wc, text="Windows are numbered by where they sit on screen (top-left first). Press 👁 to see which "
-                              "one is which (yellow box = the chat it reads). 🔲 Chat = drag that window's chat box "
-                              "(a window without one isn't read).",
+        ctk.CTkLabel(wc, text="Numbered top-left first. 👁 Show = which window is which.",
                      font=("Arial", 12), text_color="#ced4da", wraplength=420, justify="left").pack(anchor="w", padx=10)
         self.win_box = ctk.CTkFrame(wc, fg_color="transparent"); self.win_box.pack(fill="x", padx=8, pady=(4, 8))
-        self.build_windows()
+        self._show_clear_options()                       # also builds the window list
 
         self.status = ctk.CTkLabel(p, text="", font=("Arial", 12, "bold"), text_color="#75b798", anchor="w",
                                    wraplength=420, justify="left")
@@ -162,12 +189,31 @@ class EventsPage:
         lh = ctk.CTkFrame(p, fg_color="transparent"); lh.pack(fill="x", padx=4, pady=(6, 2))
         ctk.CTkLabel(lh, text="Events", font=("Arial", 14, "bold")).pack(side="left", padx=4)
         ctk.CTkButton(lh, text="+ Add event", width=100, command=self.add_event, **{**BTN, **BLUE}).pack(side="right")
-        ctk.CTkLabel(p, text="✓ = notify   ·   keyword = any words from its chat message   ·   "
-                             "@user = ping for just this event (replaces the main @user)   ·   role ID = role to ping for this event", font=("Arial", 12), text_color="#ced4da",
-                     wraplength=420, justify="left").pack(anchor="w", padx=8)
+        ctk.CTkLabel(p, text="on  ·  name  ·  words from its chat message  ·  👥 who to ping  ·  role ID",
+                     font=("Arial", 12), text_color="#adb5bd").pack(anchor="w", padx=8)
         self.list_box = ctk.CTkFrame(p, fg_color="transparent"); self.list_box.pack(fill="x")
         for ev in cfg["events"]:
             self._event_row(ev)
+
+    def _show_clear_options(self):
+        """Global-tab option + tab buttons only make sense while 'Clear it' is ticked."""
+        on = bool(self.cfg.get("clear_chat"))
+        if on:
+            self._clear_opts.pack(fill="x", padx=8)
+        else:
+            self._clear_opts.pack_forget()
+        if on and self.cfg.get("clear_in_global", True):
+            self._tabs_hint.pack(anchor="w", padx=28, pady=(0, 4))
+        else:
+            self._tabs_hint.pack_forget()
+        if hasattr(self, "win_box"):
+            self.build_windows()
+
+    def _section(self, parent, title):
+        """One card with a bold title: Discord / Checking / Clear chat."""
+        card = ctk.CTkFrame(parent, **CARD); card.pack(fill="x", pady=4)
+        ctk.CTkLabel(card, text=title, font=("Arial", 13, "bold")).pack(anchor="w", padx=10, pady=(8, 2))
+        return card
 
     def _event_row(self, ev):
         r = ctk.CTkFrame(self.list_box, **CARD); r.pack(fill="x", pady=2)
@@ -278,6 +324,30 @@ class EventsPage:
             self.build_windows()
         Overlay(done)
 
+    def pick_window_tabs(self, n):
+        """Click this window's chat 'Here' tab, then its 'Global' tab (used by /clear in Global).
+        Saved per window, relative to the window, so moving it doesn't break them."""
+        wins = roblox_windows()
+        if not 1 <= n <= len(wins):
+            self._log(f"Window {n} isn't open any more — press ↻ Refresh.")
+            return
+        w = wins[n - 1]
+        self.root.withdraw(); self.root.update(); time.sleep(0.2)
+        picked = {}
+
+        def got_global(x, y):
+            picked["global"] = [x - w.left, y - w.top]
+            self.root.deiconify()
+            self.cfg.setdefault("window_tabs", {})[str(n)] = picked
+            self._save()
+            self._log(f"Window {n}: Here and Global tabs saved - /clear will click Global, clear, then click Here.")
+            self.build_windows()
+
+        def got_here(x, y):
+            picked["here"] = [x - w.left, y - w.top]
+            type("PickGlobal", (PointSelector,), {"HINT": f"Window {n}: now click the GLOBAL tab"})(got_global)
+        type("PickHere", (PointSelector,), {"HINT": f"Window {n}: click the HERE tab of its chat"})(got_here)
+
     def _window_key(self):
         try:
             return tuple(w.getHandle() for w in roblox_windows())
@@ -318,13 +388,22 @@ class EventsPage:
             seg.pack(side="left")
             ctk.CTkButton(r, text="👁 Show", width=70, command=lambda win=w, n=i: self.show_window(win, n),
                           **BTN).pack(side="right", padx=(6, 0))
-            own = str(i) in self.cfg.get("window_chat", {})
-            ctk.CTkButton(r, text="🔲 Chat ✔" if own else "🔲 Chat", width=78, command=lambda n=i: self.pick_window_chat(n),
-                          **{**BTN, **({"fg_color": "#198754", "hover_color": "#157347"} if own else BLUE)}
-                          ).pack(side="right", padx=(6, 0))
-            r2 = ctk.CTkFrame(card, fg_color="transparent"); r2.pack(fill="x", padx=6, pady=(0, 6))
+            r2 = ctk.CTkFrame(card, fg_color="transparent"); r2.pack(fill="x", padx=6, pady=(0, 2))
             ctk.CTkLabel(r2, text="PS code", width=72, anchor="w", font=("Arial", 12)).pack(side="left")
             self._entry(r2, ps, str(i), 140, f"PS code for window {i}").pack(side="left", fill="x", expand=True)
+            r3 = ctk.CTkFrame(card, fg_color="transparent"); r3.pack(fill="x", padx=6, pady=(2, 6))
+            ctk.CTkLabel(r3, text="", width=72).pack(side="left")
+            green = {"fg_color": "#198754", "hover_color": "#157347"}
+            own = str(i) in self.cfg.get("window_chat", {})
+            ctk.CTkButton(r3, text="✔ Chat box" if own else "🔲 Drag chat box", width=130,
+                          command=lambda n=i: self.pick_window_chat(n),
+                          **{**BTN, **(green if own else BLUE)}).pack(side="left")
+            if self.cfg.get("clear_chat") and self.cfg.get("clear_in_global", True):   # only used by /clear in Global
+                tabs = self.cfg.get("window_tabs", {}).get(str(i), {})
+                has_tabs = "here" in tabs and "global" in tabs
+                ctk.CTkButton(r3, text="✔ Here / Global tabs" if has_tabs else "Set Here / Global tabs", width=160,
+                              command=lambda n=i: self.pick_window_tabs(n),
+                              **{**BTN, **(green if has_tabs else {})}).pack(side="left", padx=6)
         if hasattr(self, "win_lbl"):
             self._refresh_area()
 

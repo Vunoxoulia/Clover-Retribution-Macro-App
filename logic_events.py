@@ -34,6 +34,9 @@ DEFAULT_CFG = {
     "cooldown": 120,           # seconds before the same event can be posted again
     "event_lines_only": True,  # ignore player chat: only lines that start with [Event]
     "clear_chat": False,       # type /clear after an alert
+    "clear_cmd": "/clear",     # or "/cls"
+    "sound_on_alert": False,   # play a Windows sound when an event is posted (optional, off by default)
+    "clear_in_global": True,   # /clear doesn't always work in 'Here': click Global, clear, click Here again
     "hover_chat": True,        # move the mouse onto the chat before reading (it fades out otherwise)
     "events": [{"enabled": True, "name": n, "keyword": k, "mention": ""} for n, k in DEFAULT_EVENTS],
 }
@@ -463,16 +466,56 @@ class EventWatcher:
             time.sleep(0.05)
         return False
 
+    def find_chat_tabs(self, w):
+        """Where the chat's 'Here' and 'Global' tabs are in this window: the spots picked with 📍 Tabs on the
+        Events page, or (not picked yet) read with OCR just above the window's chat box.
+        Returns {"here": (x, y), "global": (x, y)} in screen pixels (missing ones left out)."""
+        key = str(self.window_number(w))
+        saved = self.cfg.setdefault("window_tabs", {}).get(key)
+        if saved and "here" in saved and "global" in saved:
+            return {k: (w.left + v[0], w.top + v[1]) for k, v in saved.items()}
+        own = self.cfg.get("window_chat", {}).get(key)
+        if own:
+            x1, y1, x2, y2 = own
+            area = [w.left + max(0, x1 - 40), w.top + max(0, y1 - 160), w.left + x2 + 40, w.top + y1 + 90]
+        else:                                            # no chat box set: chat sits in the top-left
+            area = [w.left, w.top, w.left + w.width // 2, w.top + w.height // 2]
+        cx, cy = (area[0] + area[2]) // 2, (area[1] + area[3]) // 2
+        RobloxInputDriver.move_to(cx, cy)                # hovering brings the faded chat back
+        time.sleep(0.05)
+        RobloxInputDriver.move_to(cx + 3, cy + 3)
+        time.sleep(0.6)
+        found = {}
+        for box, text, conf in self.utils.get_text_from_region(area):
+            t = compact(text)
+            name = "here" if t == "here" or t.endswith("here") and len(t) <= 6 else \
+                   "global" if "global" in t and len(t) <= 9 else None
+            if name and conf > 0.4 and name not in found:
+                bx = sum(p[0] for p in box) / len(box)
+                by = sum(p[1] for p in box) / len(box)
+                found[name] = (int(area[0] + bx), int(area[1] + by))
+        return found                                     # OCR is only the fallback; picked tabs are what's saved
+
     def clear_chat(self, w):
-        """Focus this Roblox window, type /clear in its chat, then give focus back to whatever had it."""
+        """Focus this Roblox window and type /clear (or /cls) in its chat, then give focus back.
+        'In Global': /clear doesn't always work in the 'Here' tab, so click Global → clear → click Here again."""
         import ctypes
         try:
             prev = ctypes.windll.user32.GetForegroundWindow()
-            with RobloxInputDriver._lock:
+            cmd = self.cfg.get("clear_cmd", "/clear") or "/clear"
+            with RobloxInputDriver._lock:                # nothing else may click or type until this is done
                 if not self.focus_window(w.getHandle()):
                     self.log(f"/clear skipped for window {self.window_number(w)}: Windows wouldn't switch to it.")
                     return
                 time.sleep(0.3)                          # let Roblox take the keyboard
+                tabs = {}
+                if self.cfg.get("clear_in_global", True):
+                    tabs = self.find_chat_tabs(w)
+                    if "global" in tabs:
+                        RobloxInputDriver.click_at(*tabs["global"], duration=0.05)
+                        time.sleep(0.35)
+                    else:
+                        self.log(f"Window {self.window_number(w)}: couldn't find the Global tab - clearing in the current tab.")
                 self._type_char("/")                     # opens the chat box (Shift+: on AZERTY)
                 time.sleep(0.3)
                 # Sometimes that opening "/" also lands in the box (-> "//clear"), so empty it first
@@ -480,13 +523,16 @@ class EventWatcher:
                 time.sleep(0.05)
                 self._tap("backspace")
                 time.sleep(0.1)
-                for ch in "/clear":
+                for ch in cmd:
                     self._type_char(ch)                  # layout-aware, so it's "/clear" on AZERTY too
                     time.sleep(0.03)
                 time.sleep(0.25)                         # let the text box catch up before sending
                 self._tap("enter", hold=0.1)             # a quick tap gets missed by Roblox's chat
                 time.sleep(0.3)
-                self.log(f"Chat cleared in window {self.window_number(w)}.")
+                if "global" in tabs and "here" in tabs:
+                    RobloxInputDriver.click_at(*tabs["here"], duration=0.05)   # back to 'Here'
+                    time.sleep(0.25)
+                self.log(f"Chat cleared ({cmd}{' in Global' if 'global' in tabs else ''}) in window {self.window_number(w)}.")
             if prev and prev != w.getHandle():
                 self.focus_window(prev, timeout=0.5)     # hand focus back (best effort)
         except Exception as e:
@@ -552,6 +598,9 @@ class EventWatcher:
                 self.log(f"Posted: {msg}")
             elif post:
                 self.log(f"Detected {ev['name']} (not posted)")
+        if post and new and self.cfg.get("sound_on_alert", False):
+            from utils import play_sound
+            play_sound("event")                          # once per check, however many events were new
         if post and new and self.cfg.get("clear_chat"):
             for w in {id(w): w for _, w in new}.values():
                 self.clear_chat(w)

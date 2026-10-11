@@ -128,3 +128,5 @@ event_roles_import.json
 tundra_route.json
 tundra_home.png
 tundra_snapshots/
+# the user's own alert sounds
+sounds/

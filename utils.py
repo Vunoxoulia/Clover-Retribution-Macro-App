@@ -1,4 +1,5 @@
 import mss
+import os
 import numpy as np
 import cv2
 import keyboard
@@ -105,6 +106,55 @@ def game_key(key):
         if sc:
             return sc
     return key
+
+
+SOUNDS = {"done": "SystemAsterisk", "event": "SystemExclamation"}
+
+
+SOUND_TYPES = (".mp3", ".wav", ".wma", ".m4a", ".mp4", ".aac")
+
+
+def custom_sound(kind):
+    """The sound file the user picked for this kind ('event' / 'done'), or None (= Windows sound)."""
+    try:
+        from settings import SpatialSettings, get_base_path
+        rel = (SpatialSettings().get("sound_files") or {}).get(kind)
+        if rel:
+            path = rel if os.path.isabs(rel) else os.path.join(get_base_path(), rel)
+            if os.path.exists(path):
+                return path
+    except Exception:
+        pass
+    return None
+
+
+def _mci(cmd):
+    buf = ctypes.create_unicode_buffer(256)
+    return ctypes.windll.winmm.mciSendStringW(cmd, buf, 255, 0), buf.value
+
+
+def play_sound(kind="event"):
+    """Play the user's own sound file for this kind (mp3 / wav / m4a / mp4...) or, if none is set, a Windows
+    notification sound. Never blocks (done = macro finished, event = alert posted)."""
+    path = custom_sound(kind)
+    if path and IS_WINDOWS:
+        try:
+            alias = f"vv_{kind}"
+            _mci(f"close {alias}")                       # stop the previous one of the same kind
+            err, _ = _mci(f'open "{path}" type mpegvideo alias {alias}')
+            if err == 0:
+                _mci(f"play {alias}")
+                return
+        except Exception:
+            pass
+    try:
+        import winsound
+        winsound.PlaySound(SOUNDS.get(kind, "SystemDefault"), winsound.SND_ALIAS | winsound.SND_ASYNC)
+    except Exception:
+        try:
+            print("\a", end="", flush=True)              # not Windows: terminal bell
+        except Exception:
+            pass
 
 
 class RobloxInputDriver:

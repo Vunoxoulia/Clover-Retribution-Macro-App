@@ -12,6 +12,53 @@ BTN_BLUE = dict(height=30, font=("Arial", 12), fg_color=BLUE, hover_color=BLUE_H
 TITLE_FONT = ("Arial", 16, "bold")
 
 
+def sound_picker(parent, kind):
+    """🎵 Choose sound… / ▶ / Reset for one alert sound. The file is copied into the app's 'sounds' folder
+    so updates never delete it. kind = 'event' or 'done'."""
+    import os, shutil
+    from tkinter import filedialog
+    from settings import SpatialSettings, get_base_path
+    from utils import play_sound, custom_sound, SOUND_TYPES
+    st = SpatialSettings()
+    f = ctk.CTkFrame(parent, fg_color="transparent")
+    name = ctk.CTkLabel(f, text="", font=("Arial", 12), text_color=TEXT_DIM)
+
+    def show():
+        p = custom_sound(kind)
+        name.configure(text=os.path.basename(p) if p else "Windows sound")
+
+    def choose():
+        path = filedialog.askopenfilename(title="Pick a sound", parent=parent.winfo_toplevel(),
+                                          filetypes=[("Sound files", " ".join("*" + e for e in SOUND_TYPES)),
+                                                     ("All files", "*.*")])
+        if not path:
+            return
+        folder = os.path.join(get_base_path(), "sounds")
+        os.makedirs(folder, exist_ok=True)
+        dest = os.path.join(folder, f"{kind}_{os.path.basename(path)}")
+        try:
+            if os.path.abspath(path) != os.path.abspath(dest):
+                shutil.copy2(path, dest)
+        except Exception:
+            return
+        st.settings.setdefault("sound_files", {})[kind] = os.path.relpath(dest, get_base_path())
+        st.save()
+        show()
+        play_sound(kind)
+
+    def reset():
+        st.settings.setdefault("sound_files", {}).pop(kind, None)
+        st.save()
+        show()
+
+    ctk.CTkButton(f, text="🎵 Choose sound…", width=118, height=26, command=choose, **{k: v for k, v in BTN.items() if k != "height"}).pack(side="left")
+    ctk.CTkButton(f, text="▶", width=30, height=26, command=lambda: play_sound(kind), **{k: v for k, v in BTN.items() if k != "height"}).pack(side="left", padx=4)
+    ctk.CTkButton(f, text="Reset", width=50, height=26, command=reset, **{k: v for k, v in BTN.items() if k != "height"}).pack(side="left")
+    name.pack(side="left", padx=6)
+    show()
+    return f
+
+
 def save_while_typing(widget, save, delay=400):
     """Save a text box shortly after you stop typing, so you don't have to press Enter or click
     somewhere else first (closing the window right after typing used to lose the text)."""
