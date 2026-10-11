@@ -27,7 +27,8 @@ class LibraryLogic(RouteNav):
     ROUTES_DIRNAME = "routes_library"
     ACTIVE_ROUTE_KEY = "library_active_route"
     USE_ALIGNMENT = False      # normal 3rd-person camera: no snapshot walking
-    ROUTE_TARGET = "wisp"      # the recording's one E tap = arriving at the wisp
+    ROUTE_TARGET = "wisp"
+    E_MARKS_TARGET = False     # E is recorded like any key: the whole Ctrl+P → Ctrl+P walk is the way to the wisp
 
     def __init__(self, app):
         super().__init__(app)
@@ -183,6 +184,7 @@ class LibraryLogic(RouteNav):
             self.app.log("No recorded route to the wisp - using the old D/S/W walk. (Record one with Ctrl+P.)")
             self.perform_approach_movement()
             return
+        # New recordings: the whole walk is one piece ('return'). Old ones: the walk up to the first E.
         seg = route["segments"][0] if route["segments"] else route["return"]
         self.align_home()
         self.app.log(f"Walking to the wisp (route '{self.active_route()}')...")
@@ -492,8 +494,6 @@ class LibraryLogic(RouteNav):
         for attempt in range(1, 9):
             if not self.wait_for_roblox_focus():
                 return False
-            if attempt > 1 and not self.prompt_near_player():
-                self.confirm_arrival("wisp")      # nudge around to find the Interact prompt
             if attempt % 3 == 0:
                 self.utils.send_key('space')      # unstick / stand up
                 time.sleep(0.4)
@@ -628,7 +628,6 @@ class LibraryLogic(RouteNav):
                          + ("   (Nevermind is further down — the list scrolls)" if not any("never" in t.lower() for t in texts) else ""))
         else:
             self.app.log("No dialogue open.")
-        self.app.log(f"Interact prompt near character: {'yes' if self.prompt_near_player() else 'no'}")
         s = self.minigame_score()
         self.app.log("Minigame: " + ("no snapshot captured yet (Areas tab)" if s is None else
                      f"{'YES' if s >= float(self.app.settings.get('minigame_threshold', 0.8)) else 'no'} (match {s:.2f})"))
@@ -660,7 +659,7 @@ class LibraryLogic(RouteNav):
         self.running = True
         try:
             self.go_to_wisp()
-            self.app.log(f"Arrived. Interact prompt visible: {'yes' if self.prompt_near_player() else 'no'}")
+            self.app.log("Arrived at the end of the recorded path.")
         except Exception as e:
             self.app.log(f"Test Path error: {e}")
         finally:

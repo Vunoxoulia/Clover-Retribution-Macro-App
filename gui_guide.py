@@ -394,7 +394,7 @@ def draw_lib_route(c):
                   arrow="last", arrowshape=(10, 12, 4))
     tag(c, 80, 48, "1  Ctrl+P", BLUE)
     tag(c, 290, 160, "2  walk there", "#495057")
-    tag(c, 500, 48, "3  tap E   4  Ctrl+P", BLUE)
+    tag(c, 500, 48, "3  Ctrl+P at the wisp", BLUE)
 
 
 def draw_lib_moves(c):
@@ -526,8 +526,9 @@ def draw_lib_start(c):
 
 LIBRARY_PAGES = [
     ("Route", "1. Record the walk to the wisp", draw_lib_route,
-     "Settings → Route → New. Stand at the desk (where you end up after a minigame), press Ctrl+P, walk to the wisp, "
-     "tap E at it, press Ctrl+P again. Test Path (F3) replays it. No recording = the old D/S/W walk."),
+     "Settings → Route → New. Stand at the desk (where you end up after a minigame), press Ctrl+P, walk to the wisp "
+     "(jumps and E presses are recorded too), press Ctrl+P again at the wisp. Test Path (F3) replays it. "
+     "No recording = the old D/S/W walk."),
     ("Moves", "2. Tick the moves to train", draw_lib_moves,
      "Tick each move to train and type its name exactly as on the wisp's button. The list only shows ~4 at a "
      "time: the macro scrolls one notch at a time until it sees the name (or its captured picture), and stops at "
@@ -736,26 +737,13 @@ def draw_min_start(c):
 
 
 def draw_min_checks(c):
-    label(c, W / 2, 16, "Settings → Line-up checks & Prompt area", YELLOW, 11, bold=True)
-    rrect(c, 20, 34, 580, 132, 8, fill="#212529", outline="#343a40")
-    # Line-up checks switch
-    rrect(c, 34, 50, 70, 68, 9, fill=BLUE, outline=""); c.create_oval(52, 51, 68, 67, fill="#ffffff", outline="")
-    label(c, 80, 59, "📍 Line-up checks", "#ffffff", 10, "w", True)
-    label(c, 230, 59, "ON = line up on start spot / checkpoints / ores + look for [E]", DIM, 9, "w")
-    label(c, 230, 77, "OFF = just follow the recorded path and press E", GREEN, 9, "w", True)
-    # Prompt area row
-    label(c, 34, 108, "Prompt area", "#ffffff", 10, "w", True)
-    for x, t in ((130, "🔲 Set"), (196, "Clear"), (256, "👁 Show")):
-        rrect(c, x, 96, x + 58, 120, 5, fill="#495057", outline=""); label(c, x + 29, 108, t, "#ffffff", 9)
-    label(c, 326, 108, "auto (around your character)", DIM, 9, "w")
-    for n, (x, y) in enumerate([(34, 46), (130, 92), (256, 92)], start=1):
-        marker(c, x, y, n)
-    # where the prompt is looked for
-    rrect(c, 200, 146, 400, 206, 6, fill="", outline=CYAN, width=2)
-    label(c, 300, 158, "Prompt area", CYAN, 9, bold=True)
-    rrect(c, 262, 172, 280, 190, 3, fill="", outline="#ffffff"); label(c, 271, 181, "E", "#ffffff", 9, bold=True)
-    label(c, 312, 181, "Interact", "#ffffff", 9)
-    label(c, 108, 176, "not the whole screen:\na box around your\ncharacter (or yours)", DIM, 9)
+    label(c, W / 2, 16, "Settings → Line-up checks (off by default)", YELLOW, 11, bold=True)
+    rrect(c, 20, 40, 580, 110, 8, fill="#212529", outline="#343a40")
+    rrect(c, 34, 56, 70, 74, 9, fill="#4a4d50", outline=""); c.create_oval(36, 57, 52, 73, fill="#ffffff", outline="")
+    label(c, 80, 65, "📍 Line-up checks", "#ffffff", 10, "w", True)
+    label(c, 230, 65, "OFF = just follow the recorded path and press E", GREEN, 9, "w", True)
+    label(c, 230, 88, "ON = also line up on start spot / checkpoints / ores", DIM, 9, "w")
+    label(c, W / 2, 150, "Mining plays your recording exactly: jumps, turns and every E at the ores.", TXT, 10)
 
 
 MINING_PAGES = [
@@ -764,11 +752,9 @@ MINING_PAGES = [
      "walk back to the start, press Ctrl+P. Pause briefly at corners."),
     ("Route", "2. Fine-tune the walk", draw_min_tune,
      "Each ore's card lists the recorded keys. Edit how long a key is held to fix over/under-shooting."),
-    ("Route", "3. Line-up checks & Prompt area", draw_min_checks,
-     "1 Line-up checks: ON lines up on the start spot, checkpoints and each ore, and looks for the [E] Interact prompt "
-     "(nudging if it's missing). OFF just plays your recorded path and presses E at each ore.   "
-     "2 Prompt area: drag a box where the [E] Interact prompt shows up (Clear = automatic box around your character). "
-     "3 Show flashes the box it uses. Test Prompt (F1) checks it."),
+    ("Route", "3. Line-up checks", draw_min_checks,
+     "Off (default): just plays your recorded path and presses E at each ore. On: also lines up on the start spot, "
+     "checkpoints and each ore's snapshot before mining (only useful with a locked camera)."),
     ("Start", "4. Test and start", draw_min_start,
      "Test Path (F2) walks one lap without mining (click into Roblox within 5 s if you used the button). "
      "Then Start (F6)."),

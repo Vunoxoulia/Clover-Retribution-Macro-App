@@ -13,7 +13,7 @@ class MiningLogic(RouteNav):
 
     You walk a route once (Ctrl+P to start/stop recording), tapping E at each ore.
     Playback replays your keys, lines up on a snapshot at every ore and at every
-    spot you paused while recording, confirms the Interact prompt, then mines.
+    spot you paused while recording, then mines.
     Routes are stored per name in routes/<name>/, so one macro covers any area."""
 
     def __init__(self, app):
@@ -69,10 +69,10 @@ class MiningLogic(RouteNav):
 
     def route_checks(self):
         """Settings → 'Line-up checks'. Off = just follow the recorded path and press E, no checks."""
-        return bool(self.app.settings.get("mining_checks", True))
+        return bool(self.app.settings.get("mining_checks", False))
 
     def _mine_here(self, ore_idx, seg):
-        """Line up on the ore snapshot, confirm the Interact prompt, mine."""
+        """(Line-up checks on: line up on the ore snapshot first), then mine."""
         self.lap["targets"] += 1
         self._wait_still()
         if not self.route_checks():                      # no checks: mine right where the path ended
@@ -83,10 +83,6 @@ class MiningLogic(RouteNav):
         if os.path.exists(snap):
             if self.align_to(cv2.imread(snap), f"ore {ore_idx}", max_tries=8) == "lost":
                 self.app.log(f"   ore {ore_idx}: snapshot not recognised (off by >150px?)")
-        if not self.confirm_arrival(ore_idx):
-            self.lap["misses"] += 1
-            self.app.log(f"   x Ore {ore_idx}: not found, skipping")
-            return False
         self.mine(ore_idx, seg)
         self.lap["mined"] += 1
         return True
@@ -113,11 +109,6 @@ class MiningLogic(RouteNav):
         self.app.log(f"=== Lap {self.lap_no} [{self.active_route()}]: {L['mined']}/{L['targets']} mined, "
                      f"{L['misses']} misses, {L['nudges']} nudges, {L['corrections']} snapshot fixes, "
                      f"{time.perf_counter() - L['start']:.1f}s ===")
-
-
-    def test_detection(self):
-        hit = self.prompt_near_player()
-        self.app.log(f"Interact prompt near character: {'FOUND at ' + str(hit) if hit else 'not found'}")
 
 
     def test_movement(self):

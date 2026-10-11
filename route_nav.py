@@ -9,10 +9,6 @@ import numpy as np
 import cv2
 from logic_base import BaseLogic
 
-# Small nudges tried (in order) when we arrive and the Interact prompt isn't
-# showing. Each nudge is undone if it doesn't help, so we don't drift.
-ARRIVAL_NUDGES = [("w", 0.12), ("s", 0.12), ("a", 0.12), ("d", 0.12),
-                  ("w", 0.25), ("s", 0.25), ("a", 0.25), ("d", 0.25)]
 OPPOSITE = {"w": "s", "s": "w", "a": "d", "d": "a"}
 
 DEFAULT_MINE_HOLD = 3.0
@@ -33,6 +29,7 @@ class RouteNav(BaseLogic):
     ROUTE_TARGET = "ore"     # what an E tap marks, for the recording messages ("wisp" in the Library)
 
     RECORD_KEYS = {"w", "a", "s", "d", "space", "shift", "left shift"}
+    E_MARKS_TARGET = True    # Mining: every E tap marks an ore. Library: E is just a recorded key (one walk)
     CHECKPOINT_IDLE = 0.5   # stand still this long while recording -> checkpoint
     MIN_TAP = 0.05          # playback: a key is held at least this long, or Roblox can miss a quick tap
 
@@ -204,71 +201,10 @@ class RouteNav(BaseLogic):
         while alive() and time.perf_counter() < end:
             time.sleep(0.02)
 
-    # ================= Interact prompt =================
+    # ================= Line-up checks =================
     def route_checks(self):
         """Line-ups on snapshots (start spot, checkpoints). Mining can turn them off."""
         return True
-
-    def _near_player_region(self):
-        """Where the '[E] Interact' prompt is looked for: the user's own box if set,
-        otherwise a box around the screen centre (the character, with the fixed top-down camera)."""
-        own = self.app.settings.get("regions", {}).get("prompt_area", [0, 0, 0, 0])
-        if own and own[2] > own[0] and own[3] > own[1]:
-            return list(own)
-        l, t, r, b = self.get_roblox_window_region()
-        cx, cy = (l + r) // 2, (t + b) // 2
-        dx, dy = int((r - l) * 0.16), int((b - t) * 0.24)
-        return [cx - dx, cy - dy, cx + dx, cy + dy]
-
-    @staticmethod
-    def find_prompt_in_image(img_bgr):
-        """Find the '[E] Interact' prompt by its shape: a square key box with a wide
-        word just to its right, on the same line. Returns (x, y) or None."""
-        mask = cv2.inRange(img_bgr, (180, 180, 180), (255, 255, 255))
-        mask = cv2.dilate(mask, np.ones((5, 9), np.uint8))  # join letters into one word
-        n, _, stats, _ = cv2.connectedComponentsWithStats(mask)
-        boxes, words = [], []
-        for i in range(1, n):
-            x, y, w, h, _ = stats[i]
-            if 18 <= w <= 70 and 18 <= h <= 70 and 0.75 <= w / h <= 1.35:
-                boxes.append((x, y, w, h))      # the [E] key outline (36x33 at 1080p)
-            elif 35 <= w <= 140 and 7 <= h <= 30 and w >= h * 3:
-                words.append((x, y, w, h))      # 'Interact' (68x14 at 1080p)
-        for bx, by, bw, bh in boxes:
-            bcy = by + bh / 2
-            for wx, wy, ww, wh in words:
-                gap = wx - (bx + bw)
-                if -5 <= gap <= bw * 1.5 and abs((wy + wh / 2) - bcy) <= bh * 0.35:
-                    return (int((bx + wx + ww) / 2), int(bcy))
-        return None
-
-    def prompt_near_player(self):
-        reg = self._near_player_region()
-        hit = self.find_prompt_in_image(self.utils.capture_screen_bgr(reg))
-        return (reg[0] + hit[0], reg[1] + hit[1]) if hit else None
-
-    def confirm_arrival(self, ore_idx):
-        """Check the Interact prompt is up; if not, wait a moment, then try small
-        nudges around the spot (each undone if it doesn't help)."""
-        wait = float(self.app.settings.get("arrival_wait", 1.5))
-        end = time.perf_counter() + wait
-        while self.running and time.perf_counter() < end:
-            if self.prompt_near_player():
-                return True
-            time.sleep(0.1)
-        self.app.log(f"   ? Ore {ore_idx}: no Interact prompt, searching nearby...")
-        for key, secs in ARRIVAL_NUDGES:
-            if not self.running:
-                return False
-            self.lap["nudges"] += 1
-            self.hold_key(key, secs)
-            self._wait_still(0.5)
-            if self.prompt_near_player():
-                self.app.log(f"   + Found it after nudging {key.upper()} {secs:.2f}s")
-                return True
-            self.hold_key(OPPOSITE[key], secs)  # undo
-            self._wait_still(0.5)
-        return False
 
     # ================= Snapshot alignment =================
     @staticmethod
@@ -425,7 +361,8 @@ class RouteNav(BaseLogic):
             self.app.log(f"● RECORDING '{name}'. Walk the route, TAP E at each ore (as many as you like), then walk "
                          f"back to the start and press Ctrl+P. Everything after the last E = the walk back.")
         else:
-            self.app.log(f"● RECORDING '{name}'. Walk to the {self.ROUTE_TARGET}, TAP E there, then press Ctrl+P.")
+            self.app.log(f"● RECORDING '{name}'. Walk to the {self.ROUTE_TARGET} (jumps, E... all recorded), "
+                         f"then press Ctrl+P there.")
         if hasattr(self.app, "set_recording_ui"):
             self.app.root.after(0, lambda: self.app.set_recording_ui(True))
 
@@ -445,10 +382,12 @@ class RouteNav(BaseLogic):
             name_ = (ev.name or "").lower()
             now = time.perf_counter()
             with lock:
-                if name_ == "e" and ev.event_type == "up":
+                if name_ == "e" and not self.E_MARKS_TARGET:
+                    pass                                 # recorded like any other key below
+                elif name_ == "e" and ev.event_type == "up":
                     st["e_held"] = False
                     return
-                if name_ == "e" and ev.event_type == "down":
+                elif name_ == "e" and ev.event_type == "down":
                     # Holding E makes Windows repeat 'down'; a real new tap has an 'up' first
                     if st.get("e_held") or now - st["last_mark"] < 0.3:
                         return
@@ -469,7 +408,7 @@ class RouteNav(BaseLogic):
                         self.app.log(f"   {self.ROUTE_TARGET} reached ({seg['duration']:.1f}s walk) — press Ctrl+P to finish")
                     st["cp_taken"] = True
                     return
-                if name_ in self.RECORD_KEYS:
+                if name_ in self.RECORD_KEYS or (name_ == "e" and not self.E_MARKS_TARGET):
                     t = round(now - st["seg_start"], 3)
                     if ev.event_type == "down" and name_ not in held:
                         held.add(name_); events.append([t, name_, "down"])
@@ -515,6 +454,10 @@ class RouteNav(BaseLogic):
         if self.ROUTE_TARGET == "ore":
             self.app.log(f"✓ Route '{name}' saved: {len(segments)} ore{'s' if len(segments) != 1 else ''} "
                          f"+ the walk back to the start ({ret['duration']:.1f}s), {n_cp} checkpoints.")
+        elif not self.E_MARKS_TARGET:
+            n_keys = sum(1 for e in ret["events"] if e[2] == "down")
+            self.app.log(f"✓ Route '{name}' saved: walk to the {self.ROUTE_TARGET} ({ret['duration']:.1f}s, "
+                         f"{n_keys} key presses incl. jumps / E).")
         elif segments:
             self.app.log(f"✓ Route '{name}' saved: walk to the {self.ROUTE_TARGET} ({segments[0]['duration']:.1f}s).")
         else:

@@ -1,6 +1,12 @@
 HOW TO RUN SPATIAL MACRO
 ========================
 
+WHAT'S NEW IN V6.2.6
+=====================
+- Library and Mining: removed the [E] Interact prompt detector (it was unreliable); Mining's Prompt area and Test Prompt are gone
+- fixed Library recordings stopping at the first E - jumps and E presses during the walk are now recorded and played back (the whole Ctrl+P → Ctrl+P walk is the route)
+- Mining: 'Line-up checks' is now off by default (just follows your recorded path)
+
 WHAT'S NEW IN V6.2.5
 =====================
 - Skill Macro: 'Auto-tune' is now 🪄 Find hotbar - it only moves the hotbar region onto your filled slots (no more casting your skills or retaking snapshots)
