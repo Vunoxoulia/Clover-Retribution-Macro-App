@@ -54,9 +54,26 @@ class RouteNav(BaseLogic):
         os.makedirs(d, exist_ok=True)
         return d
 
+    # A route that ships with the app (Library: VunVun's route). Always listed first, used by default,
+    # and locked: it can't be recorded over, renamed, deleted or edited. Make your own with New.
+    BUILTIN_ROUTE = None          # display name
+    BUILTIN_DIR = None            # folder inside the app (tracked in git, not user data)
+
+    def _builtin_dir(self):
+        if not self.BUILTIN_ROUTE or not self.BUILTIN_DIR:
+            return None
+        from settings import get_base_path
+        d = os.path.join(get_base_path(), self.BUILTIN_DIR)
+        return d if os.path.exists(os.path.join(d, "route.json")) else None
+
+    def is_locked(self, name=None):
+        name = name or self.active_route()
+        return bool(self._builtin_dir()) and name == self.BUILTIN_ROUTE
+
     def list_routes(self):
         d = self._routes_dir()
-        return sorted(n for n in os.listdir(d) if os.path.isdir(os.path.join(d, n)))
+        own = sorted(n for n in os.listdir(d) if os.path.isdir(os.path.join(d, n)) and n != self.BUILTIN_ROUTE)
+        return ([self.BUILTIN_ROUTE] if self._builtin_dir() else []) + own
 
     def active_route(self):
         name = self.app.settings.get(self.ACTIVE_ROUTE_KEY, "")
@@ -70,6 +87,8 @@ class RouteNav(BaseLogic):
 
     def route_dir(self, name=None):
         name = name or self.active_route()
+        if self.is_locked(name):
+            return self._builtin_dir()
         return os.path.join(self._routes_dir(), name) if name else ""
 
     @staticmethod
@@ -79,13 +98,15 @@ class RouteNav(BaseLogic):
 
     def create_route(self, name):
         name = self._clean_name(name)
-        if not name or name in self.list_routes():
+        if not name or name in self.list_routes() or name == self.BUILTIN_ROUTE:
             return None
         os.makedirs(self.route_dir(name))
         self.set_active_route(name)
         return name
 
     def rename_route(self, old, new):
+        if self.is_locked(old):
+            return None
         new = self._clean_name(new)
         if not new or new in self.list_routes() or old not in self.list_routes():
             return None
@@ -95,6 +116,8 @@ class RouteNav(BaseLogic):
         return new
 
     def delete_route(self, name):
+        if self.is_locked(name):
+            return
         if name in self.list_routes():
             shutil.rmtree(self.route_dir(name))
         if self.app.settings.get(self.ACTIVE_ROUTE_KEY) == name:
@@ -109,6 +132,8 @@ class RouteNav(BaseLogic):
             return None
 
     def save_route(self, route, name=None):
+        if self.is_locked(name):
+            return                                       # the built-in route is never changed
         with open(os.path.join(self.route_dir(name), "route.json"), "w", encoding="utf-8") as f:
             json.dump(route, f, indent=1)
 
@@ -328,6 +353,10 @@ class RouteNav(BaseLogic):
             return
         if self.running:
             self.app.log("Stop the macro before recording.")
+            return
+        if self.is_locked():
+            self.app.log(f"🔒 '{self.BUILTIN_ROUTE}' is the built-in route and can't be recorded over. "
+                         "Press New to make your own route, then Ctrl+P.")
             return
         if not self.active_route():
             self.create_route("Route 1")

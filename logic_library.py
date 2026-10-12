@@ -25,6 +25,8 @@ class LibraryLogic(RouteNav):
     3. Wait for the minigame (its captured snapshot shows up) and click clovers until it ends."""
 
     ROUTES_DIRNAME = "routes_library"
+    BUILTIN_ROUTE = "VunVun's route"
+    BUILTIN_DIR = os.path.join("builtin_routes", "library")
     ACTIVE_ROUTE_KEY = "library_active_route"
     USE_ALIGNMENT = False      # normal 3rd-person camera: no snapshot walking
     ROUTE_TARGET = "wisp"
@@ -69,6 +71,7 @@ class LibraryLogic(RouteNav):
     THIRD_X = (0.68, 0.90)
     THIRD_Y = (0.0, 0.18)                       # just the clover row, not the gold icon border below it
     GOLD_SHARE = 0.15                               # empty spot reads ~0, a gold clover ~0.2-0.25
+    GOLD_HSV_LO, GOLD_HSV_HI = (10, 160, 170), (30, 255, 255)   # clover gold only, never the gold-ish text
 
     def gold_mode(self):
         return "manual" if self.app.settings.get("gold_mode") == "manual" else "auto"
@@ -128,8 +131,8 @@ class LibraryLogic(RouteNav):
             if not filled:
                 continue
             band = hsv[y1:y2, x + int(w * 0.55):x + int(w * 0.98)]
-            prof += ((band[:, :, 0] >= 8) & (band[:, :, 0] <= 32) & (band[:, :, 1] > 120)
-                     & (band[:, :, 2] > 150)).sum(axis=1)
+            prof += ((band[:, :, 0] >= 8) & (band[:, :, 0] <= 32) & (band[:, :, 1] >= 160)
+                     & (band[:, :, 2] >= 170)).sum(axis=1)   # strong clover gold/bronze, not the name text
         if not prof.size or prof.max() < 3:
             return None
         return float((prof * np.arange(y1, y2)).sum() / prof.sum())
@@ -155,7 +158,9 @@ class LibraryLogic(RouteNav):
         img = self.utils.capture_screen_bgr(rect)
         if img is None or not img.size:
             return None
-        gold = cv2.inRange(cv2.cvtColor(img, cv2.COLOR_BGR2HSV), (10, 120, 150), (30, 255, 255))
+        # Saturation >= 160: the clover's gold is strong (~210); the move NAME text is a pale gold (~120)
+        # that used to count too when it reached into the box.
+        gold = cv2.inRange(cv2.cvtColor(img, cv2.COLOR_BGR2HSV), self.GOLD_HSV_LO, self.GOLD_HSV_HI)
         return float((gold > 0).mean())
 
     def move_is_gold(self, i):

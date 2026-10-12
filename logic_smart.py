@@ -38,6 +38,9 @@ MEDITATION_DEFAULT = {
     "waits": {},
 }
 
+# Anti screen-shake: every N seconds press ',' → wait → ',' (resets the camera lock) between casts
+ANTI_SHAKE_DEFAULT = {"enabled": False, "every": 30, "key": ",", "between": 1.0, "after": 0.5}
+
 DEFAULT_SMART = {
     "hotkey": "f6",
     "only_when_focused": True,
@@ -491,6 +494,7 @@ class SmartMacroLogic:
         if self.running:
             return
         self.running = True
+        self._last_shake = 0
         cfg = self.cfg
         self._threads = []
         parts = []
@@ -621,6 +625,24 @@ class SmartMacroLogic:
             self.utils.send_key(key, 0.04)
 
     # ---------- meditation (refill mana) ----------
+    def anti_shake(self):
+        d = self.cfg["rotation"].setdefault("anti_shake", {})
+        for k, v in ANTI_SHAKE_DEFAULT.items():
+            d.setdefault(k, v)
+        return d
+
+    def do_anti_shake(self):
+        """',' → wait → ',' → wait. Each key waits so the game finishes the camera change."""
+        d = self.anti_shake()
+        key = (d.get("key") or ",").strip() or ","
+        with RobloxInputDriver._lock:
+            self._press(key)
+        self._wait(max(0.0, float(d.get("between", 1.0) or 0)))
+        with RobloxInputDriver._lock:
+            self._press(key)
+        self._wait(max(0.0, float(d.get("after", 0.5) or 0)))
+        self._last_shake = time.time()
+
     def med(self):
         d = self.cfg["rotation"].setdefault("meditation", {})
         for k, v in MEDITATION_DEFAULT.items():
@@ -737,6 +759,13 @@ class SmartMacroLogic:
                 if self.med()["enabled"] and self.mana_empty():
                     self.meditate()
                     continue
+                sh = self.anti_shake()
+                if sh["enabled"]:
+                    if not getattr(self, "_last_shake", 0):
+                        self._last_shake = time.time()   # first one after 'every' seconds, not at the start
+                    elif time.time() - self._last_shake >= max(1.0, float(sh.get("every", 30) or 30)):
+                        self.do_anti_shake()
+                        continue
                 pick = self.pick_move(self.read_slots())
                 if not pick:
                     self._wait(float(rot["tick"])); continue

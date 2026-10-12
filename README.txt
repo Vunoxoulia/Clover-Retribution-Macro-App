@@ -1,6 +1,15 @@
 HOW TO RUN SPATIAL MACRO
 ========================
 
+WHAT'S NEW IN V6.2.7
+=====================
+- route recording now shows a red '● REC 0:12 · Ctrl+P to stop' badge on top of the game (it never takes focus or blocks clicks)
+- Library: comes with a ready-made route to the wisp (🔒 VunVun's route), selected by default and locked; press New to record your own
+- fixed the launcher failing for people with Python 3.15 (or 3.10): it now picks Python 3.11 - 3.14, which the text reader supports, and offers to install 3.12 next to the other one
+- fixed Library's gold clover check possibly counting the gold-tinted move name text as a gold clover - it now only counts the strong clover gold
+- faster launcher: finds Python quickly and remembers it, only installs packages when something changed (starts in about half a second after the first time), cleaner window
+- Skill Macro: new optional 🎥 Anti screen-shake - every few seconds (your choice) it presses , → waits → , again between casts; every wait is adjustable
+
 WHAT'S NEW IN V6.2.6
 =====================
 - Library and Mining: removed the [E] Interact prompt detector (it was unreliable); Mining's Prompt area and Test Prompt are gone
@@ -91,7 +100,7 @@ PREREQUISITES & SYSTEM REQUIREMENTS
 
 SOFTWARE REQUIREMENTS:
 - Operating System: Windows 10 or Windows 11 (64-bit).
-- Python: Version 3.10 or newer (3.12.3 is recommended).
+- Python: Version 3.11 to 3.14 (3.12 is recommended). The text reader (onnxruntime) isn't available for 3.10 or 3.15 - install 3.12 next to it (the launcher offers to).
 - Microsoft Visual C++ Redistributable (x64): Required for OCR features.
   (run.bat will check for this and provide a download link if missing).
 

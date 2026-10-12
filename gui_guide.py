@@ -170,6 +170,19 @@ def draw_meditation(c):
     label(c, W / 2, 200, "Both out:  R, G → N … N → G, R          (keys can be changed)", DIM, 9)
 
 
+def draw_anti_shake(c):
+    label(c, W / 2, 16, "Anti screen-shake: re-lock the camera every few seconds", YELLOW, 11, bold=True)
+    y = 70
+    blocks = [(30, 150, "#343a40", "every 30 s", "#dce4ee"), (150, 230, BLUE, "press ,", "#ffffff"),
+              (230, 330, "#664d03", "wait 1 s", "#ffda6a"), (330, 410, BLUE, "press ,", "#ffffff"),
+              (410, 500, "#664d03", "wait 0.5 s", "#ffda6a"), (500, 570, GREEN, "casts", "#000000")]
+    for x1, x2, fill, text, col in blocks:
+        c.create_rectangle(x1, y, x2, y + 32, fill=fill, outline="#1e2124")
+        label(c, (x1 + x2) / 2, y + 16, text, col, 10, bold=True)
+    label(c, W / 2, 140, "It runs between casts, never in the middle of a skill. Every number is adjustable.", TXT, 10)
+    label(c, W / 2, 164, "The key ( , by default) can be changed if your camera lock uses another key.", DIM, 9)
+
+
 def draw_priority(c):
     real_card(c, 12, 1, "Chrono Burst", "3", False, ("cd 0.31", YELLOW))
     real_card(c, 52, 2, "Mana Lance", "7", False, ("ready 0.97", GREEN))
@@ -325,23 +338,26 @@ PAGES = [
      "Turn it on and press ⚙ Settings (its own window): 🔲 Mana bar = drag over the light-blue mana bar, then pick what you fight with: Weapon, "
      "Grimoire or Both. Meditate at = how low the mana may get first (5% = basically empty). Once it's that low, it puts them away (R / G), meditates (N) until "
      "the bar is full again, stops (N) and takes them back out. Every key has its own wait box (Start / When full lines) so animations can finish; 'All waits' sets them all at once. 'Give up after' = longest it meditates. Test shows the mana it reads."),
-    ("Rotation", "9. The order of one cast", draw_anim,
+    ("Rotation", "9. Anti screen-shake (optional)", draw_anti_shake,
+     "Turn on 🎥 Anti screen-shake on the Rotation page: every [30] s it presses , → waits [1] s → presses , again → "
+     "waits [0.5] s, then the rotation carries on. Use it if the camera starts shaking / drifting during long AFK runs."),
+    ("Rotation", "10. The order of one cast", draw_anim,
      "Move mouse → Delay before → press → M2 or M1 (if ticked) → Delay after → next move. Delay before gives the game "
      "time to turn toward the mouse before the key. Delay after lets slow moves finish before the next cast."),
-    ("Skill Combo", "10. Skill Combos", draw_combo,
+    ("Skill Combo", "11. Skill Combos", draw_combo,
      "Skill Combo page → + Add Combo, set the trigger key, then + Step. Each step reads like a sentence: "
      "Press [key] [1 time] then wait [0.2 s]; with 2+ times it waits after each press. The step's ⚙ adds 'Click after the key' [M2 | M1] (M2 by default; the row then reads 'then M2 after [s]': press → wait → click) or mouse aim. Works while the macro is running."),
-    ("Items", "11. Item auto-use (optional)", draw_items,
+    ("Items", "12. Item auto-use (optional)", draw_items,
      "Items page → Set Scan Area over the pickup messages, then + Add Item: \"When [Copper] shows up, press [9] ☑ then M1\". "
      "It presses the key, then left-clicks to use the item — once per message. Test OCR (while a message is on screen) shows what it reads."),
-    ("Settings", "12. Events & OK Popup pages", draw_skill_extras,
+    ("Settings", "13. Events & OK Popup pages", draw_skill_extras,
      "The Skill Macro also has the 📣 Events and 🔔 OK Popup pages (same as every macro), each with its own ? Help. "
      "Turn on their big bars to post events to Discord or click OK popups while the rotation runs."),
-    ("Settings", "13. Loadouts (saved builds)", draw_loadouts,
+    ("Settings", "14. Loadouts (saved builds)", draw_loadouts,
      "The 🎒 Loadout bar at the top saves a whole build: hotbar region, snapshots, move order and options, mouse aim, "
      "combos and items. New = a fresh empty save (your current one stays as it is); use 🪄 Find hotbar and 📸 Snapshot all to set it up. "
      "Switching applies instantly, even while running. The hotkey and focus setting are shared by all loadouts."),
-    ("Settings", "14. Start it", draw_start,
+    ("Settings", "15. Start it", draw_start,
      "Press Start or F6 (change it in Settings). Press again to stop."),
 ]
 
@@ -526,6 +542,7 @@ def draw_lib_start(c):
 
 LIBRARY_PAGES = [
     ("Route", "1. Record the walk to the wisp", draw_lib_route,
+     "A ready-made route, 🔒 VunVun's route, is already selected - try Test Path (F3) first. Want your own? "
      "Settings → Route → New. Stand at the desk (where you end up after a minigame), press Ctrl+P, walk to the wisp "
      "(jumps and E presses are recorded too), press Ctrl+P again at the wisp. Test Path (F3) replays it. "
      "No recording = the old D/S/W walk."),

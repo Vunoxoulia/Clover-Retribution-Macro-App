@@ -121,6 +121,61 @@ class PersistentOverlay:
             pass
 
 
+class RecordingBadge:
+    """A small red '● REC 0:12 · Ctrl+P to stop' badge on top of the game while a route is recorded.
+    It NEVER takes keyboard focus (or the keys you press would stop reaching Roblox / the recording),
+    clicks go straight through it, and it isn't in the taskbar."""
+
+    def __init__(self, x, y):
+        import time as _t
+        self._t0 = _t.time()
+        self._time = _t.time
+        self.root = tk.Toplevel()
+        self.root.withdraw()                              # never shown the normal (focus-taking) way
+        self.root.overrideredirect(True)
+        self.root.attributes("-topmost", True)
+        self.root.config(bg="#b02a37")
+        self.lbl = tk.Label(self.root, text="", bg="#b02a37", fg="white", font=("Arial", 13, "bold"), padx=14, pady=5)
+        self.lbl.pack()
+        self._tick(first=True)
+        self.root.update_idletasks()
+        w = self.root.winfo_reqwidth()
+        self.root.geometry(f"+{int(x - w / 2)}+{int(y)}")
+        self.root.update_idletasks()
+        self._show_without_focus()
+
+    def _show_without_focus(self):
+        try:
+            import sys, ctypes
+            if not sys.platform.startswith("win"):
+                self.root.deiconify(); return
+            u = ctypes.windll.user32
+            hwnd = int(self.root.wm_frame(), 16) or u.GetParent(self.root.winfo_id()) or self.root.winfo_id()
+            # LAYERED | TRANSPARENT (click-through) | TOOLWINDOW (no taskbar) | TOPMOST | NOACTIVATE
+            ex = u.GetWindowLongW(hwnd, -20) | 0x80000 | 0x20 | 0x80 | 0x8 | 0x08000000
+            u.SetWindowLongW(hwnd, -20, ex)
+            u.SetLayeredWindowAttributes(hwnd, 0, 235, 2)            # slightly see-through
+            u.ShowWindow(hwnd, 4)                                     # SW_SHOWNOACTIVATE
+            u.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x1 | 0x2 | 0x10)   # topmost, no move/size, NO activate
+            self.hwnd = hwnd
+        except Exception as e:
+            print(f"Recording badge error: {e}")
+
+    def _tick(self, first=False):
+        try:
+            secs = int(self._time() - self._t0)
+            self.lbl.configure(text=f"● REC  {secs // 60}:{secs % 60:02d}   ·   Ctrl+P to stop")
+            self.root.after(500, self._tick)
+        except Exception:
+            pass
+
+    def destroy(self):
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
+
+
 class PointSelector(_FrozenScreen):
     HINT = "Click the spot"
 

@@ -316,6 +316,7 @@ class SmartMacroGUI:
 
         self.build_aim_panel(p)
         self.build_meditation(p)
+        self.build_anti_shake(p)
         self.cards_box = ctk.CTkFrame(p, fg_color="transparent")
         self.cards_box.pack(fill="x", pady=(4, 0))
         self.build_cards()
@@ -351,6 +352,27 @@ class SmartMacroGUI:
         lbl.configure(text=f"at {float(d.get('below', 5)):g}% mana · {out} out · keys "
                            f"{'/'.join(k.upper() for k, _ in self.logic.meditation_steps()['away'])} + {d['key'].upper()}",
                       text_color="#adb5bd")
+
+    def build_anti_shake(self, parent):
+        """One line: every [30] s press [,] → [1] s → [,] → [0.5] s."""
+        d = self.logic.anti_shake()
+        card = ctk.CTkFrame(parent, **CARD); card.pack(fill="x", pady=4)
+        row = ctk.CTkFrame(card, fg_color="transparent"); row.pack(fill="x", padx=10, pady=8)
+        ctk.CTkLabel(row, text="🎥 Anti screen-shake", font=("Arial", 13, "bold")).pack(side="left")
+        sw = ctk.CTkSwitch(row, text="", width=40, command=lambda: self._set(d, "enabled", bool(sw.get())))
+        if d["enabled"]:
+            sw.select()
+        sw.pack(side="left", padx=8)
+        word = lambda t: ctk.CTkLabel(row, text=t, font=("Arial", 12)).pack(side="left", padx=(2, 2))
+        word("every")
+        self._pick(row, d, "every", ["10", "15", "20", "30", "45", "60", "120"], 58).pack(side="left")
+        word("s:  press")
+        self._entry(row, d, "key", 30).pack(side="left")
+        word("→ wait")
+        self._pick(row, d, "between", ["0.25", "0.5", "0.75", "1", "1.5", "2"], 58).pack(side="left")
+        word("s → press again → wait")
+        self._pick(row, d, "after", ["0", "0.25", "0.5", "1", "1.5"], 58).pack(side="left")
+        word("s")
 
     def open_meditation(self):
         """The Meditation settings in their own window."""

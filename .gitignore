@@ -130,3 +130,5 @@ tundra_home.png
 tundra_snapshots/
 # the user's own alert sounds
 sounds/
+# launcher cache (found Python, installed-packages marker)
+.launcher/

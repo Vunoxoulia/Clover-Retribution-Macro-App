@@ -511,6 +511,7 @@ class SpatialGUI:
             self.build_route_panel()
 
     def set_recording_ui(self, recording):
+        self._rec_badge(recording)
         if not hasattr(self, "rec_label"):
             return
         if recording:
@@ -521,9 +522,23 @@ class SpatialGUI:
             n_cp = sum(len(sg.get("checkpoints", [])) for sg in r["segments"]) + len(r["return"].get("checkpoints", []))
             what = (f"{r['ores']} ores, {n_cp} checkpoints" if "Mining" in self.root.title()
                     else f"recorded ({sum(s['duration'] for s in r['segments']) or r['return']['duration']:.1f}s walk)")
-            self.rec_label.configure(text=f"✓ {what}", text_color="#75b798")
+            lock = "🔒 built-in · " if self.logic.is_locked() else ""
+            self.rec_label.configure(text=f"✓ {lock}{what}", text_color="#75b798")
         else:
             self.rec_label.configure(text="Not recorded yet — press Ctrl+P", text_color="#ced4da")
+
+    def _rec_badge(self, on):
+        """Red '● REC' badge on top of the Roblox window while recording (never takes focus)."""
+        old = getattr(self, "_badge", None)
+        if old is not None:
+            old.destroy(); self._badge = None
+        if on:
+            try:
+                l, t, r, b = self.logic.get_roblox_window_region()
+                from overlay import RecordingBadge
+                self._badge = RecordingBadge((l + r) / 2, t + 40)
+            except Exception as e:
+                print(f"REC badge: {e}")
 
     def _select_route(self, name):
         if name in self.logic.list_routes():
@@ -549,6 +564,8 @@ class SpatialGUI:
     def _rename_route(self):
         old = self.logic.active_route()
         if not old: return
+        if self.logic.is_locked(old):
+            self.log(f"🔒 '{old}' is built in and can't be renamed. Press New to make your own route."); return
         new = self._ask("Rename route", f"New name for '{old}':", old)
         if new and self.logic.rename_route(old, new):
             self.refresh_routes()
@@ -558,6 +575,8 @@ class SpatialGUI:
     def _delete_route(self):
         from tkinter import messagebox
         name = self.logic.active_route()
+        if self.logic.is_locked(name):
+            self.log(f"🔒 '{name}' is built in and can't be deleted."); return
         if name and messagebox.askyesno("Delete route", f"Delete route '{name}' and its recording?"):
             self.logic.delete_route(name)
             self.refresh_routes()
