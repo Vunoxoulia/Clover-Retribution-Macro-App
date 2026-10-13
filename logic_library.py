@@ -232,7 +232,8 @@ class LibraryLogic(RouteNav):
         for i in range(1, n):
             x, y, w, h, a = st[i]
             y += y0
-            if px + pw < x < px + pw + W * 0.16 and H * 0.02 < h < H * 0.07 and w > 6 and a > w * h * 0.5:
+            # fill >= 35%: in small windows a button's two lines of text cover much of its dark fill
+            if px + pw < x < px + pw + W * 0.16 and H * 0.02 < h < H * 0.07 and w > 6 and a > w * h * 0.35:
                 parts.append([x, y, x + w, y + h])
         parts.sort()
         merged = []
@@ -414,13 +415,24 @@ class LibraryLogic(RouteNav):
     TRAINING_WORDS = ("clover", "training", "research")
     NEVER_WORDS = ("class", "reset", "opportunit")        # Class Reset must never be clicked
 
+    @staticmethod
+    def _has_word(text, words):
+        """True if `text` contains one of `words`, forgiving OCR typos in tiny text
+        ('reskarch' = research, 'Trainingl' = training)."""
+        import difflib, re
+        t = text.lower()
+        if any(w in t for w in words):
+            return True
+        tokens = re.findall(r"[a-z]{4,}", t)
+        return any(difflib.SequenceMatcher(None, tok, w).ratio() >= 0.8 for tok in tokens for w in words)
+
     def find_training_button(self):
         """The first menu's 'I'd like to research. [Clover Training]' button, found by its TEXT.
         Returns ((x, y), description) or None. A button mentioning Class Reset is never returned."""
         btns = self.dialog_buttons()
         low = [(x, y, (t or "").lower()) for x, y, t in btns]
         for x, y, t in low:
-            if any(w in t for w in self.TRAINING_WORDS) and not any(w in t for w in self.NEVER_WORDS):
+            if self._has_word(t, self.TRAINING_WORDS) and not self._has_word(t, self.NEVER_WORDS):
                 return (x, y), f"'{t.strip()[:40]}'"
         # Backup: read the whole button column and click right on the words (a button the shape
         # finder missed is still found this way)
@@ -431,7 +443,7 @@ class LibraryLogic(RouteNav):
         # with 3+ buttons and never onto a button that reads as Class Reset.
         if len(low) >= 3:
             x, y, t = low[-2]
-            if not any(w in t for w in self.NEVER_WORDS):
+            if not self._has_word(t, self.NEVER_WORDS):
                 return (x, y), f"button {len(low) - 1} of {len(low)} (just above Nevermind)"
         if not getattr(self, "_warned_training", 0) or time.time() - self._warned_training > 5:
             self.app.log(f"   First menu: can't find 'Clover Training' yet ({len(low)} button(s): "
@@ -456,7 +468,7 @@ class LibraryLogic(RouteNav):
         for i, (box, text, conf) in enumerate(lines):
             t = text.lower()
             nxt = lines[i + 1][1].lower() if i + 1 < len(lines) else ""
-            if any(w in t for w in words) and not any(w in t or w in nxt for w in never):
+            if self._has_word(t, words) and not (self._has_word(t, never) or self._has_word(nxt, never)):
                 cx = sum(p[0] for p in box) / len(box)
                 cy = sum(p[1] for p in box) / len(box)
                 return int(area[0] + cx), int(area[1] + cy)
