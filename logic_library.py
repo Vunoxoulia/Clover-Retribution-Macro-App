@@ -226,12 +226,27 @@ class LibraryLogic(RouteNav):
         if not panel:
             return None, []
         px, py, pw, ph = panel
-        buttons = []
+        # pieces right of the panel; a button can be cut in two by a bright line (mouse pointer, glare),
+        # so pieces on the same row that touch are joined back into one button first
+        parts = []
         for i in range(1, n):
             x, y, w, h, a = st[i]
             y += y0
-            if px + pw < x < px + pw + W * 0.08 and W * 0.06 < w < W * 0.16 and H * 0.02 < h < H * 0.07 and a > w * h * 0.5:
-                buttons.append((x, y, w, h))
+            if px + pw < x < px + pw + W * 0.16 and H * 0.02 < h < H * 0.07 and w > 6 and a > w * h * 0.5:
+                parts.append([x, y, x + w, y + h])
+        parts.sort()
+        merged = []
+        for p_ in parts:
+            for m in merged:
+                same_row = abs(m[1] - p_[1]) <= 6 and abs(m[3] - p_[3]) <= 6
+                if same_row and p_[0] - m[2] <= 14:
+                    m[0], m[1] = min(m[0], p_[0]), min(m[1], p_[1])
+                    m[2], m[3] = max(m[2], p_[2]), max(m[3], p_[3])
+                    break
+            else:
+                merged.append(list(p_))
+        buttons = [(x1, y1, x2 - x1, y2 - y1) for x1, y1, x2, y2 in merged
+                   if px + pw < x1 < px + pw + W * 0.08 and W * 0.06 < x2 - x1 < W * 0.16]
         return panel, sorted(buttons, key=lambda b: b[1])
 
     def read_dialog(self, with_text=False):
@@ -407,6 +422,11 @@ class LibraryLogic(RouteNav):
         for x, y, t in low:
             if any(w in t for w in self.TRAINING_WORDS) and not any(w in t for w in self.NEVER_WORDS):
                 return (x, y), f"'{t.strip()[:40]}'"
+        # Backup: read the whole button column and click right on the words (a button the shape
+        # finder missed is still found this way)
+        hit = self._find_words_right_of_panel(self.TRAINING_WORDS, self.NEVER_WORDS)
+        if hit:
+            return hit, "the 'research / Clover Training' text"
         # No readable 'Clover Training' text: fall back to position (just above Nevermind), but only
         # with 3+ buttons and never onto a button that reads as Class Reset.
         if len(low) >= 3:
@@ -417,6 +437,29 @@ class LibraryLogic(RouteNav):
             self.app.log(f"   First menu: can't find 'Clover Training' yet ({len(low)} button(s): "
                          f"{' | '.join(t[:25] or '?' for _, _, t in low)}) - waiting")
             self._warned_training = time.time()
+        return None
+
+    def _find_words_right_of_panel(self, words, never=()):
+        """OCR the strip right of the dialogue panel (where the option buttons are); return the screen
+        centre of the first text line containing one of `words` (and none of `never`), or None."""
+        win = self.get_roblox_window_region()
+        img = self._screen()
+        panel, _ = self.find_dialog(img)
+        if not panel:
+            return None
+        px, py, pw, ph = panel
+        W = img.shape[1]
+        area = [win[0] + px + pw, win[1] + max(0, py - int(ph * 0.3)),
+                win[0] + min(W, px + pw + int(W * 0.18)), win[1] + py + ph]
+        lines = self.utils.get_text_from_region(area)
+        lines.sort(key=lambda r: min(p[1] for p in r[0]))
+        for i, (box, text, conf) in enumerate(lines):
+            t = text.lower()
+            nxt = lines[i + 1][1].lower() if i + 1 < len(lines) else ""
+            if any(w in t for w in words) and not any(w in t or w in nxt for w in never):
+                cx = sum(p[0] for p in box) / len(box)
+                cy = sum(p[1] for p in box) / len(box)
+                return int(area[0] + cx), int(area[1] + cy)
         return None
 
     def dialog_buttons(self):
