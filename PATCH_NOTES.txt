@@ -1,3 +1,7 @@
+WHAT'S NEW IN V6.2.9
+=====================
+- Library: 🪄 Auto now pins each gold-clover check to the top-right corner of its own hotbar slot (it could sit too high before), and reads gold reliably in small windows
+
 WHAT'S NEW IN V6.2.8
 =====================
 - fixed Library (Auto dialogue) sometimes clicking 'New opportunities [Class Reset]' instead of 'Clover Training' - it now finds the button by its words (research / clover / training), even when the mouse cuts across it or the window is small (tiny, misread text), and never clicks Class Reset

@@ -70,7 +70,7 @@ class LibraryLogic(RouteNav):
     # at the top of the clovers (top ~18% = above the clover row line). A move is trained once that spot is gold.
     THIRD_X = (0.68, 0.90)
     THIRD_Y = (0.0, 0.18)                       # just the clover row, not the gold icon border below it
-    GOLD_SHARE = 0.15                               # empty spot reads ~0, a gold clover ~0.2-0.25
+    GOLD_SHARE = 0.05       # anything not gold reads 0.00 (strong-gold colour test); gold reads 0.08 (small window) - 0.25
     GOLD_HSV_LO, GOLD_HSV_HI = (10, 160, 170), (30, 255, 255)   # clover gold only, never the gold-ish text
 
     def gold_mode(self):
@@ -116,6 +116,9 @@ class LibraryLogic(RouteNav):
         hb["region"] = [reg[0] + slots[0][0], reg[1] + int(round(top_img)), reg[0] + last[0] + last[2],
                         reg[1] + bottom_img]
         hb["slots"] = filled
+        # The 3rd clover always sits on the TOP-RIGHT CORNER of its slot's frame: pin each check box there,
+        # from that slot's own frame (no guessing the clover row, which could end up too high).
+        hb["spots"] = [self.corner_spot(reg[0] + x, reg[1] + y, w, s) for x, y, w, s, _ in slots[:filled]]
         self.app.settings.save()
         self.app.log(f"Auto-find: hotbar found, {filled} filled slot(s). Press Show to check the yellow boxes.")
         return filled
@@ -140,11 +143,23 @@ class LibraryLogic(RouteNav):
     def move_slot(self, i):
         return int(self._nine("gold_move_slots", lambda k: k + 1)[i])
 
+    CORNER_X = (0.71, 0.96)     # of the slot's width: the 3rd clover / top-right corner of the frame
+    CORNER_Y = (-0.12, 0.15)    # of the slot's height, around the frame's top edge (small windows draw clovers lower)
+
+    @classmethod
+    def corner_spot(cls, x, top, w, side):
+        """Check box on the top-right corner of one slot frame (screen coords)."""
+        return [int(x + cls.CORNER_X[0] * w), int(top + cls.CORNER_Y[0] * side),
+                int(x + cls.CORNER_X[1] * w), int(top + cls.CORNER_Y[1] * side)]
+
     def third_clover_rect(self, slot):
         """Screen box of the 3rd-clover spot of hotbar slot 1..n (None if the hotbar isn't set)."""
         r, n = self.gold_hotbar()
         if not r or not 1 <= slot <= n:
             return None
+        spots = (self.app.settings.get("gold_hotbar") or {}).get("spots") or []
+        if slot <= len(spots):                           # 🪄 Auto: pinned to each slot's top-right corner
+            return list(spots[slot - 1])
         sw, h = (r[2] - r[0]) / n, r[3] - r[1]
         x = r[0] + (slot - 1) * sw
         return [int(x + self.THIRD_X[0] * sw), int(r[1] + self.THIRD_Y[0] * h),

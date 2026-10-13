@@ -946,7 +946,9 @@ class SpatialGUI:
 
         def done(x1, y1, x2, y2):
             self.root.deiconify()
-            self.settings.settings.setdefault("gold_hotbar", {"slots": 6})["region"] = [x1, y1, x2, y2]
+            hb = self.settings.settings.setdefault("gold_hotbar", {"slots": 6})
+            hb["region"] = [x1, y1, x2, y2]
+            hb.pop("spots", None)                        # a dragged box uses the classic spots again
             self.settings.save()
             self.build_gold_card()
             self.log("Hotbar saved. Press Show to check the yellow boxes sit on each 3rd-clover spot.")

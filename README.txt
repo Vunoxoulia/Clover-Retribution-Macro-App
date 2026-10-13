@@ -1,6 +1,10 @@
 HOW TO RUN SPATIAL MACRO
 ========================
 
+WHAT'S NEW IN V6.2.9
+=====================
+- Library: 🪄 Auto now pins each gold-clover check to the top-right corner of its own hotbar slot (it could sit too high before), and reads gold reliably in small windows
+
 WHAT'S NEW IN V6.2.8
 =====================
 - video tutorial, YouTube, Discord and donate links now come from links.txt on GitHub, so they can be updated without a new version
