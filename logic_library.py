@@ -353,15 +353,10 @@ class LibraryLogic(RouteNav):
         return tuple(pt) if pt and any(pt) else None
 
     def _skip_typing(self, seconds):
-        """Wait, clicking the dialogue's Skip button if the text is still typing (auto shape check)."""
+        """Just wait while the dialogue text types out (Skip is never clicked)."""
         end = time.time() + seconds
         while self.running and time.time() < end:
-            has_panel, btns = self.read_dialog()
-            if has_panel and len(btns) == 1:
-                self.human_click(*btns[0], duration=0.12)
-                self._park_mouse()
-                time.sleep(0.6)
-            time.sleep(0.15)
+            time.sleep(0.05)
 
     def run_dialogue_fixed(self, move_idx):
         """Image / Manual mode: click Clover Training, then the move's button."""
@@ -523,7 +518,7 @@ class LibraryLogic(RouteNav):
         if self.dialog_mode() != "auto":
             return self.run_dialogue_fixed(move_idx)
         STABLE_SECS = 1.0
-        stage, last_skip, menu1_text = "training", 0.0, None
+        stage, menu1_text = "training", None
         no_panel_since, seen, seen_since = None, None, 0.0
         deadline = time.time() + 30
         self._park_mouse()
@@ -545,10 +540,8 @@ class LibraryLogic(RouteNav):
                 time.sleep(0.1)
                 continue
             if n <= 1:
-                if n == 1 and time.time() - last_skip > 0.8:
-                    self.human_click(*btns[0], duration=0.12)   # Skip (text still typing)
-                    last_skip = time.time()
-                    self._park_mouse()
+                time.sleep(0.1)                         # text still typing: wait for the menu (Skip isn't clicked)
+                continue
             elif stage == "moves" and float(np.mean(text_img ^ menu1_text)) < 0.12:
                 pass                                    # same text as the first menu: not changed yet
             elif stage == "training":
