@@ -396,6 +396,29 @@ class LibraryLogic(RouteNav):
         return True
 
     # ---------- the move list: 9 moves + Nevermind, only ~4 visible, scrolls with the mouse wheel ----------
+    TRAINING_WORDS = ("clover", "training", "research")
+    NEVER_WORDS = ("class", "reset", "opportunit")        # Class Reset must never be clicked
+
+    def find_training_button(self):
+        """The first menu's 'I'd like to research. [Clover Training]' button, found by its TEXT.
+        Returns ((x, y), description) or None. A button mentioning Class Reset is never returned."""
+        btns = self.dialog_buttons()
+        low = [(x, y, (t or "").lower()) for x, y, t in btns]
+        for x, y, t in low:
+            if any(w in t for w in self.TRAINING_WORDS) and not any(w in t for w in self.NEVER_WORDS):
+                return (x, y), f"'{t.strip()[:40]}'"
+        # No readable 'Clover Training' text: fall back to position (just above Nevermind), but only
+        # with 3+ buttons and never onto a button that reads as Class Reset.
+        if len(low) >= 3:
+            x, y, t = low[-2]
+            if not any(w in t for w in self.NEVER_WORDS):
+                return (x, y), f"button {len(low) - 1} of {len(low)} (just above Nevermind)"
+        if not getattr(self, "_warned_training", 0) or time.time() - self._warned_training > 5:
+            self.app.log(f"   First menu: can't find 'Clover Training' yet ({len(low)} button(s): "
+                         f"{' | '.join(t[:25] or '?' for _, _, t in low)}) - waiting")
+            self._warned_training = time.time()
+        return None
+
     def dialog_buttons(self):
         """[(x, y, text)] of the option buttons on screen, top to bottom (text read with OCR)."""
         win = self.get_roblox_window_region()
@@ -545,9 +568,13 @@ class LibraryLogic(RouteNav):
             elif stage == "moves" and float(np.mean(text_img ^ menu1_text)) < 0.12:
                 pass                                    # same text as the first menu: not changed yet
             elif stage == "training":
-                pick = n - 2                            # Clover Training sits just above Nevermind
-                self.app.log(f"[1/2] First menu ({n} buttons): clicking button {pick + 1} (Clover Training)")
-                self.human_click(*btns[pick], duration=0.15)
+                target = self.find_training_button()
+                if target is None:
+                    time.sleep(0.3)                     # not sure which one it is: look again, never guess
+                    continue
+                (tx, ty), why = target
+                self.app.log(f"[1/2] First menu: clicking {why}")
+                self.human_click(tx, ty, duration=0.15)
                 self._park_mouse()
                 stage, menu1_text = "moves", text_img
             else:

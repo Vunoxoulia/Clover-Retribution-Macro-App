@@ -3,6 +3,7 @@ HOW TO RUN SPATIAL MACRO
 
 WHAT'S NEW IN V6.2.8
 =====================
+- fixed Library (Auto dialogue) sometimes clicking 'New opportunities [Class Reset]' instead of 'Clover Training' - it now finds the button by its text and never clicks Class Reset
 - Library: no longer clicks the dialogue's Skip button - it waits for the text to finish instead
 
 WHAT'S NEW IN V6.2.7
