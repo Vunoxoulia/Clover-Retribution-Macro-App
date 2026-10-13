@@ -3,6 +3,8 @@ HOW TO RUN SPATIAL MACRO
 
 WHAT'S NEW IN V6.2.8
 =====================
+- video tutorial, YouTube, Discord and donate links now come from links.txt on GitHub, so they can be updated without a new version
+- new Library video tutorial
 - Library: new optional 💬 Dialogue area (Areas tab) - drag a box over the wisp's dialogue and only that box is read, so other things on screen can't confuse it
 - fixed Library (Auto dialogue) sometimes clicking 'New opportunities [Class Reset]' instead of 'Clover Training' - it now finds the button by its words (research / clover / training), even when the mouse cuts across it or the window is small (tiny, misread text), and never clicks Class Reset
 - Library: no longer clicks the dialogue's Skip button - it waits for the text to finish instead

@@ -132,3 +132,5 @@ tundra_snapshots/
 sounds/
 # launcher cache (found Python, installed-packages marker)
 .launcher/
+# last links.txt downloaded from GitHub
+links_cache.txt

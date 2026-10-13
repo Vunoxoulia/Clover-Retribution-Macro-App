@@ -100,7 +100,7 @@ class SpatialUpdater:
 
                 dest_dir = os.path.abspath(".")
 
-                PRESERVE = {"settings.json", "settings.json.bak", "settings.json.broken", "Vunoxoulia.ico", "__pycache__"}
+                PRESERVE = {"settings.json", "settings.json.bak", "settings.json.broken", "links_cache.txt", "Vunoxoulia.ico", "__pycache__"}
                 # The user's own saved data: never deleted or overwritten by an update.
                 # (recorded routes, Skill Macro snapshots, captured dialogue / minigame / OK pictures)
                 USER_DATA = {"routes", "routes_library", "smart_templates", "library_templates",

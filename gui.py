@@ -12,6 +12,7 @@ from ui_style import big_toggle, style_toggle, save_while_typing, sound_picker
 import os
 import sys
 import webbrowser
+import links
 import time
 import threading
 
@@ -41,17 +42,17 @@ class MacroSelector:
         self.create_card("Library Macro", "Auto spell clover mastery.", "Launch", 
                          lambda: self.on_select("Library Macro", LibraryLogic, 
                                                 tabs=["Main", "Settings", "Areas", "Clover Clicker", "Hotkeys", "Statistics"],
-                                                tutorial_url="https://youtu.be/4xNxNFktF5o"), 0)
+                                                tutorial_url="video_library"), 0)
 
         self.create_card("Mining Macro", "Mining away.", "Launch",
                          lambda: self.on_select("Mining Macro", MiningLogic,
                                                 tabs=["Main", "Settings", "Hotkeys"],
-                                                tutorial_url="https://youtu.be/mD85aJdDbfE"), 1)
+                                                tutorial_url="video_mining"), 1)
 
         self.create_card("Fishing Macro", "Auto Fishy.", "Launch",
                          lambda: self.on_select("Fishing Macro", FishingLogic,
                                                 tabs=["Main", "Fishing Settings", "Hotkeys"],
-                                                tutorial_url="https://youtu.be/a_4odPOc3e4"), 2)
+                                                tutorial_url="video_fishing"), 2)
 
         self.create_card("Skill Macro", "AFK skill rotation, skill\ncombos and auto item use.", "Launch",
                          self.launch_smart, 3)
@@ -75,17 +76,15 @@ class MacroSelector:
 
         link_btn = dict(height=32, width=118, corner_radius=16, font=("Arial", 13, "bold"))
         ctk.CTkButton(links_frame, text="▶  YouTube", fg_color="#c4302b", hover_color="#9e2622", **link_btn,
-                      command=lambda: webbrowser.open("https://www.youtube.com/@Vunoxoulia")).pack(side="left", padx=4)
+                      command=lambda: links.open_link("youtube")).pack(side="left", padx=4)
         ctk.CTkButton(links_frame, text="💬  Discord", fg_color="#5865F2", hover_color="#4752c4", **link_btn,
-                      command=lambda: webbrowser.open("https://discord.com/invite/VRMB4djfzp")).pack(side="left", padx=4)
+                      command=lambda: links.open_link("discord")).pack(side="left", padx=4)
 
         # Donate: pick Robux (Roblox group store) or real money (Ko-fi)
         donate_menu = tk.Menu(self.root, tearoff=0, bg="#212529", fg="#e9ecef", activebackground="#0d6efd",
                               activeforeground="#ffffff", font=("Arial", 12))
-        donate_menu.add_command(label="  Robux  (Roblox store)", command=lambda: webbrowser.open(
-            "https://www.roblox.com/communities/34022778/The-Manga-Corner#!/store"))
-        donate_menu.add_command(label="  Real money  (Ko-fi)", command=lambda: webbrowser.open(
-            "https://ko-fi.com/vunoxoulia"))
+        donate_menu.add_command(label="  Robux  (Roblox store)", command=lambda: links.open_link("donate_robux"))
+        donate_menu.add_command(label="  Real money  (Ko-fi)", command=lambda: links.open_link("donate_money"))
         donate_btn = ctk.CTkButton(links_frame, text="♥  Donate  ▾", fg_color="#ffc107", hover_color="#e0a800",
                                    text_color="#212529", **link_btn)
         donate_btn.configure(command=lambda: donate_menu.tk_popup(donate_btn.winfo_rootx(),
@@ -311,7 +310,7 @@ class SpatialGUI:
 
         tutorial_link = ctk.CTkLabel(tab, text="Video Tutorial", font=("Arial", 14, "underline"), text_color="#0dcaf0", cursor="hand2")
         tutorial_link.pack(side="bottom", pady=10)
-        tutorial_link.bind("<Button-1>", lambda e: webbrowser.open(self.tutorial_url))
+        tutorial_link.bind("<Button-1>", lambda e: links.open_link(self.tutorial_url))   # name in links.txt
 
     # ================= Mining (recorded routes) =================
     def setup_mining_settings(self, tab):

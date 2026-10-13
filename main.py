@@ -37,6 +37,8 @@ class SpatialApp:
         self.app =SpatialGUI(self.root, title=title, logic_class=logic_class, on_back=self.show_selector, tabs=tabs, tutorial_url=tutorial_url)
 
 def main():
+    import links
+    links.refresh_async()             # newest links.txt from GitHub (videos, Discord, donate)
     if sys.platform.startswith('win'):
         try:
             import ctypes

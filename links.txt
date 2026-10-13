@@ -1,0 +1,16 @@
+# VunVun's Macro - links used by the app.
+# Edit this file on GitHub (main branch) and every app picks up the change the next time it starts.
+# One link per line:   name = link        Lines starting with # are notes.
+
+# --- video tutorials ---
+video_library  = https://youtu.be/oTvYkCcnIrc
+video_mining   = https://youtu.be/mD85aJdDbfE
+video_fishing  = https://youtu.be/a_4odPOc3e4
+video_skill    = https://youtu.be/CwSAvulD4Ac
+video_events   = https://youtu.be/Ye4gGTp7fzE
+
+# --- main menu buttons ---
+youtube        = https://www.youtube.com/@Vunoxoulia
+discord        = https://discord.com/invite/VRMB4djfzp
+donate_robux   = https://www.roblox.com/communities/34022778/The-Manga-Corner#!/store
+donate_money   = https://ko-fi.com/vunoxoulia

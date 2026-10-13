@@ -1,10 +1,10 @@
 import time
 import threading
 import webbrowser
+import links
 import customtkinter as ctk
 import keyboard
 
-SKILL_VIDEO = "https://youtu.be/CwSAvulD4Ac"
 from settings import SpatialSettings
 from overlay import Overlay, PointSelector, PersistentOverlay
 from logic_smart import SmartMacroLogic
@@ -1100,7 +1100,7 @@ class SmartMacroGUI:
                       command=lambda: self.open_guide(section)).place(relx=1.0, x=-10, y=8, anchor="ne")
         ctk.CTkButton(card, text="▶ Video", width=64, height=24, font=("Arial", 11, "bold"), fg_color="#343a40",
                       hover_color="#495057", text_color="#ff6b6b",
-                      command=lambda: webbrowser.open(SKILL_VIDEO)).place(relx=1.0, x=-76, y=8, anchor="ne")
+                      command=lambda: links.open_link("video_skill")).place(relx=1.0, x=-76, y=8, anchor="ne")
 
     # ---------- loadouts ----------
     def _refresh_loadout_menu(self):

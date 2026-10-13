@@ -1,5 +1,6 @@
 import time
 import webbrowser
+import links
 import threading
 import customtkinter as ctk
 from overlay import Overlay, PointSelector
@@ -78,7 +79,7 @@ class EventsPage:
                       hover_color="#495057", text_color="#0dcaf0", command=self.open_help).pack(side="right")
         ctk.CTkButton(head, text="▶ Video", width=64, height=24, font=("Arial", 11, "bold"), fg_color="#343a40",
                       hover_color="#495057", text_color="#ff6b6b",
-                      command=lambda: webbrowser.open("https://youtu.be/Ye4gGTp7fzE")).pack(side="right", padx=(0, 6))
+                      command=lambda: links.open_link("video_events")).pack(side="right", padx=(0, 6))
         ctk.CTkLabel(top, text="Posts the [Event]s from every Roblox window's chat to Discord. Keeps running in every macro.",
                      font=("Arial", 12), text_color="#ced4da", wraplength=420, justify="left").pack(anchor="w", padx=10)
         self.toggle = big_toggle(top, self.flip)
