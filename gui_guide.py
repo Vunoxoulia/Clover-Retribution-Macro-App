@@ -553,8 +553,7 @@ LIBRARY_PAGES = [
     ("Dialogue", "3. Wisp dialogue mode", draw_lib_dialog,
      "Auto (default): finds the buttons by shape — try this first.  Image: you capture a picture of each button.  "
      "Manual: you click the exact spot of each button (only for moves visible without scrolling). "
-     "Test Dialogue (F1) shows what each button reads. Auto having a hard time? Areas tab → 💬 Dialogue area: with the "
-     "dialogue open, drag ONE box over its text box AND the buttons - then only that box is read."),
+     "Test Dialogue (F1) shows what each button reads."),
     ("Dialogue", "4. Image mode", draw_lib_image,
      "Talk to the wisp so the menu is on screen, press 📸 Capture next to Clover Training and drag a tight box around "
      "that button. Do the same for each move button in the move menu."),

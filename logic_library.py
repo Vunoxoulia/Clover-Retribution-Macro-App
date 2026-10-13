@@ -206,12 +206,11 @@ class LibraryLogic(RouteNav):
 
     # ================= Dialogue (language independent) =================
     @staticmethod
-    def find_dialog(img, whole=False):
+    def find_dialog(img):
         """Find the dialogue panel and the option buttons to its right, by shape.
-        Returns (panel, buttons) in image coords; buttons top-to-bottom.
-        whole: search the whole image (a Dialogue area is set and everything else is blanked out)."""
+        Returns (panel, buttons) in image coords; buttons top-to-bottom."""
         H, W = img.shape[:2]
-        y0 = 0 if whole else int(H * 0.55)
+        y0 = int(H * 0.55)
         g = cv2.cvtColor(img[y0:], cv2.COLOR_BGR2GRAY)
         bgr = img[y0:].astype(np.int16)
         hovered = (bgr[..., 1] > bgr[..., 2] + 25) & (bgr[..., 1] > bgr[..., 0] + 15)  # green = mouse over it
@@ -250,37 +249,12 @@ class LibraryLogic(RouteNav):
                    if px + pw < x1 < px + pw + W * 0.08 and W * 0.06 < x2 - x1 < W * 0.16]
         return panel, sorted(buttons, key=lambda b: b[1])
 
-    # ---------- Dialogue area (Areas tab, optional) ----------
-    def dialog_area(self):
-        """The user's box around the wisp's dialogue (text box + buttons), or None."""
-        r = self.app.settings.get("regions", {}).get("dialog_area", [0, 0, 0, 0])
-        return list(r) if r and r[2] > r[0] and r[3] > r[1] else None
-
-    def _dialog_screen(self):
-        """The Roblox window picture used to read the dialogue. With a Dialogue area set, everything
-        outside it is painted white, so only the dialogue itself can be found."""
-        img = self._screen()
-        area = self.dialog_area()
-        if area is None or img is None:
-            return img
-        win = self.get_roblox_window_region()
-        x1, y1 = max(0, area[0] - win[0]), max(0, area[1] - win[1])
-        x2, y2 = min(img.shape[1], area[2] - win[0]), min(img.shape[0], area[3] - win[1])
-        if x2 <= x1 or y2 <= y1:
-            return img                                   # box isn't on this window: ignore it
-        out = np.full_like(img, 255)
-        out[y1:y2, x1:x2] = img[y1:y2, x1:x2]
-        return out
-
-    def _find_dialog_here(self, img):
-        return self.find_dialog(img, whole=self.dialog_area() is not None)
-
     def read_dialog(self, with_text=False):
         """(dialogue open?, button centres) - plus a small image of the panel's text
         when with_text, used to tell menus apart without reading any words."""
         win = self.get_roblox_window_region()
-        img = self._dialog_screen()
-        panel, buttons = self._find_dialog_here(img)
+        img = self._screen()
+        panel, buttons = self.find_dialog(img)
         centers = [(win[0] + x + w // 2, win[1] + y + h // 2) for x, y, w, h in buttons]
         if not with_text:
             return panel is not None, centers
@@ -469,20 +443,14 @@ class LibraryLogic(RouteNav):
         """OCR the strip right of the dialogue panel (where the option buttons are); return the screen
         centre of the first text line containing one of `words` (and none of `never`), or None."""
         win = self.get_roblox_window_region()
-        img = self._dialog_screen()
-        panel, _ = self._find_dialog_here(img)
-        own = self.dialog_area()
-        if panel:
-            px, py, pw, ph = panel
-            W = img.shape[1]
-            area = [win[0] + px + pw, win[1] + max(0, py - int(ph * 0.3)),
-                    win[0] + min(W, px + pw + int(W * 0.18)), win[1] + py + ph]
-            if own:                                      # stay inside the user's box
-                area = [max(area[0], own[0]), max(area[1], own[1]), min(area[2], own[2]), min(area[3], own[3])]
-        elif own:
-            area = own                                   # panel not recognised: read the whole box
-        else:
+        img = self._screen()
+        panel, _ = self.find_dialog(img)
+        if not panel:
             return None
+        px, py, pw, ph = panel
+        W = img.shape[1]
+        area = [win[0] + px + pw, win[1] + max(0, py - int(ph * 0.3)),
+                win[0] + min(W, px + pw + int(W * 0.18)), win[1] + py + ph]
         lines = self.utils.get_text_from_region(area)
         lines.sort(key=lambda r: min(p[1] for p in r[0]))
         for i, (box, text, conf) in enumerate(lines):
@@ -497,8 +465,8 @@ class LibraryLogic(RouteNav):
     def dialog_buttons(self):
         """[(x, y, text)] of the option buttons on screen, top to bottom (text read with OCR)."""
         win = self.get_roblox_window_region()
-        img = self._dialog_screen()
-        panel, boxes = self._find_dialog_here(img)
+        img = self._screen()
+        panel, boxes = self.find_dialog(img)
         if not boxes:
             return []
         x1 = min(b[0] for b in boxes); y1 = min(b[1] for b in boxes)

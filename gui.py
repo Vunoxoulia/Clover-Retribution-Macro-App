@@ -862,24 +862,6 @@ class SpatialGUI:
                                          font=("Arial", 12), text_color="#75b798" if any(pos) else "#ea868f")
         self.chat_btn_lbl.pack(side="left", padx=8)
 
-        # where the wisp's dialogue appears (optional) - only that box is read for its buttons
-        dc = ctk.CTkFrame(tab, fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
-        dc.pack(fill="x", padx=15, pady=4)
-        row = ctk.CTkFrame(dc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(6, 2))
-        ctk.CTkButton(row, text="💬 Dialogue area", width=150, height=28, fg_color="#0d6efd", hover_color="#0b5ed7",
-                      command=lambda: self.pick_region("dialog_area")).pack(side="left")
-        ctk.CTkButton(row, text="Clear", width=50, height=28, fg_color="#495057", hover_color="#343a40",
-                      command=self._clear_dialog_area).pack(side="left", padx=(6, 3))
-        ctk.CTkButton(row, text="👁 Show", width=64, height=28, fg_color="#495057", hover_color="#343a40",
-                      command=self._show_dialog_area).pack(side="left", padx=3)
-        self.dialog_area_lbl = ctk.CTkLabel(row, text="", font=("Arial", 12))
-        self.dialog_area_lbl.pack(side="left", padx=8)
-        ctk.CTkLabel(dc, text="optional — with the wisp's dialogue open, drag ONE box over its text box AND the "
-                              "buttons on the right. Then only that box is read.",
-                     font=("Arial", 12), text_color="#ced4da", justify="left", wraplength=420
-                     ).pack(fill="x", padx=8, pady=(0, 6))
-        self._refresh_dialog_area()
-
         cr = ctk.CTkFrame(tab, fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
         cr.pack(fill="x", padx=15, pady=4)
         row = ctk.CTkFrame(cr, fg_color="transparent"); row.pack(fill="x", padx=8, pady=6)
@@ -1332,30 +1314,8 @@ class SpatialGUI:
         self._hide_for_pick()
         Overlay(lambda x1, y1, x2, y2: self.save_region(key, x1, y1, x2, y2))
 
-    def _refresh_dialog_area(self):
-        if not hasattr(self, "dialog_area_lbl"):
-            return
-        on = self.logic.dialog_area() is not None if hasattr(self.logic, "dialog_area") else False
-        self.dialog_area_lbl.configure(text="✔ set" if on else "not set",
-                                       text_color="#75b798" if on else "#adb5bd")
-
-    def _clear_dialog_area(self):
-        self.settings.settings["regions"]["dialog_area"] = [0, 0, 0, 0]
-        self.settings.save()
-        self._refresh_dialog_area()
-
-    def _show_dialog_area(self):
-        r = self.logic.dialog_area()
-        if not r:
-            self.log("No dialogue area set yet."); return
-        ov = PersistentOverlay(r[0], r[1], r[2], r[3], color="cyan")
-        self.root.after(3000, ov.destroy)
-
     def save_region(self, key, x1, y1, x2, y2):
         self.root.deiconify(); self.settings.settings["regions"][key] = [x1, y1, x2, y2]; self.settings.save(); self.check_calibration()
-        if key == "dialog_area":
-            self._refresh_dialog_area()
-            self.log("Dialogue area saved. Open the wisp's dialogue and press Test Dialogue (F1) to check.")
         if key.startswith("gold_clover_") and getattr(self, "gold_status", {}).get(int(key[-1])):
             self.gold_status[int(key[-1])].configure(text="✔ set", text_color="#75b798")
         if key == "ok_scan_area":
