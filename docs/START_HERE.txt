@@ -1,0 +1,73 @@
+╔════════════════════════════════════════════════════════════════╗
+║                   VUNVUN'S MACRO - START HERE                  ║
+║              Clover Retribution macros for Windows             ║
+╚════════════════════════════════════════════════════════════════╝
+
+🚀 QUICK START
+═════════════════════════════════════════════════════════════════
+
+   1. Unzip the download first (right-click the .zip → Extract All)
+   2. Double-click: Windows_Launcher.bat  (don't "Run as administrator")
+   3. Wait for Python to be found (it offers to install 3.12 if needed)
+   4. Wait for the packages to install (only the first time)
+   5. The macro opens! 🎮
+
+═════════════════════════════════════════════════════════════════
+
+📁 FOLDERS
+═════════════════════════════════════════════════════════════════
+
+Windows_Launcher.bat  ← double-click this to start
+app\                  ← the program (replaced by updates)
+data\                 ← YOUR settings, routes, pictures and sounds
+                        (updates never touch it - back this up)
+docs\                 ← patch notes and guides
+
+═════════════════════════════════════════════════════════════════
+
+📋 WHAT'S INCLUDED
+═════════════════════════════════════════════════════════════════
+
+✅ Library, Mining, Fishing and Skill Macro
+✅ Event Notifier (server events to Discord)
+✅ Automatic Python detection and package installation
+✅ Built-in updater
+✅ Hotkey customization
+
+═════════════════════════════════════════════════════════════════
+
+✨ SYSTEM REQUIREMENTS
+═════════════════════════════════════════════════════════════════
+
+Minimum:
+  • Windows 10 (64-bit)
+  • 4GB RAM
+  • Python 3.11 - 3.14 (the launcher finds or installs it)
+  • Microsoft Visual C++ Redistributable x64 (the launcher tells you if it's missing)
+
+Recommended:
+  • Windows 11
+  • 8GB+ RAM
+  • Display: 1920x1080 at 100% scaling
+  • Roblox in Windowed or Borderless Windowed mode
+
+Mac and Linux are not supported.
+
+═════════════════════════════════════════════════════════════════
+
+❓ NEED HELP?
+═════════════════════════════════════════════════════════════════
+
+1. Read README.txt for features, usage and antivirus warnings
+2. Check PATCH_NOTES.txt for what changed
+3. Watch the video guides (buttons in each macro)
+4. Ask in the Discord (button on the main menu)
+
+═════════════════════════════════════════════════════════════════
+
+🎮 YOU'RE ALL SET!
+
+Just double-click Windows_Launcher.bat.
+No prior Python knowledge needed!
+
+═════════════════════════════════════════════════════════════════

@@ -11,12 +11,12 @@ After Download
 Click the folder.zip
 Right click and Extract all
 
-REREQUISITES & SYSTEM REQUIREMENTS
+PREREQUISITES & SYSTEM REQUIREMENTS
 ==================================
 
 SOFTWARE REQUIREMENTS:
 - Operating System: Windows 10 or Windows 11 (64-bit).
-- Python: Version 3.10 to 3.13 (3.12.3 is recommended).
+- Python: Version 3.11 to 3.14 (3.12 is recommended) - the launcher offers to install it.
 
 HARDWARE REQUIREMENTS:
 - CPU: Intel Core i3 / AMD Ryzen 3 or better.
@@ -34,12 +34,18 @@ INSTALLING PYTHON:
    *** IMPORTANT ***: Check the box that says "Add Python to PATH" during installation.
 3. Verify Pip: Pip is usually installed with Python automatically.
 
+FOLDERS
+=======
+- Windows_Launcher.bat - double-click this to start
+- app\  - the program (replaced by updates)
+- data\ - YOUR settings, routes, pictures and sounds (updates never touch it - back this up)
+- docs\ - patch notes and guides
+
 HOW TO RUN
 ==========
 
-double click or open Windows_Launcher.bat for windows users
+Double-click Windows_Launcher.bat (Windows 10 / 11 only - Mac and Linux aren't supported).
 
-double click or open Linux_Mac_Launcher.sh for Linux and Mac users this is however experimental im not sure if its going to work.
 
 ----------
 Use this for daily use. It will automatically install required libraries, check for system dependencies, and start the macro.
@@ -54,7 +60,7 @@ Why is this happening?
 2. Keygen/Downloader: The `updater.py` script is designed to download the latest version from GitHub and replace local files. This behavior (downloading and modifying its own files) is a common trigger for "Keygen" or "Downloader" heuristics.
 
 Is it safe?
-Yes. The code is open-source. You can inspect `utils.py` to see exactly how keyboard/mouse inputs are handled, and `updater.py` to see how updates are processed.
+Yes. The code is open-source. You can inspect `app/utils.py` to see exactly how keyboard/mouse inputs are handled, and `app/updater.py` to see how updates are processed.
 
 USAGE
 =====

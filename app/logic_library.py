@@ -13,6 +13,7 @@ DIALOG_TEMPLATE_DIR = os.path.join(get_base_path(), "library_templates")
 DIALOG_MODES = ("auto", "image", "manual")
 # Settings key per dialogue button (manual spots reuse the old "positions" entries)
 MAX_MOVES = 9          # one per hotbar slot; the wisp's list is these 9 + Nevermind (always last)
+MANUAL_MOVES = 3       # Manual dialogue clicks fixed spots and never scrolls: only the first 3 moves are reachable
 DIALOG_BUTTONS = {"clover_training": "Clover Training", **{f"move_{i}": f"Move {i}" for i in range(1, MAX_MOVES + 1)}}
 
 
@@ -27,6 +28,7 @@ class LibraryLogic(RouteNav):
     ROUTES_DIRNAME = "routes_library"
     BUILTIN_ROUTE = "VunVun's route"
     BUILTIN_DIR = os.path.join("builtin_routes", "library")
+    EXTRA_BUILTINS = (("VunVun's route 2", os.path.join("builtin_routes", "library_2")),)
     ACTIVE_ROUTE_KEY = "library_active_route"
     USE_ALIGNMENT = False      # normal 3rd-person camera: no snapshot walking
     ROUTE_TARGET = "wisp"
@@ -42,18 +44,40 @@ class LibraryLogic(RouteNav):
 
     # ================= Which moves to train =================
     def _nine(self, key, fill):
-        """Settings list padded to MAX_MOVES (older setups had 3)."""
+        """Settings list padded to MAX_MOVES (older setups had 3). Padded IN PLACE: the saved list is never
+        swapped for a copy, or a page still holding the old list (slot dropdowns) would edit a dropped copy."""
         st = self.app.settings.settings
-        lst = list(st.get(key) or [])
+        lst = st.get(key)
+        if not isinstance(lst, list):
+            lst = st[key] = []
         for i in range(len(lst), MAX_MOVES):
             lst.append(fill(i) if callable(fill) else fill)
-        st[key] = lst[:MAX_MOVES]
-        return st[key]
+        del lst[MAX_MOVES:]
+        return lst
+
+    def set_move_slot(self, i, slot):
+        """Which hotbar slot move i sits in (for the gold clover check)."""
+        self._nine("gold_move_slots", lambda k: k + 1)[i] = int(slot)
+        self.app.settings.save()
 
     def move_names(self):
         return self._nine("move_names", "")
 
+    def manual_moves(self):
+        """Manual dialogue's own 3 move spots: [{'train': bool, 'slot': hotbar slot}]. Independent of
+        'Moves to train' (names / ticks / slots there are for Auto and Image only)."""
+        st = self.app.settings.settings
+        lst = st.get("manual_moves")
+        if not isinstance(lst, list):
+            lst = st["manual_moves"] = []
+        for i in range(len(lst), MANUAL_MOVES):
+            lst.append({"train": i == 0, "slot": i + 1})
+        del lst[MANUAL_MOVES:]
+        return lst
+
     def train_flags(self):
+        if self.dialog_mode() == "manual":           # Manual: its own ticks, only 3 spots
+            return [bool(m.get("train")) for m in self.manual_moves()] + [False] * (MAX_MOVES - MANUAL_MOVES)
         if not self.app.settings.get("train_moves"):
             names = self.move_names()
             self.app.settings.settings["train_moves"] = ([bool(n) for n in names] if any(names)
@@ -61,6 +85,8 @@ class LibraryLogic(RouteNav):
         return list(self._nine("train_moves", False))
 
     def move_label(self, i):
+        if self.dialog_mode() == "manual":
+            return f"Move spot {i + 1}"
         name = self.move_names()[i]
         return f"Move {i + 1}" + (f" ({name})" if name else "")
 
@@ -141,6 +167,8 @@ class LibraryLogic(RouteNav):
         return float((prof * np.arange(y1, y2)).sum() / prof.sum())
 
     def move_slot(self, i):
+        if self.dialog_mode() == "manual" and i < MANUAL_MOVES:
+            return int(self.manual_moves()[i].get("slot") or i + 1)
         return int(self._nine("gold_move_slots", lambda k: k + 1)[i])
 
     CORNER_X = (0.71, 0.96)     # of the slot's width: the 3rd clover / top-right corner of the frame
@@ -185,10 +213,22 @@ class LibraryLogic(RouteNav):
         area = self.app.settings.get("regions", {}).get(f"gold_clover_{i + 1}", [0, 0, 0, 0])
         return any(v != 0 for v in area) and self.utils.check_pixel_area(area, self.GOLD_CLOVER_COLOR, tolerance=25)
 
+    def usable_moves(self):
+        """How many moves this dialogue mode can reach: Manual = 3 (fixed spots, no scrolling), else all 9."""
+        return MANUAL_MOVES if self.dialog_mode() == "manual" else MAX_MOVES
+
     def check_trained_status(self):
         """A move is done when its 3rd clover is gold (automatic: read from the hotbar; manual: its own box)."""
         flags = self.train_flags()
         trained = [not f for f in flags]
+        limit = self.usable_moves()
+        skipped = [i for i in range(limit, MAX_MOVES) if not trained[i]]
+        if skipped and not getattr(self, "_warned_manual_limit", False):
+            self.app.log(f"Manual dialogue only reaches Moves 1-{MANUAL_MOVES} (no scrolling) - skipping "
+                         + ", ".join(f"Move {i + 1}" for i in skipped) + ". Use Image or Auto for those.")
+            self._warned_manual_limit = True
+        for i in skipped:
+            trained[i] = True
         for i in range(MAX_MOVES):
             if trained[i]:
                 continue
@@ -238,32 +278,57 @@ class LibraryLogic(RouteNav):
             x, y, w, h, a = st[i]
             if w > W * 0.2 and h > H * 0.12 and a > w * h * 0.5:
                 panel = (x, y + y0, w, h)
-        if not panel:
+        def column_fallback():
+            # The panel can blend into other dark things (the macro window, a dark floor) or another dark area
+            # can look like it, so find the BUTTON COLUMN itself: 2+ same-size dark buttons stacked at one x.
+            cands = [(int(x), int(y) + y0, int(w), int(h)) for x, y, w, h, a in st[1:]
+                     if W * 0.06 < w < W * 0.16 and H * 0.02 < h < H * 0.07 and a > w * h * 0.35]
+            best = []
+            for c in cands:
+                col = sorted((o for o in cands if abs(o[0] - c[0]) <= 6 and abs(o[2] - c[2]) <= c[2] * 0.1),
+                             key=lambda o: o[1])
+                if len(col) >= 2 and len(col) > len(best):
+                    best = col
+            if not best:
+                return None
+            bx = min(b[0] for b in best)
+            top, bottom = min(b[1] for b in best), max(b[1] + b[3] for b in best)
+            return (max(0, bx - 12), top, 1, bottom - top)        # a thin stand-in just left of the buttons
+
+        def buttons_next_to(panel):
+            px, py, pw, ph = panel
+            # pieces right of the panel; a button can be cut in two by a bright line (mouse pointer, glare),
+            # so pieces on the same row that touch are joined back into one button first
+            parts = []
+            for i in range(1, n):
+                x, y, w, h, a = st[i]
+                y += y0
+                # fill >= 35%: in small windows a button's two lines of text cover much of its dark fill
+                if px + pw < x < px + pw + W * 0.16 and H * 0.02 < h < H * 0.07 and w > 6 and a > w * h * 0.35:
+                    parts.append([x, y, x + w, y + h])
+            parts.sort()
+            merged = []
+            for p_ in parts:
+                for m in merged:
+                    same_row = abs(m[1] - p_[1]) <= 6 and abs(m[3] - p_[3]) <= 6
+                    if same_row and p_[0] - m[2] <= 14:
+                        m[0], m[1] = min(m[0], p_[0]), min(m[1], p_[1])
+                        m[2], m[3] = max(m[2], p_[2]), max(m[3], p_[3])
+                        break
+                else:
+                    merged.append(list(p_))
+            buttons = [(x1, y1, x2 - x1, y2 - y1) for x1, y1, x2, y2 in merged
+                       if px + pw < x1 < px + pw + W * 0.08 and W * 0.06 < x2 - x1 < W * 0.16]
+            return sorted(buttons, key=lambda b: b[1])
+
+        buttons = buttons_next_to(panel) if panel else []
+        if not buttons:
+            alt = column_fallback()
+            if alt:
+                panel, buttons = alt, buttons_next_to(alt)
+        if not buttons and not panel:
             return None, []
-        px, py, pw, ph = panel
-        # pieces right of the panel; a button can be cut in two by a bright line (mouse pointer, glare),
-        # so pieces on the same row that touch are joined back into one button first
-        parts = []
-        for i in range(1, n):
-            x, y, w, h, a = st[i]
-            y += y0
-            # fill >= 35%: in small windows a button's two lines of text cover much of its dark fill
-            if px + pw < x < px + pw + W * 0.16 and H * 0.02 < h < H * 0.07 and w > 6 and a > w * h * 0.35:
-                parts.append([x, y, x + w, y + h])
-        parts.sort()
-        merged = []
-        for p_ in parts:
-            for m in merged:
-                same_row = abs(m[1] - p_[1]) <= 6 and abs(m[3] - p_[3]) <= 6
-                if same_row and p_[0] - m[2] <= 14:
-                    m[0], m[1] = min(m[0], p_[0]), min(m[1], p_[1])
-                    m[2], m[3] = max(m[2], p_[2]), max(m[3], p_[3])
-                    break
-            else:
-                merged.append(list(p_))
-        buttons = [(x1, y1, x2 - x1, y2 - y1) for x1, y1, x2, y2 in merged
-                   if px + pw < x1 < px + pw + W * 0.08 and W * 0.06 < x2 - x1 < W * 0.16]
-        return panel, sorted(buttons, key=lambda b: b[1])
+        return panel, buttons
 
     def read_dialog(self, with_text=False):
         """(dialogue open?, button centres) - plus a small image of the panel's text
@@ -489,6 +554,55 @@ class LibraryLogic(RouteNav):
                 return int(area[0] + cx), int(area[1] + cy)
         return None
 
+    def _ocr_button(self, crop):
+        """Read ONE button picture. Small, pixelated text (e.g. 'Sovereign Magic: Cage Gates' squeezed into
+        a smaller font) reads blank or as 'Cagt' straight off the screen; enlarging it smoothly and giving it
+        a wide border of its own background makes the reader see the whole line."""
+        if crop is None or not crop.size:
+            return ""
+        self.utils._init_ocr()
+        reader = getattr(self.utils, "ocr_reader", None)
+        if not reader:
+            return ""
+        best = ""
+        for up in (2, 4):
+            big = cv2.resize(crop, None, fx=up, fy=up, interpolation=cv2.INTER_LANCZOS4)
+            big = cv2.copyMakeBorder(big, 40, 40, 40, 40, cv2.BORDER_REPLICATE)
+            try:
+                res, _ = reader(big)
+            except Exception:
+                res = None
+            res = sorted(res or [], key=lambda r: (min(p[1] for p in r[0]), min(p[0] for p in r[0])))
+            text = " ".join(t for _, t, c in res if float(c) > 0.3).strip()
+            if len(self._norm_name(text)) > len(self._norm_name(best)):
+                best = text
+        return best
+
+    def _read_button_texts(self, win, boxes, img_h=None, img=None):
+        """Read ALL the option buttons in one go (the whole column plus a margin - reading each button on its
+        own cuts letters at its edges) and give each button the text lines that sit on it."""
+        m = 10
+        x1 = max(0, min(b[0] for b in boxes) - m); y1 = max(0, min(b[1] for b in boxes) - m)
+        x2 = max(b[0] + b[2] for b in boxes) + m; y2 = max(b[1] + b[3] for b in boxes) + m
+        if img_h:
+            y2 = min(y2, img_h)
+        found = self.utils.get_text_from_region([win[0] + x1, win[1] + y1, win[0] + x2, win[1] + y2], upscale=3)
+        texts = []
+        for x, y, w, h in boxes:
+            cy = y + h / 2 - y1
+            lines = sorted((min(p[1] for p in bb), t) for bb, t, c in found
+                           if abs((bb[0][1] + bb[2][1]) / 2 - cy) < h * 0.6)
+            texts.append(" ".join(t for _, t in lines))
+        if img is not None:
+            # a button that read blank, or the same as another one, gets its own careful read
+            for i, (x, y, w, h) in enumerate(boxes):
+                k = self._norm_name(texts[i])
+                if not k or sum(1 for t in texts if self._norm_name(t) == k) > 1:
+                    again = self._ocr_button(img[max(0, y):y + h, max(0, x):x + w])
+                    if self._norm_name(again):
+                        texts[i] = again
+        return texts
+
     def dialog_buttons(self):
         """[(x, y, text)] of the option buttons on screen, top to bottom (text read with OCR)."""
         win = self.get_roblox_window_region()
@@ -496,36 +610,103 @@ class LibraryLogic(RouteNav):
         panel, boxes = self.find_dialog(img)
         if not boxes:
             return []
-        x1 = min(b[0] for b in boxes); y1 = min(b[1] for b in boxes)
-        x2 = max(b[0] + b[2] for b in boxes); y2 = max(b[1] + b[3] for b in boxes)
-        found = self.utils.get_text_from_region([win[0] + x1, win[1] + y1, win[0] + x2, win[1] + y2])
-        out = []
-        for x, y, w, h in boxes:
-            cy = y + h / 2 - y1
-            text = " ".join(t for bb, t, c in found if abs((bb[0][1] + bb[2][1]) / 2 - cy) < h * 0.6)
-            out.append((win[0] + x + w // 2, win[1] + y + h // 2, text))
-        return out
+        texts = self._read_button_texts(win, boxes, img.shape[0], img)
+        return [(win[0] + x + w // 2, win[1] + y + h // 2, t) for (x, y, w, h), t in zip(boxes, texts)]
 
     @staticmethod
     def _same_name(a, b):
-        a = "".join(ch for ch in a.lower() if ch.isalnum())
-        b = "".join(ch for ch in b.lower() if ch.isalnum())
-        if not a or not b:
+        """Does button text b show move name a? Whole-name match (forgiving), or - for the one-word names
+        Auto setup saves - any single word on the button within one misread letter ('Cage' ~ 'Cagt')."""
+        import difflib, re
+        an = "".join(ch for ch in a.lower() if ch.isalnum())
+        bn = "".join(ch for ch in b.lower() if ch.isalnum())
+        if not an or not bn:
             return False
-        import difflib
-        return a in b or b in a or difflib.SequenceMatcher(None, a, b).ratio() >= 0.8
+        if an in bn or bn in an or difflib.SequenceMatcher(None, an, bn).ratio() >= 0.8:
+            return True
+        if len(an) >= 3 and " " not in a.strip():
+            return any(difflib.SequenceMatcher(None, an, w).ratio() >= 0.75
+                       for w in re.findall(r"[a-z0-9]+", b.lower()) if len(w) >= 3)
+        return False
 
     def _scroll_list(self, buttons, notches=-1):
         """One mouse-wheel notch down over the button column."""
         from pynput.mouse import Controller as MouseController
         x, y = buttons[len(buttons) // 2][:2]
         with self.input_lock:
-            self.utils.mouse_move(x, y)
-            time.sleep(0.1)
-            MouseController().scroll(0, notches)
+            # Roblox misses an instant jump: glide there in small steps, wiggle, THEN scroll
+            mc = MouseController()
+            sx, sy = mc.position
+            for k in range(1, 13):
+                self.utils.mouse_move(int(sx + (x - sx) * k / 12), int(sy + (y - sy) * k / 12))
+                time.sleep(0.015)
+            for dx in (3, -3, 0):
+                self.utils.mouse_move(x + dx, y)
+                time.sleep(0.04)
+            time.sleep(0.15)
+            for _ in range(abs(notches)):
+                mc.scroll(0, -1 if notches < 0 else 1)
+                time.sleep(0.08)
         time.sleep(0.6)                                 # let the list settle
         self._park_mouse()
         time.sleep(0.2)
+
+    @staticmethod
+    def _is_skip(text):
+        return (text or "").strip().lower().strip(".!") in ("skip", "skip>", ">>")
+
+    def _move_refs(self):
+        """Names to recognise the move list by: the hotbar names read once (cached for this session)
+        plus the saved 'Moves to train' names."""
+        refs = list(getattr(self, "_hotbar_seen", []) or [])
+        if not refs and self.running and not getattr(self, "_hotbar_tried", False):
+            self._hotbar_tried = True                 # read the hotbar once per session, not every dialogue
+            try:
+                refs = [t for _, t in (self.read_hotbar_names() or []) if t]
+                self._hotbar_seen = refs
+            except Exception:
+                refs = []
+        flags = self.train_flags()
+        names = self._nine("move_names", "")
+        return refs + [names[i] for i in range(MAX_MOVES) if flags[i] and names[i]]
+
+    def _looks_like_move(self, text, refs):
+        """Does this button text match one of the moves ~50% or more? First-menu buttons never count."""
+        import difflib
+        t = self._norm_name(text)
+        if len(t) < 3 or self._is_skip(text) or self._has_word(text, self.TRAINING_WORDS) or self._has_word(text, self.NEVER_WORDS)                 or "never" in t:
+            return False
+        for r in refs:
+            rn = self._norm_name(r)
+            if len(rn) < 3:
+                continue
+            need = 0.5 if min(len(t), len(rn)) >= 6 else 0.75     # short words need a closer match
+            if rn in t or difflib.SequenceMatcher(None, t, rn).ratio() >= need:
+                return True
+        return False
+
+    def wait_move_list(self, timeout=12.0, alive=None):
+        """Wait until the MOVE LIST is on screen: 2+ real buttons (not just 'Skip' while the text is typing)
+        and the same buttons for ~0.8 s. Returns those buttons [(x, y, text)], or [] if it never settled."""
+        alive = alive or (lambda: self.running)
+        end = time.time() + timeout
+        last, since = None, 0.0
+        refs = self._move_refs()
+        while alive() and time.time() < end:
+            buttons = [b for b in self.dialog_buttons() if not self._is_skip(b[2])]
+            sig = tuple(self._norm_name(b[2]) for b in buttons)
+            # fast trigger: a button that looks ~50% like one of YOUR moves (hotbar / saved names) = the move list
+            if any(self._looks_like_move(b[2], refs) for b in buttons):
+                return buttons
+            if len(buttons) >= 2:
+                if sig != last:
+                    last, since = sig, time.time()
+                elif time.time() - since >= 0.8:
+                    return buttons
+            else:
+                last = None
+            time.sleep(0.25)
+        return []
 
     def pick_move_button(self, move_idx):
         """In the move menu: find the move by its captured picture or its name; if it isn't visible,
@@ -542,10 +723,10 @@ class LibraryLogic(RouteNav):
                     self.app.log(f"[2/2] Found {label} (picture) - clicking")
                     self.human_click(*pt, duration=0.15)
                     return True
-            buttons = self.dialog_buttons()
+            buttons = self.wait_move_list()
             if not buttons:
-                time.sleep(0.4)
-                continue
+                self.app.log(f"-> The move list didn't show up (only 'Skip' / no buttons).")
+                return False
             if name:
                 hit = next((b for b in buttons if self._same_name(name, b[2])), None)
                 if hit:
@@ -597,6 +778,27 @@ class LibraryLogic(RouteNav):
                     self.app.log("Dialogue opened.")
                     return True
                 time.sleep(0.15)
+        return False
+
+    def reopen_dialogue(self, tries=10):
+        """Standing at the wisp: double jump (space, space) then E, until the dialogue shows again.
+        Every key waits for its animation first. Returns True once it's open."""
+        for _ in range(tries):
+            if not self.running or not self.wait_for_roblox_focus():
+                return False
+            self.utils.send_key('space'); time.sleep(0.35)     # jump
+            self.utils.send_key('space'); time.sleep(0.8)      # double jump, then land
+            self.utils.send_key('e')
+            if self.dialog_mode() == "manual":
+                time.sleep(1.0)
+                return True                               # manual mode can't see the dialogue: assume it opened
+            end = time.time() + 2.0
+            while self.running and time.time() < end:
+                if self.dialogue_visible():
+                    self.app.log("Dialogue open again.")
+                    return True
+                time.sleep(0.15)
+        self.app.log("Couldn't reopen the dialogue here - walking to the wisp again.")
         return False
 
     def _park_mouse(self):
@@ -694,7 +896,21 @@ class LibraryLogic(RouteNav):
                 self.app.log("Couldn't open the wisp dialogue. Trying again from the start...")
                 time.sleep(1.0)
                 continue
-            if not self.run_dialogue(self.current_move_idx):
+            # The dialogue WAS found. If it closes before the move is picked (Nevermind, a misclick...),
+            # we're still at the wisp: stay here, double jump + E until it's back - no walking again.
+            done = False
+            for attempt in range(3):
+                if self.run_dialogue(self.current_move_idx):
+                    done = True
+                    break
+                if not self.running:
+                    break
+                if self.dialog_mode() != "manual" and self.dialogue_visible():
+                    continue                            # still open: just try the dialogue again
+                self.app.log("Dialogue closed - staying here: double jump + E until it opens again")
+                if not self.reopen_dialogue():
+                    break
+            if not done:
                 time.sleep(1.0)
                 continue
             self.perform_clover_scoring()
@@ -742,6 +958,297 @@ class LibraryLogic(RouteNav):
         self.app.log(f"Test scroll: before: {names(before)}  →  after: {names(after)}  "
                      + ("✔ the list scrolled" if moved else "✖ nothing changed (already at the bottom, or scrolling "
                                                            "doesn't reach the list)"))
+
+    # ---------- 🪄 Auto setup: hotbar names -> wisp move list -> 'Moves to train' ----------
+    @staticmethod
+    def _norm_name(t):
+        return "".join(ch for ch in (t or "").lower() if ch.isalnum())
+
+    def read_hotbar_names(self, only_slots=None):
+        """[(hotbar slot number, text read on it)] for the FILLED slots of the Roblox window in front
+        (only `only_slots` when given - Auto setup passes the ticked moves' slots; an empty one reads '')."""
+        from logic_smart import SmartMacroLogic
+        try:
+            import pywinctl
+            win = pywinctl.getActiveWindow()
+        except Exception:
+            win = None
+        if not win or "Roblox" not in win.title:
+            return None
+        reg = [win.left, win.top, win.left + win.width, win.top + win.height]
+        img = self.utils.capture_screen_bgr(reg)
+        slots = SmartMacroLogic.find_hotbar_slots(img) if img is not None else []
+        out = []
+        for n, (x, y, w, side, filled) in enumerate(slots, start=1):
+            if only_slots is not None and n not in only_slots:
+                continue
+            if not filled:
+                if only_slots is not None:
+                    out.append((n, ""))               # ticked but empty: say so in the confirmation
+                continue
+            m = max(2, w // 14)
+            box = [reg[0] + x + m, reg[1] + y + m, reg[0] + x + w - m, reg[1] + y + side - m]
+            lines = self.utils.get_text_from_region(box, upscale=3)
+            lines.sort(key=lambda r: min(p[1] for p in r[0]))
+            out.append((n, " ".join(t for _, t, c in lines if c > 0.3).strip()))
+        return out
+
+    @staticmethod
+    def _same_picture(a, b):
+        """Two button pictures of the same move (it was seen again after scrolling)?"""
+        try:
+            if a is None or b is None or not a.size or not b.size:
+                return False
+            ga = cv2.cvtColor(a, cv2.COLOR_BGR2GRAY)
+            gb = cv2.resize(cv2.cvtColor(b, cv2.COLOR_BGR2GRAY), (ga.shape[1], ga.shape[0]))
+            return float(cv2.matchTemplate(ga, gb, cv2.TM_CCOEFF_NORMED).max()) >= 0.93
+        except Exception:
+            return False
+
+    def scan_move_list(self, alive=lambda: True):
+        """With the wisp's MOVE LIST open: read every button top to bottom, scrolling down until Nevermind.
+        Returns [(name, picture)] in list order (picture = BGR crop of the button, for Image mode)."""
+        found, seen_names, still = [], set(), 0
+        for _ in range(MAX_MOVES + 4):
+            if not alive():
+                break
+            if not self.wait_move_list(alive=alive):
+                break                                    # list never showed (still typing / closed)
+            win = self.get_roblox_window_region()
+            img = self._screen()
+            panel, boxes = self.find_dialog(img)
+            if not boxes:
+                time.sleep(0.5)
+                continue
+            new, centers, never = 0, [], False
+            for (x, y, w, h), text in zip(boxes, self._read_button_texts(win, boxes, img.shape[0], img)):
+                text = text.strip()
+                centers.append((win[0] + x + w // 2, win[1] + y + h // 2, text))
+                if "never" in text.lower():
+                    never = True
+                    continue
+                if self._is_skip(text):
+                    continue
+                if self._has_word(text, self.TRAINING_WORDS) or self._has_word(text, self.NEVER_WORDS):
+                    continue                             # first menu (Clover Training / Class Reset): not a move
+                pic = img[y:y + h, x:x + w].copy()
+                if any(self._same_picture(pic, p) for _, p in found):
+                    continue                             # the same button again (list scrolled)
+                key = self._norm_name(text)
+                if not key:
+                    continue
+                if key in seen_names:
+                    # a DIFFERENT button that read the same (e.g. small text lost a word: 'Cage' Gates vs Gates):
+                    # read just this button again, bigger, to get its real name
+                    again = self._ocr_button(pic)
+                    if self._norm_name(again) and self._norm_name(again) not in seen_names:
+                        text, key = again, self._norm_name(again)
+                    else:
+                        text = f"{text} (#{sum(1 for n, _ in found if self._norm_name(n).startswith(key)) + 1})"
+                        key = self._norm_name(text)      # keep it as its own move; the picture tells them apart
+                seen_names.add(key)
+                found.append((text, pic))
+                new += 1
+            if never:
+                break
+            still = still + 1 if new == 0 else 0
+            if still >= 2:
+                break                                # list stopped moving
+            self._scroll_list(centers)
+        return found
+
+    @staticmethod
+    def _words(text):
+        import re
+        return [w for w in re.findall(r"[a-z0-9]+", (text or "").lower().replace("'", "")) if w]
+
+    @classmethod
+    def unique_keyword(cls, name, all_names):
+        """The one word of `name` that no other move-list name has (longest first), or None.
+        'Sovereign Magic: Cage Gates' among the Sovereign Magic moves -> 'cage'."""
+        import difflib
+        others = [w for n in all_names if n != name for w in cls._words(n)]
+        cands = [w for w in cls._words(name) if len(w) >= 3]
+        unique = [w for w in cands if not any(difflib.SequenceMatcher(None, w, o).ratio() >= 0.8 for o in others)]
+        return max(unique, key=len) if unique else None
+
+    def match_hotbar_to_list(self, hotbar, names):
+        """The MOVE LIST leads; the hotbar only says which slot holds which move.
+        Each move-list name gets a unique keyword; each hotbar slot is matched to the move whose keyword (or
+        full name) fits what the hotbar shows, best pairs first, every move used once.
+        Returns [{'slot', 'hotbar', 'match', 'keyword', 'score', 'suggest'}]."""
+        import difflib
+        keys = {n: self.unique_keyword(n, names) for n in names}
+
+        def close(a, b):
+            return difflib.SequenceMatcher(None, a, b).ratio()
+
+        # words two or more moves share ('sovereign', 'magic', 'gates' - misreads like 'sovercign' too)
+        # tell nothing apart: drop them and compare ONLY what's left - each move's unique word
+        all_words = [set(self._words(n)) for n in names]
+        shared = {w for i, ws in enumerate(all_words) for w in ws
+                  if any(close(w, o) >= 0.8 for j, os_ in enumerate(all_words) if j != i for o in os_)}
+
+        def leftover(text):
+            return [t for t in self._words(text) if not any(close(t, w) >= 0.8 for w in shared)]
+
+        def score(hot, name):
+            if not self._norm_name(hot):
+                return 0.0
+            left, k = leftover(hot), keys.get(name)
+            if not left:
+                # the hotbar shows only shared words -> the move WITHOUT a unique word ('Sovereign Magic: Gates')
+                if k:
+                    return 0.3
+                return 0.6 + 0.4 * close(self._norm_name(hot), self._norm_name(name))
+            if not k:
+                return 0.3                    # the hotbar has an extra word this move doesn't have
+            best = 0.0
+            for t in left:
+                r = close(t, k)
+                if len(t) >= 3 and len(k) >= 3 and t[:2] == k[:2]:
+                    r = max(r, 0.7)           # 'cagt' / 'cate' / 'cag' for 'cage': same start, a letter misread
+                if k.startswith(t):
+                    r = max(r, 0.6 + 0.4 * len(t) / len(k))   # cut off on the hotbar: 'C' / 'Ca' for 'cage'
+                best = max(best, r)
+            return best
+
+        pairs = sorted(((score(t, n), slot, n) for slot, t in hotbar for n in names), reverse=True)
+        chosen, used = {}, set()
+        for sc, slot, n in pairs:
+            if slot in chosen or n in used or sc < 0.5:
+                continue
+            chosen[slot] = (n, sc)
+            used.add(n)
+        rows = []
+        for slot, text in hotbar:
+            n, sc = chosen.get(slot, ("", 0.0))
+            ranked = [m for _, sl, m in pairs if sl == slot and (m == n or m not in used)]
+            rows.append({"slot": slot, "hotbar": text, "match": n, "keyword": keys.get(n) if n else None,
+                         "score": round(sc, 2), "suggest": list(dict.fromkeys(ranked))[:3]})
+        self._auto_keys = keys
+        return rows
+
+    def apply_auto_setup(self, rows, pictures):
+        """rows: [{'slot', 'name', 'train'}] in the order to train. Fills 'Moves to train' (names, slots,
+        ticks) and, in Image mode, saves each chosen move's button picture."""
+        names = self._nine("move_names", "")
+        slots = self._nine("gold_move_slots", lambda k: k + 1)
+        flags = self._nine("train_moves", False)
+        if not any("move" in r for r in rows):           # old behaviour: fill from the top, clear the rest
+            for i in range(MAX_MOVES):
+                names[i], flags[i] = "", False
+        keys = getattr(self, "_auto_keys", {})
+        for n, r in enumerate(rows[:MAX_MOVES]):
+            i = int(r.get("move", n))                  # the ticked Move row this hotbar slot belongs to
+            word = r.get("keyword") or keys.get(r["name"])
+            names[i] = word.capitalize() if word else r["name"]   # one unique word - easy for the reader
+            slots[i], flags[i] = int(r["slot"]), bool(r["train"])
+            pic = pictures.get(r["name"])
+            if self.dialog_mode() == "image" and pic is not None and pic.size:
+                os.makedirs(DIALOG_TEMPLATE_DIR, exist_ok=True)
+                cv2.imwrite(self.dialog_template_path(f"move_{i + 1}"), pic)
+        self.app.settings.save()
+
+    def test_find_moves(self):
+        """Dry run: walk to the wisp, open the dialogue, click Clover Training, then go down the move list
+        ONCE and only HOVER each ticked move it finds (never clicks a move). Returns a result dict:
+        {'lines': [...], 'ok': bool} - also logged."""
+        mode = self.dialog_mode()
+        result = {"lines": [], "ok": False}
+        say = lambda m: (result["lines"].append(m), self.app.log(m))
+        if mode == "manual":
+            say("Manual mode doesn't search for moves - it just clicks your spots. Use Dialogue (F1) to check them.")
+            return result
+        if self.running:
+            say("Stop the macro first."); return result
+        if not self.wait_focus_for_test():
+            return result
+        flags = self.train_flags()
+        wanted = [i for i in range(MAX_MOVES) if flags[i]]
+        if not wanted:
+            say("Tick at least one move in 'Moves to train' first."); return result
+        self.running = True
+        seen = []                                    # every button text read on the way (for suggestions)
+        found = {}                                   # move index -> how it was found
+        try:
+            self.app.log("--- Find moves (test): walking to the wisp ---")
+            self.go_to_wisp()
+            if not self.running or not self.open_dialogue():
+                say("✖ Couldn't open the wisp's dialogue (are you at the wisp?)."); return result
+            # first menu -> Clover Training (this one IS clicked, it's the only way to reach the move list)
+            deadline = time.time() + 20
+            target = None
+            while self.running and time.time() < deadline and not target:
+                if mode == "image" and self.has_dialog_template("clover_training"):
+                    pt = self.find_dialog_button("clover_training")
+                    target = (pt, "picture") if pt else None
+                else:
+                    t = self.find_training_button()
+                    target = t if t else None
+                if not target:
+                    time.sleep(0.4)
+            if not target:
+                say("✖ Couldn't find 'Clover Training' in the first menu."); return result
+            self.human_click(*target[0], duration=0.15)
+            self._park_mouse()
+            time.sleep(2.0)                          # move list fades in
+            for step in range(MAX_MOVES + 3):
+                if not self.running:
+                    break
+                buttons = self.wait_move_list()
+                if not buttons:
+                    say("✖ The move list didn't show up (only 'Skip' while the text was typing?) - try again.")
+                    break
+                seen.extend(b[2] for b in buttons if b[2] and b[2] not in seen and not self._is_skip(b[2]))
+                for i in wanted:
+                    if i in found:
+                        continue
+                    key, name = f"move_{i + 1}", self.move_names()[i]
+                    pt, how = None, ""
+                    if mode == "image" and self.has_dialog_template(key):
+                        pt = self.find_dialog_button(key); how = "picture"
+                    if not pt and name:
+                        hit = next((b for b in buttons if self._same_name(name, b[2])), None)
+                        if hit:
+                            pt, how = (hit[0], hit[1]), f"name '{hit[2]}'"
+                    if pt:
+                        found[i] = how
+                        self.app.log(f"   ✔ {self.move_label(i)} found ({how}) - hovering, not clicking")
+                        self.utils.mouse_move(*pt)
+                        time.sleep(0.9)
+                if all(i in found for i in wanted):
+                    break
+                if any("never" in (b[2] or "").lower() for b in buttons):
+                    break                            # Nevermind is always last: end of the list
+                self._scroll_list(buttons)
+        finally:
+            self.running = False
+        import difflib
+        for i in wanted:
+            label = self.move_label(i)
+            if i in found:
+                say(f"✔ {label}: found by {found[i]}")
+                continue
+            name = self.move_names()[i]
+            has_pic = self.has_dialog_template(f"move_{i + 1}")
+            if not name and not has_pic:
+                say(f"✖ {label}: no name{' or picture' if mode == 'image' else ''} set - nothing to look for")
+                continue
+            line = f"✖ {label}: not found"
+            options = [t for t in seen if t and "never" not in t.lower() and not self._is_skip(t)]
+            close = difflib.get_close_matches(name, options, n=2, cutoff=0.35) if name else []
+            if close:
+                line += "  →  did you mean: " + " / ".join(f"'{c}'" for c in close) + " ?"
+            elif options:
+                line += "  (saw: " + ", ".join(f"'{t}'" for t in options[:6]) + ")"
+            if mode == "image" and not has_pic:
+                line += "  - no picture captured, so only the name was tried"
+            say(line)
+        result["ok"] = all(i in found for i in wanted)
+        say("All ticked moves were found." if result["ok"] else "Some moves weren't found - see above.")
+        self.app.log("(The dialogue was left open - nothing else was clicked.)")
+        return result
 
     def test_path(self):
         """Walk to the wisp only (no dialogue)."""

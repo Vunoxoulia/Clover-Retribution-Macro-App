@@ -241,19 +241,8 @@ class SpatialUtils:
         if self.ocr_reader is None:
             try:
                 from rapidocr_onnxruntime import RapidOCR
-                import platform
-                
-                providers = ['CPUExecutionProvider']
-                system = platform.system()
-                
-                if system == 'Darwin': 
-                    providers = ['CoreMLExecutionProvider', 'CPUExecutionProvider']
-                elif system == 'Linux':
-                    
-                    providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
-                
-                self.ocr_reader = RapidOCR(providers=providers)
-                print(f"✅ RapidOCR initialized on {system}")
+                self.ocr_reader = RapidOCR(providers=['CPUExecutionProvider'])
+                print("RapidOCR initialized")
             except Exception as e:
                 print(f"OCR (RapidOCR) Initialization error: {e}")
                 SpatialUtils.ocr_error = OCR_HELP

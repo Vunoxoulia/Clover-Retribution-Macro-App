@@ -134,7 +134,7 @@ class MacroSelector:
     def show_patch_notes(self):
         import requests
         from tkinter import messagebox
-        notes_url = f"https://raw.githubusercontent.com/Vunoxoulia/Clover-Retribution-Macro-App/main/PATCH_NOTES.txt"
+        notes_url = f"https://raw.githubusercontent.com/Vunoxoulia/Clover-Retribution-Macro-App/main/docs/PATCH_NOTES.txt"
         try:
             response = requests.get(notes_url, timeout=5)
             if response.status_code == 200:
@@ -262,8 +262,6 @@ class SpatialGUI:
     def setup_main_tab(self):
         tab = self.tabview.tab("Main")
         ctk.CTkLabel(tab, text=self.root.title().upper(), font=("Arial", 22, "bold"), text_color="#0d6efd").pack(pady=(12, 6))
-        self.help_btn = ctk.CTkButton(tab, text="❓ How to Setup", width=130, height=26, font=("Arial", 12, "bold"), fg_color="#0dcaf0", hover_color="#31d2f2", text_color="#000000", command=self.show_quick_start)
-        self.help_btn.pack(pady=4)
 
         self.calib_frame = ctk.CTkFrame(tab, fg_color="#842029", border_color="#f5c2c7", border_width=1, corner_radius=8)
         self.calib_label = ctk.CTkLabel(self.calib_frame, text="⚠️ UNCALIBRATED SETTINGS DETECTED\nPlease go to Settings tabs to set up.", font=("Arial", 12, "bold"), text_color="#ea868f")
@@ -363,34 +361,37 @@ class SpatialGUI:
         self.rec_label.pack(side="left")
         ctk.CTkButton(row, text=test2_text, width=110, command=lambda: self._run_test(test2_fn), **btn).pack(side="right")
         if test1_text:
-            ctk.CTkButton(row, text=test1_text, width=120, command=lambda: self._run_test(test1_fn), **btn).pack(side="right", padx=4)
+            ctk.CTkButton(row, text=test1_text, width=136, command=lambda: self._run_test(test1_fn), **btn).pack(side="right", padx=4)
         ctk.CTkLabel(rc, text=tip, font=("Arial", 12), text_color="#ced4da", justify="left",
                      wraplength=410).pack(fill="x", padx=8, pady=(0, 6))
 
     # ================= Library =================
     def setup_library_settings(self, tab):
-        self._route_card(tab, "Test Dialogue (F1)", self.logic.test_detection,
+        self._route_card(tab, "Dialogue (F1)", self.logic.test_detection,
                          "Test Path (F3)", self.logic.test_path,
-                         "At the desk: Ctrl+P → walk to the wisp (jumps and E are recorded too) → Ctrl+P.  (❓ How to Setup on Main explains it.)")
-        mc = ctk.CTkFrame(tab, fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
+                         "At the desk: Ctrl+P → walk to the wisp (jumps and E are recorded too) → Ctrl+P.")
+        mc = self._moves_card = ctk.CTkFrame(tab, fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
         mc.pack(fill="x", padx=15, pady=4)
         ctk.CTkLabel(mc, text="✨ Moves to train", font=("Arial", 13, "bold")).pack(anchor="w", padx=8, pady=(6, 0))
-        ctk.CTkLabel(mc, text="Type each move's name exactly as on the wisp's button: it's found by name (scrolling "
-                              "the list if needed). Slot = where it sits on your hotbar (for the gold clover check).",
-                     font=("Arial", 12), text_color="#ced4da",
-                     justify="left", wraplength=410).pack(fill="x", padx=8, pady=(0, 4))
+        ctk.CTkButton(mc, text="🪄 Auto setup", width=110, height=24, font=("Arial", 11, "bold"),
+                      fg_color="#0d6efd", hover_color="#0b5ed7",
+                      command=self.auto_setup_moves).place(relx=1.0, x=-10, y=6, anchor="ne")
+        self._moves_desc = ctk.CTkLabel(mc, text="", font=("Arial", 12), text_color="#ced4da",
+                                        justify="left", wraplength=410)
+        self._moves_desc.pack(fill="x", padx=8, pady=(0, 4))
         from logic_library import MAX_MOVES
         flags = self.logic.train_flags()
         names = self.logic.move_names()
         slots = self.logic._nine("gold_move_slots", lambda k: k + 1)
-        self.train_vars, self.move_entries = [], []
+        self.train_vars, self.move_entries, self._move_rows = [], [], []
         for i in range(MAX_MOVES):
             row = ctk.CTkFrame(mc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=2)
+            self._move_rows.append(row)
             var = ctk.BooleanVar(value=flags[i])
             ctk.CTkCheckBox(row, text=f"Move {i + 1}", variable=var, width=90, font=("Arial", 12, "bold"),
                             command=self._save_train_flags).pack(side="left")
             sel = ctk.CTkOptionMenu(row, values=[str(k) for k in range(1, MAX_MOVES + 1)], width=58, height=26,
-                                    command=lambda v, idx=i: (slots.__setitem__(idx, int(v)), self.settings.save()))
+                                    command=lambda v, idx=i: self.logic.set_move_slot(idx, v))
             sel.set(str(slots[i]))
             sel.pack(side="right")
             ctk.CTkLabel(row, text="slot", font=("Arial", 12)).pack(side="right", padx=(6, 3))
@@ -413,19 +414,199 @@ class SpatialGUI:
         "manual": "Click the exact spot of each button. Use it if Auto/Image miss. Don't move or resize Roblox afterwards.",
     }
 
+    # 'Moves to train' explained for the selected Wisp dialogue mode (Manual doesn't use this card)
+    MOVES_HINTS = {
+        "auto": "Tick the moves to train and type ONE word that only that move's button has (e.g. 'Cage' for "
+                "Sovereign Magic: Cage Gates) - or let 🪄 Auto setup fill it in. Auto finds the move by that word, "
+                "scrolling the list if needed. Slot = where it sits on your hotbar (for the gold clover check).",
+        "image": "Tick the moves to train, then capture each move's button below (📸 Capture). Image finds the move "
+                 "by its PICTURE, scrolling the list if needed; the name is a backup if the picture isn't found. "
+                 "Slot = where it sits on your hotbar (for the gold clover check).",
+    }
+
+    def auto_setup_moves(self):
+        """🪄 Auto setup: read the hotbar, then the wisp's move list, match them, and let the user confirm."""
+        from tkinter import messagebox
+        if self.logic.running:
+            self.log("Stop the macro first."); return
+        self.log("Auto setup: click into Roblox (hotbar visible) within 10 s...")
+
+        from logic_library import MAX_MOVES
+        flags = self.logic.train_flags()
+        ticked = {self.logic.move_slot(i): i for i in range(MAX_MOVES) if flags[i]}   # hotbar slot -> Move row
+        if not ticked:
+            messagebox.showinfo("Auto setup", "Tick the moves you want first - each ticked Move reads the hotbar "
+                                              "slot next to it (e.g. tick Move 4 with slot 4).", parent=self.root)
+            return
+        self._auto_rows = ticked
+
+        def step1():
+            if not self.logic.wait_focus_for_test():
+                return
+            hotbar = self.logic.read_hotbar_names(only_slots=set(ticked))
+            if hotbar:
+                self.logic._hotbar_seen = [t for _, t in hotbar if t]   # also used to recognise the move list
+            if not hotbar:
+                self.root.after(0, lambda: messagebox.showwarning(
+                    "Auto setup", "Couldn't find your hotbar. Click into Roblox with your skills on the hotbar, "
+                                  "then try again.", parent=self.root))
+                return
+            listing = "\n".join(f"  slot {s}:  {t or '(not readable)'}" for s, t in hotbar)
+            self.root.after(0, lambda: ask(hotbar, listing))
+
+        def ask(hotbar, listing):
+            ok = messagebox.askokcancel(
+                "Auto setup - step 2",
+                f"Read on your hotbar:\n{listing}\n\nNow talk to the wisp and open its MOVE LIST "
+                f"(click 'Clover Training'). Leave it open, press OK, then click into Roblox.",
+                parent=self.root)
+            if ok:
+                threading.Thread(target=lambda: step2(hotbar), daemon=True).start()
+
+        def step2(hotbar):
+            if not self.logic.wait_focus_for_test():
+                return
+            self.log("Auto setup: reading the move list (scrolling down)...")
+            listed = self.logic.scan_move_list(alive=lambda: not self.logic.running)
+            if not listed:
+                self.root.after(0, lambda: messagebox.showwarning(
+                    "Auto setup", "Couldn't read the wisp's move list. Open it (Clover Training) and try again.",
+                    parent=self.root))
+                return
+            rows = self.logic.match_hotbar_to_list(hotbar, [n for n, _ in listed])
+            pictures = {n: p for n, p in listed}
+            self.root.after(0, lambda: self._auto_setup_confirm(rows, [n for n, _ in listed], pictures))
+
+        threading.Thread(target=step1, daemon=True).start()
+
+    def _auto_setup_confirm(self, rows, names, pictures):
+        """Confirmation: one row per hotbar slot - tick, slot, matched move (changeable)."""
+        win = ctk.CTkToplevel(self.root)
+        win.title("Auto setup - confirm")
+        win.geometry("660x" + str(190 + 40 * len(rows) + 20 * ((len(names) + 1) // 2)))
+        win.transient(self.root); win.after(150, win.lift)
+        ctk.CTkLabel(win, text="Check each slot's move. If one is wrong, just pick the right one from its list - "
+                               "the list holds every move seen in the wisp's dialogue. Untick what you don't "
+                               "want to train, then Apply.",
+                     font=("Arial", 12), wraplength=620, justify="left").pack(anchor="w", padx=12, pady=(10, 4))
+        seen = ctk.CTkFrame(win, fg_color="#1a1d20", corner_radius=6); seen.pack(fill="x", padx=12, pady=(0, 6))
+        ctk.CTkLabel(seen, text=f"Seen in the dialogue ({len(names)}):", font=("Arial", 11, "bold"),
+                     text_color="#9ec5fe").grid(row=0, column=0, columnspan=2, sticky="w", padx=8, pady=(4, 0))
+        for i, n in enumerate(names):
+            key = getattr(self.logic, "_auto_keys", {}).get(n)
+            ctk.CTkLabel(seen, text=f"• {n}" + (f"  → '{key.capitalize()}'" if key else "  → (no unique word)"),
+                         font=("Arial", 11), text_color="#ced4da").grid(
+                row=1 + i // 2, column=i % 2, sticky="w", padx=8, pady=0)
+        ctk.CTkLabel(seen, text="").grid(row=99, column=0, pady=0)
+        widgets = []
+        for r in rows:
+            row = ctk.CTkFrame(win, fg_color="#212529", corner_radius=6); row.pack(fill="x", padx=12, pady=2)
+            var = ctk.BooleanVar(value=bool(r["match"]))
+            mv = getattr(self, "_auto_rows", {}).get(r["slot"])
+            ctk.CTkCheckBox(row, text=(f"Move {mv + 1} · slot {r['slot']}" if mv is not None else f"Slot {r['slot']}"),
+                            variable=var, width=120,
+                            font=("Arial", 12, "bold")).pack(side="left", padx=6, pady=6)
+            pick = r["match"] or (r["suggest"][0] if r["suggest"] else "(skip)")
+            note = ctk.CTkLabel(row, text="", font=("Arial", 11), wraplength=250, justify="left")
+
+            def show_word(choice, r=r, note=note):
+                key = getattr(self.logic, "_auto_keys", {}).get(choice)
+                if choice == "(skip)":
+                    note.configure(text="skipped", text_color="#adb5bd")
+                elif not key:
+                    note.configure(text="⚠ no word that's unique to this move - switch the Wisp dialogue to "
+                                        "Image mode for it", text_color="#ffc107")
+                elif choice == r["match"]:
+                    note.configure(text=f"✔ will look for '{key.capitalize()}'  (hotbar: {r['hotbar'][:20] or '?'})",
+                                   text_color="#75b798" if r["score"] >= 0.7 else "#ffc107")
+                else:
+                    note.configure(text=f"will look for '{key.capitalize()}'  (picked by you)", text_color="#ced4da")
+            # best guesses for this slot first, then every other move seen in the dialogue
+            choices = list(dict.fromkeys([m for m in r["suggest"] if m in names] + names)) + ["(skip)"]
+            om = ctk.CTkOptionMenu(row, values=choices, width=230, height=26, command=show_word)
+            om.set(pick)
+            om.pack(side="left", padx=4)
+            note.pack(side="left", padx=6)
+            show_word(pick)
+            widgets.append((r, var, om))
+
+        def apply():
+            rows_of = getattr(self, "_auto_rows", {})
+            chosen = [{"slot": r["slot"], "name": om.get(), "train": bool(v.get()),
+                       **({"move": rows_of[r["slot"]]} if r["slot"] in rows_of else {})}
+                      for r, v, om in widgets if om.get() != "(skip)"]
+            self.logic.apply_auto_setup(chosen, pictures)
+            win.destroy()
+            self.log(f"Auto setup: {len(chosen)} move(s) filled in. Press 🔎 Find moves to double-check.")
+            self.reload_library_settings()
+        ctk.CTkButton(win, text="✔ Apply", width=120, fg_color="#198754", hover_color="#157347",
+                      command=apply).pack(pady=10)
+
+    def reload_library_settings(self):
+        """Rebuild the Settings page (inside its scroll area) so the new names / slots / ticks show."""
+        holder = self._moves_card.master
+        for w in holder.winfo_children():
+            w.destroy()
+        self.setup_library_settings(holder)
+
+    def test_find_moves(self):
+        """Run the find-moves dry run in the background and show its result in a pop-up."""
+        key = (self.settings.get("hotkeys", {}).get("test_find") or "f4").upper()
+        self.log(f"Find moves (test): click into Roblox within 10 s (or press {key} while in Roblox) - it walks to "
+                 "the wisp, opens the menu and hovers each move it finds (no move is clicked).")
+
+        def run():
+            res = self.logic.test_find_moves()
+            if res["lines"]:
+                from tkinter import messagebox
+                title = "Find moves - all found" if res["ok"] else "Find moves - results"
+                self.root.after(0, lambda: messagebox.showinfo(title, "\n\n".join(res["lines"]), parent=self.root))
+        threading.Thread(target=run, daemon=True).start()
+
+    def _apply_manual_limit(self):
+        """Manual dialogue doesn't use 'Moves to train' at all (its 3 spots live in the Wisp dialogue card)."""
+        mc = getattr(self, "_moves_card", None)
+        if mc is None:
+            return
+        mode = self.logic.dialog_mode()
+        if mode == "manual":
+            mc.pack_forget()
+            return
+        if not mc.winfo_ismapped():
+            mc.pack(fill="x", padx=15, pady=4, before=self.dialog_card)
+        self._moves_desc.configure(text=self.MOVES_HINTS.get(mode, ""))
+
+    def _dialog_preview(self, parent, key):
+        """Show the captured button picture under its row, so you can see exactly what was saved."""
+        try:
+            from PIL import Image
+            pic = Image.open(self.logic.dialog_template_path(key)).convert("RGB")
+            pic.load()
+            w, h = pic.size
+            scale = min(220 / max(w, 1), 34 / max(h, 1), 2.0)
+            size = (max(1, int(w * scale)), max(1, int(h * scale)))
+            img = ctk.CTkImage(light_image=pic, dark_image=pic, size=size)
+            holder = ctk.CTkFrame(parent, fg_color="transparent"); holder.pack(fill="x", padx=8, pady=(0, 4))
+            ctk.CTkLabel(holder, text="", image=img).pack(side="left", padx=(158, 0))
+        except Exception as e:
+            print(f"preview {key}: {e}")
+
     def build_dialog_card(self):
-        from logic_library import DIALOG_BUTTONS
+        from logic_library import DIALOG_BUTTONS, MANUAL_MOVES
+        self._apply_manual_limit()
         card = self.dialog_card
         for w in card.winfo_children():
             w.destroy()
         mode = self.logic.dialog_mode()
         head = ctk.CTkFrame(card, fg_color="transparent"); head.pack(fill="x", padx=8, pady=(6, 2))
         ctk.CTkLabel(head, text="💬 Wisp dialogue", font=("Arial", 13, "bold")).pack(side="left")
-        ctk.CTkButton(head, text="? Help", width=60, height=24, font=("Arial", 11, "bold"), fg_color="#343a40",
-                      hover_color="#495057", text_color="#0dcaf0",
-                      command=lambda: self.open_library_guide("Dialogue")).pack(side="right")
-        ctk.CTkButton(head, text="↕ Test scroll", width=100, height=24, font=("Arial", 11, "bold"), fg_color="#495057",
-                      hover_color="#343a40", command=lambda: self._run_test(self.logic.test_scroll)).pack(side="right", padx=6)
+        if mode != "manual":                             # manual never scrolls the move list
+            ctk.CTkButton(head, text="↕ Test scroll", width=100, height=24, font=("Arial", 11, "bold"), fg_color="#495057",
+                          hover_color="#343a40", command=lambda: self._run_test(self.logic.test_scroll)).pack(side="right", padx=6)
+            ctk.CTkButton(head, text=f"🔎 Find moves ({(self.settings.get('hotkeys', {}).get('test_find') or 'f4').upper()})",
+                          width=130, height=24, font=("Arial", 11, "bold"),
+                          fg_color="#0d6efd", hover_color="#0b5ed7",
+                          command=self.test_find_moves).pack(side="right")
         seg = ctk.CTkSegmentedButton(card, values=["Auto", "Image", "Manual"], font=("Arial", 12, "bold"),
                                      command=lambda v: (self.settings.set("dialog_mode", v.lower()), self.build_dialog_card()))
         seg.set(mode.capitalize())
@@ -439,6 +620,8 @@ class SpatialGUI:
         for key, label in DIALOG_BUTTONS.items():
             if key.startswith("move_") and not flags[int(key[-1]) - 1]:
                 continue                                    # only the moves being trained
+            if mode == "manual" and key.startswith("move_"):
+                continue                                    # manual: its own 3 spots, built below
             row = ctk.CTkFrame(card, fg_color="transparent"); row.pack(fill="x", padx=8, pady=2)
             text = label if key == "clover_training" else self.logic.move_label(int(key[-1]) - 1)
             ctk.CTkLabel(row, text=text, width=150, anchor="w", font=("Arial", 12, "bold")).pack(side="left")
@@ -449,6 +632,8 @@ class SpatialGUI:
                               command=lambda k=key: self.capture_dialog_button(k)).pack(side="left", padx=4)
                 ctk.CTkLabel(row, text="✔ captured" if ok else "not captured", font=("Arial", 12),
                              text_color="#75b798" if ok else "#ea868f").pack(side="left", padx=6)
+                if ok:
+                    self._dialog_preview(card, key)
             else:
                 pt = self.logic.manual_point(key)
                 ctk.CTkButton(row, text="🎯 Pick spot", width=110, height=26, fg_color="#0d6efd", hover_color="#0b5ed7",
@@ -456,6 +641,28 @@ class SpatialGUI:
                 ctk.CTkLabel(row, text=f"({pt[0]}, {pt[1]})" if pt else "not set", font=("Arial", 12),
                              text_color="#75b798" if pt else "#ea868f").pack(side="left", padx=6)
         if mode == "manual":
+            mm = self.logic.manual_moves()
+            for i in range(MANUAL_MOVES):
+                key = f"move_{i + 1}"
+                row = ctk.CTkFrame(card, fg_color="transparent"); row.pack(fill="x", padx=8, pady=2)
+                var = ctk.BooleanVar(value=bool(mm[i].get("train")))
+                ctk.CTkCheckBox(row, text=f"Move spot {i + 1}", variable=var, width=122, font=("Arial", 12, "bold"),
+                                command=lambda i=i, v=var: (self.logic.manual_moves()[i].__setitem__("train", bool(v.get())),
+                                                            self.settings.save())).pack(side="left")
+                pt = self.logic.manual_point(key)
+                ctk.CTkButton(row, text="🎯 Pick spot", width=96, height=26, fg_color="#0d6efd", hover_color="#0b5ed7",
+                              command=lambda k=key: self.pick_dialog_point(k)).pack(side="left", padx=2)
+                ctk.CTkLabel(row, text=f"({pt[0]}, {pt[1]})" if pt else "not set", font=("Arial", 12),
+                             text_color="#75b798" if pt else "#ea868f", width=62).pack(side="left", padx=2)
+                sel = ctk.CTkOptionMenu(row, values=[str(k) for k in range(1, 10)], width=58, height=26,
+                                        command=lambda v, i=i: (self.logic.manual_moves()[i].__setitem__("slot", int(v)),
+                                                                self.settings.save()))
+                sel.set(str(mm[i].get("slot") or i + 1))
+                sel.pack(side="right")
+                ctk.CTkLabel(row, text="slot", font=("Arial", 12)).pack(side="right", padx=(6, 3))
+            ctk.CTkLabel(card, text="Ticked spots are trained in order: spot 1 until its gold clover shows (checked on "
+                                    "its hotbar slot), then spot 2, then 3. Just clicks - no reading, no scrolling.",
+                         font=("Arial", 12), text_color="#adb5bd", justify="left", wraplength=410).pack(fill="x", padx=8, pady=(2, 2))
             row = ctk.CTkFrame(card, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(4, 2))
             ctk.CTkLabel(row, text="Wait before each click (s)", font=("Arial", 12)).pack(side="left")
             om = ctk.CTkOptionMenu(row, values=["1", "1.5", "2", "3"], width=70, height=26,
@@ -488,10 +695,6 @@ class SpatialGUI:
             self.settings.save()
             self.build_dialog_card()
         PointSelector(done)
-
-    def open_library_guide(self, section=None):
-        from gui_guide import SetupGuide, LIBRARY_PAGES
-        SetupGuide.show(self.root, section, pages=LIBRARY_PAGES, title="Library Macro — Setup Guide")
 
     def _save_train_flags(self):
         self.settings.set("train_moves", [bool(v.get()) for v in self.train_vars])
@@ -679,9 +882,6 @@ class SpatialGUI:
     def setup_ok_tab(self):
         tab = self.tabview.tab("OK Popup")
         ctk.CTkLabel(tab, text="OK Popup Detection", font=("Arial", 18, "bold"), text_color="#0d6efd").pack(pady=(12, 0))
-        ctk.CTkButton(tab, text="? Help", width=60, height=24, font=("Arial", 11, "bold"), fg_color="#343a40",
-                      hover_color="#495057", text_color="#0dcaf0",
-                      command=self.open_ok_guide).place(relx=1.0, x=-14, y=14, anchor="ne")
         ctk.CTkLabel(tab, text="Shared by every macro, so you only set it up once.\n"
                           "OK popups are always clicked while a macro runs. Always Click OK also clicks them "
                           "when no macro is running.", font=("Arial", 12), wraplength=460,
@@ -762,24 +962,6 @@ class SpatialGUI:
         except Exception:
             pass
 
-    def show_quick_start(self):
-        from tkinter import messagebox
-        if "Library" in self.root.title():
-            self.open_library_guide()
-            return
-        from gui_guide import SetupGuide, MINING_PAGES, FISHING_PAGES
-        if "Mining" in self.root.title():
-            SetupGuide.show(self.root, None, pages=MINING_PAGES, title="Mining Macro — Setup Guide")
-            return
-        if "Fishing" in self.root.title():
-            SetupGuide.show(self.root, None, pages=FISHING_PAGES, title="Fishing Macro — Setup Guide")
-            return
-        else:
-            msg = ("1. Settings: tick the moves to train.\n2. Areas: set the 3 Gold Clover areas.\n"
-                   "3. Clover Clicker: pick the clover colours.\n4. (Recommended) Record the walk to the wisp with Ctrl+P.\n"
-                   "5. Press START!")
-        messagebox.showinfo("Setup Guide", msg)
-
     def check_calibration(self):
         if not hasattr(self, "calib_frame"):
             return                                   # windows without a Main page (Event Notifier)
@@ -803,10 +985,6 @@ class SpatialGUI:
     def setup_events_tab(self):
         from gui_events import EventsPage
         self.events_page = EventsPage(self.tabview.tab("Events"), self.root, self.settings)
-
-    def open_ok_guide(self):
-        from gui_guide import SetupGuide, OK_PAGES
-        SetupGuide.show(self.root, None, pages=OK_PAGES, title="OK Popup — Setup Guide")
 
     def toggle_always_ok(self):
         self._always_ok_on = not self._always_ok_on
@@ -879,9 +1057,6 @@ class SpatialGUI:
         mode = self.logic.gold_mode()
         head = ctk.CTkFrame(gc, fg_color="transparent"); head.pack(fill="x", padx=8, pady=(6, 0))
         ctk.CTkLabel(head, text="🍀 Gold Clover detection", font=("Arial", 14, "bold"), text_color="#0d6efd").pack(side="left")
-        ctk.CTkButton(head, text="? Help", width=60, height=24, font=("Arial", 11, "bold"), fg_color="#343a40",
-                      hover_color="#495057", text_color="#0dcaf0",
-                      command=lambda: self.open_library_guide("Gold Clover")).pack(side="right")
         seg = ctk.CTkSegmentedButton(gc, values=["Automatic", "Manual"], font=("Arial", 12, "bold"),
                                      command=lambda v: (self.settings.set("gold_mode", v.lower()), self.build_gold_card()))
         seg.set("Automatic" if mode == "auto" else "Manual")
@@ -983,9 +1158,6 @@ class SpatialGUI:
             w.destroy()
         head = ctk.CTkFrame(card, fg_color="transparent"); head.pack(fill="x", padx=8, pady=(6, 2))
         ctk.CTkLabel(head, text="🎮 Minigame detector", font=("Arial", 14, "bold"), text_color="#0d6efd").pack(side="left")
-        ctk.CTkButton(head, text="? Help", width=60, height=24, font=("Arial", 11, "bold"), fg_color="#343a40",
-                      hover_color="#495057", text_color="#0dcaf0",
-                      command=lambda: self.open_library_guide("Minigame")).pack(side="right")
         ctk.CTkLabel(card, text="During a minigame, press Capture: the screen freezes — drag a box around something that "
                                 "ONLY shows in the minigame (its timer, score or title). Walking starts once it's gone.",
                      font=("Arial", 12), text_color="#ced4da", justify="left", wraplength=420).pack(fill="x", padx=8, pady=(2, 4))
@@ -1165,6 +1337,7 @@ class SpatialGUI:
 
         if hasattr(self.logic, 'test_movement'): actions.append('test_movement')
         if hasattr(self.logic, 'test_path') and not hasattr(self.logic, 'test_movement'): actions.append('test_path')
+        if hasattr(self.logic, 'test_find_moves'): actions.append('test_find')
 
         for a in actions:
             f = ctk.CTkFrame(tab, fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
@@ -1174,7 +1347,7 @@ class SpatialGUI:
             if "Mining" in self.root.title():
                 display_names.update({"test_btn": "Test Prompt", "test_movement": "Test Path"})
             elif "Library" in self.root.title():
-                display_names.update({"test_btn": "Test Dialogue", "test_path": "Test Path"})
+                display_names.update({"test_btn": "Test Dialogue", "test_path": "Test Path", "test_find": "Find moves (test)"})
             label_text = display_names.get(a, a.replace("_", " ").capitalize())
             ctk.CTkLabel(f, text=label_text, width=120, font=("Arial", 12, "bold"), anchor="w").pack(side="left", padx=10, pady=6)
             e = ctk.CTkEntry(f, width=80, font=("Arial", 12))
@@ -1217,6 +1390,8 @@ class SpatialGUI:
                 try_add('test_movement', lambda: self._run_test(self.logic.test_movement))
             elif hasattr(self.logic, 'test_path'):          # Library: its own key so it doesn't share F2 with Test Color
                 try_add('test_path', lambda: self._run_test(self.logic.test_path))
+        if hasattr(self.logic, 'test_find_moves'):
+            try_add('test_find', self.test_find_moves)       # Library: walk + find moves (hover only)
 
         if hasattr(self.logic, "toggle_recording"):
             try:

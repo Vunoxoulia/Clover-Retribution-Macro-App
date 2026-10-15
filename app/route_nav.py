@@ -58,22 +58,33 @@ class RouteNav(BaseLogic):
     # and locked: it can't be recorded over, renamed, deleted or edited. Make your own with New.
     BUILTIN_ROUTE = None          # display name
     BUILTIN_DIR = None            # folder inside the app (tracked in git, not user data)
+    EXTRA_BUILTINS = ()           # more built-in routes: ((name, folder), ...)
 
-    def _builtin_dir(self):
-        if not self.BUILTIN_ROUTE or not self.BUILTIN_DIR:
-            return None
-        from settings import get_base_path
-        d = os.path.join(get_base_path(), self.BUILTIN_DIR)
-        return d if os.path.exists(os.path.join(d, "route.json")) else None
+    def _builtins(self):
+        """{name: folder} of the built-in routes that are really there, in order."""
+        from settings import get_app_path
+        out = {}
+        pairs = ([(self.BUILTIN_ROUTE, self.BUILTIN_DIR)] if self.BUILTIN_ROUTE else []) + list(self.EXTRA_BUILTINS)
+        for name, folder in pairs:
+            if name and folder:
+                d = os.path.join(get_app_path(), folder)
+                if os.path.exists(os.path.join(d, "route.json")):
+                    out[name] = d
+        return out
+
+    def _builtin_dir(self, name=None):
+        b = self._builtins()
+        return b.get(name or self.BUILTIN_ROUTE)
 
     def is_locked(self, name=None):
         name = name or self.active_route()
-        return bool(self._builtin_dir()) and name == self.BUILTIN_ROUTE
+        return name in self._builtins()
 
     def list_routes(self):
         d = self._routes_dir()
-        own = sorted(n for n in os.listdir(d) if os.path.isdir(os.path.join(d, n)) and n != self.BUILTIN_ROUTE)
-        return ([self.BUILTIN_ROUTE] if self._builtin_dir() else []) + own
+        b = self._builtins()
+        own = sorted(n for n in os.listdir(d) if os.path.isdir(os.path.join(d, n)) and n not in b)
+        return list(b) + own
 
     def active_route(self):
         name = self.app.settings.get(self.ACTIVE_ROUTE_KEY, "")
@@ -88,7 +99,7 @@ class RouteNav(BaseLogic):
     def route_dir(self, name=None):
         name = name or self.active_route()
         if self.is_locked(name):
-            return self._builtin_dir()
+            return self._builtin_dir(name)
         return os.path.join(self._routes_dir(), name) if name else ""
 
     @staticmethod
@@ -98,7 +109,7 @@ class RouteNav(BaseLogic):
 
     def create_route(self, name):
         name = self._clean_name(name)
-        if not name or name in self.list_routes() or name == self.BUILTIN_ROUTE:
+        if not name or name in self.list_routes() or name in self._builtins():
             return None
         os.makedirs(self.route_dir(name))
         self.set_active_route(name)
@@ -355,8 +366,18 @@ class RouteNav(BaseLogic):
             self.app.log("Stop the macro before recording.")
             return
         if self.is_locked():
-            self.app.log(f"🔒 '{self.BUILTIN_ROUTE}' is the built-in route and can't be recorded over. "
+            name = self.active_route()
+            self.app.log(f"🔒 '{name}' is a built-in route and can't be recorded over. "
                          "Press New to make your own route, then Ctrl+P.")
+            try:
+                from tkinter import messagebox
+                self.app.root.after(0, lambda: messagebox.showinfo(
+                    "Built-in route",
+                    f"🔒 '{name}' is a built-in route - it can't be recorded over.\n\n"
+                    "Click  New  (next to the route list) to create your own route, then press Ctrl+P "
+                    "to record it.", parent=self.app.root))
+            except Exception:
+                pass
             return
         if not self.active_route():
             self.create_route("Route 1")
@@ -557,7 +578,7 @@ class RouteNav(BaseLogic):
 
 
 
-    def wait_focus_for_test(self, seconds=5):
+    def wait_focus_for_test(self, seconds=10):
         """Tests started from the macro window's button: give the user time to click into Roblox."""
         if self.check_focus():
             return True
@@ -568,7 +589,8 @@ class RouteNav(BaseLogic):
                 time.sleep(0.3)
                 return True
             time.sleep(0.1)
-        self.app.log("Roblox wasn't focused — test cancelled. (Tip: press the test hotkey from inside Roblox.)")
+        self.app.log("Roblox wasn't focused — test cancelled. (Tip: press the test's hotkey while in Roblox - "
+                     "see the Hotkeys tab.)")
         return False
 
     def _new_lap(self):

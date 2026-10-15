@@ -171,6 +171,7 @@ class MiningLogic(RouteNav):
             while self.running:
                 if not self.check_focus() and not self.wait_for_roblox_focus():
                     break
+                route = self.load_route() or route       # edits made while running apply from the next lap
                 self.run_lap(route)
                 if self.running:
                     WATCHER.checkpoint("Mining")   # one full lap done: safe moment to check chat

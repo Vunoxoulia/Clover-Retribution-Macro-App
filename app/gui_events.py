@@ -75,11 +75,9 @@ class EventsPage:
         top = ctk.CTkFrame(p, **CARD); top.pack(fill="x", pady=4)
         head = ctk.CTkFrame(top, fg_color="transparent"); head.pack(fill="x", padx=10, pady=(8, 0))
         ctk.CTkLabel(head, text="📣 Event Notifier", font=("Arial", 16, "bold"), text_color="#0d6efd").pack(side="left")
-        ctk.CTkButton(head, text="? Help", width=60, height=24, font=("Arial", 11, "bold"), fg_color="#343a40",
-                      hover_color="#495057", text_color="#0dcaf0", command=self.open_help).pack(side="right")
         ctk.CTkButton(head, text="▶ Video", width=64, height=24, font=("Arial", 11, "bold"), fg_color="#343a40",
                       hover_color="#495057", text_color="#ff6b6b",
-                      command=lambda: links.open_link("video_events")).pack(side="right", padx=(0, 6))
+                      command=lambda: links.open_link("video_events")).pack(side="right")
         ctk.CTkLabel(top, text="Posts the [Event]s from every Roblox window's chat to Discord. Keeps running in every macro.",
                      font=("Arial", 12), text_color="#ced4da", wraplength=420, justify="left").pack(anchor="w", padx=10)
         self.toggle = big_toggle(top, self.flip)
@@ -245,10 +243,6 @@ class EventsPage:
             self._log(f"✔ {where} will ping {len(value.replace(',', ' ').split())} role(s).")
 
     # ---------- actions ----------
-    def open_help(self):
-        from gui_guide import SetupGuide, EVENTS_PAGES
-        SetupGuide.show(self.root, None, pages=EVENTS_PAGES, title="Event Notifier — Setup Guide")
-
     def _style_toggle(self):
         style_toggle(self.toggle, WATCHER.running, "Event alerts", icon_on="📣", icon_off="📣")
 

@@ -134,3 +134,6 @@ sounds/
 .launcher/
 # last links.txt downloaded from GitHub
 links_cache.txt
+
+# everything the user saved (settings, routes, pictures, sounds) lives in data/
+data/

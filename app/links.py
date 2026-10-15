@@ -7,7 +7,7 @@ The download runs in the background with a short timeout, so the app never waits
 import os
 import threading
 
-REMOTE_URL = "https://raw.githubusercontent.com/Vunoxoulia/Clover-Retribution-Macro-App/main/links.txt"
+REMOTE_URL = "https://raw.githubusercontent.com/Vunoxoulia/Clover-Retribution-Macro-App/main/app/links.txt"
 CACHE_FILE = "links_cache.txt"
 
 DEFAULTS = {
@@ -63,7 +63,8 @@ def _read(path):
 
 def load_local():
     """Shipped links.txt, then the newer downloaded copy on top of it."""
-    _apply(_read(os.path.join(_base(), "links.txt")))
+    from settings import get_app_path
+    _apply(_read(os.path.join(get_app_path(), "links.txt")))
     _apply(_read(os.path.join(_base(), CACHE_FILE)))
 
 

@@ -8,7 +8,6 @@ import keyboard
 from settings import SpatialSettings
 from overlay import Overlay, PointSelector, PersistentOverlay
 from logic_smart import SmartMacroLogic
-from gui_guide import SetupGuide
 from gui import SidebarNav, NAV_ICONS
 from ui_style import save_while_typing
 
@@ -67,8 +66,6 @@ class SmartMacroGUI:
         self.toggle_btn = ctk.CTkButton(bar, text="", width=170, font=("Arial", 13, "bold"), command=self.logic.toggle)
         self.toggle_btn.pack(side="left", padx=8, pady=8)
         self.status_label = ctk.CTkLabel(bar, text="Status: idle", font=("Arial", 12, "bold"), anchor="w")
-        ctk.CTkButton(bar, text="❓ Setup Guide", width=120, font=("Arial", 12, "bold"), fg_color="#0dcaf0",
-                      hover_color="#31d2f2", text_color="#000000", command=lambda: self.open_guide()).pack(side="right", padx=8)
         self.status_label.pack(side="left", fill="x", expand=True, padx=8)
 
         # Loadouts: saved builds (moves, aim, combos, items + snapshots), like the Mining routes
@@ -373,6 +370,32 @@ class SmartMacroGUI:
         word("s → press again → wait")
         self._pick(row, d, "after", ["0", "0.25", "0.5", "1", "1.5"], 58).pack(side="left")
         word("s")
+        # optional screenshot check that we really left ','
+        row2 = ctk.CTkFrame(card, fg_color="transparent"); row2.pack(fill="x", padx=10, pady=(0, 8))
+        r = d.get("check_region") or [0, 0, 0, 0]
+        has = r[2] > r[0] and r[3] > r[1]
+        status = ctk.CTkLabel(row2, text=("📸 Check: on - after the presses it screenshots that spot and presses ',' "
+                                          "again if it still looks like ','" if has else
+                                          "📸 Check: off - pick a spot that looks different while in ',' "
+                                          "(e.g. an icon / UI that changes) to make sure it got out"),
+                              font=("Arial", 11), text_color="#75b798" if has else "#adb5bd",
+                              wraplength=430, justify="left")
+
+        def picked():
+            # the picture is taken right away: be OUT of ',' (normal play) when you pick
+            ok = self.logic.save_anti_shake_ref()
+            status.configure(text=("📸 Check: on - saved how that spot looks in normal play" if ok
+                                   else "📸 Couldn't take the picture - try again"),
+                             text_color="#75b798" if ok else "#ea868f")
+
+        def clear():
+            d["check_region"] = [0, 0, 0, 0]; self.save()
+            status.configure(text="📸 Check: off", text_color="#adb5bd")
+        ctk.CTkButton(row2, text="📸 Pick spot", width=90, height=24,
+                      command=lambda: self.pick_region(d, "check_region", after=picked)).pack(side="left")
+        ctk.CTkButton(row2, text="✖", width=26, height=24, fg_color="#495057",
+                      command=clear).pack(side="left", padx=4)
+        status.pack(side="left", padx=6)
 
     def open_meditation(self):
         """The Meditation settings in their own window."""
@@ -1091,16 +1114,11 @@ class SmartMacroGUI:
                              "can't both be on — enabling one turns the other off. Items works with either.",
                      font=("Arial", 12), text_color="#ced4da").pack(anchor="w", padx=12, pady=(0, 10))
 
-    def open_guide(self, section=None):
-        SetupGuide.show(self.root, section)
-
     def _help_btn(self, card, section):
-        ctk.CTkButton(card, text="? Help", width=60, height=24, font=("Arial", 11, "bold"), fg_color="#343a40",
-                      hover_color="#495057", text_color="#0dcaf0",
-                      command=lambda: self.open_guide(section)).place(relx=1.0, x=-10, y=8, anchor="ne")
+        """Top-right corner of a page: the ▶ Video tutorial."""
         ctk.CTkButton(card, text="▶ Video", width=64, height=24, font=("Arial", 11, "bold"), fg_color="#343a40",
                       hover_color="#495057", text_color="#ff6b6b",
-                      command=lambda: links.open_link("video_skill")).place(relx=1.0, x=-76, y=8, anchor="ne")
+                      command=lambda: links.open_link("video_skill")).place(relx=1.0, x=-10, y=8, anchor="ne")
 
     # ---------- loadouts ----------
     def _refresh_loadout_menu(self):

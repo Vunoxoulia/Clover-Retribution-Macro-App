@@ -2,10 +2,63 @@ import json
 import os
 import sys
 
-def get_base_path():
+# Folder layout (only the launcher sits in the main folder):
+#   Windows_Launcher.bat
+#   app/   the program (code, icon, built-in routes, links.txt)  - replaced by updates
+#   data/  YOUR stuff (settings, routes, pictures, sounds)       - never touched by updates
+#   docs/  patch notes and guides
+
+def get_app_path():
+    """The program folder (app/)."""
     if hasattr(sys, '_MEIPASS'):
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.abspath(__file__))
+
+
+def get_root_path():
+    """The main folder - the one with Windows_Launcher.bat."""
+    return os.path.dirname(get_app_path())
+
+
+# Everything the user saved. Older versions kept these next to the launcher; they're moved into data/.
+USER_DATA_NAMES = ("settings.json", "settings.json.bak", "settings.json.broken", "settings.json.tmp",
+                   "links_cache.txt", "ok_template.png", "event_roles_import.json",
+                   "routes", "routes_library", "smart_templates", "library_templates", "sounds",
+                   "tundra_route.json", "tundra_home.png", "tundra_snapshots")
+
+
+def get_base_path():
+    """Where the user's data lives (data/). Made on first use; old data from the main folder is moved in."""
+    d = os.path.join(get_root_path(), "data")
+    if not os.path.isdir(d):
+        os.makedirs(d, exist_ok=True)
+    if not getattr(get_base_path, "_migrated", False):
+        get_base_path._migrated = True
+        migrate_old_data(get_root_path(), d)
+    return d
+
+
+def migrate_old_data(root, data):
+    """One-time: move the user's files from the main folder (old layout) into data/ - nothing is lost."""
+    import shutil
+    for name in USER_DATA_NAMES:
+        old, new = os.path.join(root, name), os.path.join(data, name)
+        if not os.path.exists(old):
+            continue
+        try:
+            if not os.path.exists(new):
+                shutil.move(old, new)
+            elif os.path.isdir(old) and os.path.isdir(new):
+                for r, _, files in os.walk(old):          # merge: only add what data/ doesn't have yet
+                    rel = os.path.relpath(r, old)
+                    os.makedirs(os.path.join(new, rel), exist_ok=True)
+                    for f in files:
+                        t = os.path.join(new, rel, f)
+                        if not os.path.exists(t):
+                            shutil.move(os.path.join(r, f), t)
+                shutil.rmtree(old, ignore_errors=True)
+        except Exception as e:
+            print(f"Couldn't move {name} into data/: {e}")
 
 # Every part of the app (hub, each macro, Skill Macro, Event Notifier) gets the SAME settings dict.
 # Before, each had its own copy and saving an older copy wiped newer changes (e.g. Skill Macro loadouts).
@@ -36,7 +89,8 @@ class SpatialSettings:
                 "test_btn": "f1",
                 "test_color": "f2",
                 "test_movement": "f2",
-                "test_path": "f3"
+                "test_path": "f3",
+                "test_find": "f4"
             },
             "positions": {
                 "clover_training": [0, 0],
@@ -143,6 +197,7 @@ class SpatialSettings:
             self.settings.update(data)
             # hotkeys are replaced as a whole on load: re-add actions added since that file was saved
             self.settings["hotkeys"].setdefault("test_path", "f3")
+            self.settings["hotkeys"].setdefault("test_find", "f4")
 
     def save(self):
         """Write to a temp file, then swap it in: a crash can't leave a half-written settings.json.

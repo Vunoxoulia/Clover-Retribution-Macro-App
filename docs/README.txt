@@ -1,9 +1,34 @@
+HOW TO RUN SPATIAL MACRO
+========================
+
+WHAT'S NEW IN V6.3
+==================
+- Library: new 🪄 Auto setup for 'Moves to train' - reads the hotbar slots of the moves you ticked, opens the wisp's move list (scrolling down) and matches them, saving ONE word only that move has (e.g. 'Cage' for Sovereign Magic: Cage Gates); words every move shares are ignored, so misreads like 'Cagt' / 'Cate' still find 'Cage'. If a move has no unique word it suggests Image mode (which also saves each move's picture)
+- Library: Auto setup's confirm window lists every move seen in the dialogue - if a match is wrong, just pick the right one
+- Library: small, pixelated button text is read far better (e.g. 'Cage Gates' no longer reads as blank or 'Cagt')
+- Library: new 🔎 Find moves (test, F4) - walks to the wisp, opens the move list and only hovers each ticked move it finds, then shows which were found and suggests names for the ones it couldn't find
+- Library: Manual dialogue mode now just clicks your spots: Clover Training + up to 3 move spots (each with its own tick and hotbar slot for the gold check) - no names, no reading, no scrolling. Image and Auto still use 'Moves to train' and scroll to reach all 9
+- Library: the move list is recognised as soon as a button looks ~50% like one of your moves (hotbar / saved names), or when 2+ buttons hold still - 'Skip', Clover Training and Nevermind never count, so it never scrolls while the text is still typing
+- Library: the dialogue is found even when it blends into the macro window or a dark floor
+- Library: scrolling the move list glides the mouse there first, so Roblox registers it
+- Library: if the wisp's dialogue closes (e.g. Nevermind) after it was found, it stays where it is and double jumps + presses E until the dialogue opens again, instead of walking the route again
+- Library: new built-in route 'VunVun's route 2' (locked like the first one)
+- Library: pressing Ctrl+P on a built-in route now tells you to click New to create your own route
+- Skill Macro: Anti screen-shake has an optional 📸 screenshot check - pick a spot that looks different while in ',' and after the presses it checks you're really out, pressing ',' again if not
+- changes apply right away: text boxes save almost instantly while typing, and Mining picks up route edits from the next lap without restarting
+- Mac and Linux support removed (it couldn't be tested and relied on Windows-only parts) - the macro is Windows 10 / 11 only
+- updating from an older version: if the macro doesn't reopen by itself after the update, just open Windows_Launcher.bat again
+
 WHAT'S NEW IN V6.2.9
 =====================
+- fixed Library's 'slot' dropdowns (Moves to train) not being used: after a gold check the macro could keep using old slots and skip moves
 - Library: 🪄 Auto now pins each gold-clover check to the top-right corner of its own hotbar slot (it could sit too high before), and reads gold reliably in small windows
 
 WHAT'S NEW IN V6.2.8
 =====================
+- video tutorial, YouTube, Discord and donate links now come from links.txt on GitHub, so they can be updated without a new version
+- new Library video tutorial
+- Library: new optional 💬 Dialogue area (Areas tab) - drag a box over the wisp's dialogue and only that box is read, so other things on screen can't confuse it
 - fixed Library (Auto dialogue) sometimes clicking 'New opportunities [Class Reset]' instead of 'Clover Training' - it now finds the button by its words (research / clover / training), even when the mouse cuts across it or the window is small (tiny, misread text), and never clicks Class Reset
 - Library: no longer clicks the dialogue's Skip button - it waits for the text to finish instead
 
@@ -99,10 +124,62 @@ WHAT'S NEW IN V6
 - Mining Macro: routes now use however many ores you record
 - cleaner and faster menus, with the same big ON/OFF buttons everywhere
 - Library Macro: can hide the chat during the minigame so it isn't clicked as a clover
-- Library Macro: train up to 9 moves; it scrolls the wisp's list to find each move by name or picture
-- Library Macro: gold clovers are found automatically from your hotbar (no more small boxes per move)
-- Library, Mining and Fishing: Start and Stop are now one button on F6 (same as the Skill Macro, no more F7)
-- NEW keyboard layout option in the main menu (Auto, QWERTY, AZERTY, QWERTZ, Other) so the macros press the right keys on any keyboard
-- nicer YouTube, Discord and Donate buttons in the main menu
-- Items: pick the key from a list, and each item can have a cooldown (seconds) before it can be used again
 - fixed the macro window not coming back when you press Esc while selecting an area, spot or color
+
+PPREREQUISITES & SYSTEM REQUIREMENTS
+==================================
+
+SOFTWARE REQUIREMENTS:
+- Operating System: Windows 10 or Windows 11 (64-bit).
+- Python: Version 3.11 to 3.14 (3.12 is recommended). The text reader (onnxruntime) isn't available for 3.10 or 3.15 - install 3.12 next to it (the launcher offers to).
+- Microsoft Visual C++ Redistributable (x64): Required for OCR features.
+  (the launcher will check for this and provide a download link if missing).
+
+HARDWARE REQUIREMENTS:
+- CPU: Intel Core i3 / AMD Ryzen 3 or better.
+- RAM: 4GB Minimum (8GB+ recommended for OCR stability).
+- GPU: Any modern GPU. (NVIDIA GPUs with CUDA support will make OCR significantly faster).
+
+DISPLAY SETTINGS:
+- Resolution: Optimized for 1920x1080.
+- Windows Scaling: 100% is strongly recommended.
+- Game Mode: Windowed or Borderless Windowed mode is required for screen capture.
+
+INSTALLING PYTHON:
+1. Download Python: Go to https://www.python.org/downloads/
+2. Install Python: Run the installer. 
+   *** IMPORTANT ***: Check the box that says "Add Python to PATH" during installation.
+3. Verify Pip: Pip is usually installed with Python automatically.
+
+FOLDERS
+=======
+- Windows_Launcher.bat - double-click this to start
+- app\  - the program (replaced by updates)
+- data\ - YOUR settings, routes, pictures and sounds (updates never touch it - back this up)
+- docs\ - patch notes and guides
+
+HOW TO RUN
+==========
+
+Windows_Launcher.bat (Windows 10 / 11 only - Mac and Linux aren't supported)
+----------
+Use this for daily use. It will automatically install required libraries, check for system dependencies, and start the macro.
+Double-click this file to launch.
+
+TROUBLESHOOTING: MALWARE WARNINGS
+=================================
+Some Antivirus software (including Windows Defender) may flag this project as "Malware", "Trojan", or "Keygen". These are **FALSE POSITIVES**.
+
+Why is this happening?
+1. Trojan/Keylogger: The macro uses libraries (keyboard, win32api) to simulate keystrokes and mouse clicks in Roblox. Since these libraries "hook" into your input, antivirus software flags them as potential keyloggers.
+2. Keygen/Downloader: The `updater.py` script is designed to download the latest version from GitHub and replace local files. This behavior (downloading and modifying its own files) is a common trigger for "Keygen" or "Downloader" heuristics.
+
+Is it safe?
+Yes. The code is open-source. You can inspect `app/utils.py` to see exactly how keyboard/mouse inputs are handled, and `app/updater.py` to see how updates are processed.
+
+USAGE
+=====
+- Select the desired macro from the tabs.
+- Configure your settings in the 'Settings' tab if needed.
+- Click 'Start' to begin the sequence.
+- Focus the Roblox window immediately after starting.

@@ -39,7 +39,9 @@ MEDITATION_DEFAULT = {
 }
 
 # Anti screen-shake: every N seconds press ',' → wait → ',' (resets the camera lock) between casts
-ANTI_SHAKE_DEFAULT = {"enabled": False, "every": 30, "key": ",", "between": 1.0, "after": 0.5}
+ANTI_SHAKE_DEFAULT = {"enabled": False, "every": 30, "key": ",", "between": 1.0, "after": 0.5,
+                      "check_region": [0, 0, 0, 0]}   # optional screenshot check: a spot that looks different in ','
+ANTI_SHAKE_REF = os.path.join(TEMPLATE_DIR, "anti_shake_normal.png")
 
 DEFAULT_SMART = {
     "hotkey": "f6",
@@ -641,7 +643,44 @@ class SmartMacroLogic:
         with RobloxInputDriver._lock:
             self._press(key)
         self._wait(max(0.0, float(d.get("after", 0.5) or 0)))
+        # screenshot check: does the picked spot look like normal play again? If not we're still in ','
+        for _ in range(2):
+            if self.anti_shake_back_to_normal() is not False:
+                break
+            self.app.log("Anti screen-shake: still in ',' - pressing it once more.")
+            with RobloxInputDriver._lock:
+                self._press(key)
+            self._wait(max(0.5, float(d.get("after", 0.5) or 0)))
         self._last_shake = time.time()
+
+    def save_anti_shake_ref(self):
+        """Picture of the check spot during NORMAL play (out of ','). True when saved."""
+        r = self.anti_shake().get("check_region") or [0, 0, 0, 0]
+        if r[2] <= r[0] or r[3] <= r[1]:
+            return False
+        img = self.utils.capture_screen_bgr(r)
+        if img is None or not img.size:
+            return False
+        os.makedirs(TEMPLATE_DIR, exist_ok=True)
+        return bool(cv2.imwrite(ANTI_SHAKE_REF, img))
+
+    def anti_shake_back_to_normal(self):
+        """True = the spot matches the normal picture, False = it doesn't (still in ','),
+        None = no check set up."""
+        r = self.anti_shake().get("check_region") or [0, 0, 0, 0]
+        if r[2] <= r[0] or r[3] <= r[1] or not os.path.exists(ANTI_SHAKE_REF):
+            return None
+        ref = cv2.imread(ANTI_SHAKE_REF)
+        now = self.utils.capture_screen_bgr(r)
+        if ref is None or now is None or not now.size:
+            return None
+        try:
+            now = cv2.resize(now, (ref.shape[1], ref.shape[0]))
+            a = cv2.cvtColor(ref, cv2.COLOR_BGR2GRAY).astype(np.float32)
+            b = cv2.cvtColor(now, cv2.COLOR_BGR2GRAY).astype(np.float32)
+            return float(np.mean(np.abs(a - b))) < 25        # small changes (glow, light) are fine
+        except Exception:
+            return None
 
     def med(self):
         d = self.cfg["rotation"].setdefault("meditation", {})

@@ -59,7 +59,7 @@ def sound_picker(parent, kind):
     return f
 
 
-def save_while_typing(widget, save, delay=400):
+def save_while_typing(widget, save, delay=120):
     """Save a text box shortly after you stop typing, so you don't have to press Enter or click
     somewhere else first (closing the window right after typing used to lose the text)."""
     def later(event=None):

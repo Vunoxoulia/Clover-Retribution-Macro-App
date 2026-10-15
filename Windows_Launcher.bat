@@ -1,6 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
-title VunVun's Macro Loader - V6.2.9
+title VunVun's Macro Loader - V6.3
 REM Always work from the folder this launcher is in ("Run as administrator" starts in System32)
 cd /d "%~dp0"
 
@@ -9,8 +9,8 @@ echo VunVun's Macro Loader
 echo =====================
 echo.
 
-if not exist "requirements.txt" (
-    echo   [ERROR] requirements.txt was not found next to this launcher.
+if not exist "app\requirements.txt" (
+    echo   [ERROR] app\requirements.txt was not found next to this launcher.
     echo.
     echo     1. UNZIP the download first: right-click the .zip, "Extract All...",
     echo        then run Windows_Launcher.bat from the extracted folder.
@@ -56,7 +56,7 @@ if not exist "!CACHE!\cleaned.txt" (
 
 set "NEED_INSTALL=1"
 if exist "!CACHE!\requirements.txt" (
-    fc /b "requirements.txt" "!CACHE!\requirements.txt" >nul 2>&1 && set "NEED_INSTALL=0"
+    fc /b "app\requirements.txt" "!CACHE!\requirements.txt" >nul 2>&1 && set "NEED_INSTALL=0"
 )
 if "!NEED_INSTALL!"=="0" (
     call "!PY_EXE!" -c "import importlib.util as u,sys; m=['customtkinter','mss','numpy','cv2','keyboard','rapidocr_onnxruntime','onnxruntime','pynput','pywinctl','screeninfo','PIL','requests']; sys.exit(0 if all(u.find_spec(x) for x in m) else 1)" >nul 2>&1 || set "NEED_INSTALL=1"
@@ -66,7 +66,7 @@ if "!NEED_INSTALL!"=="0" (
     echo up to date
 ) else (
     echo installing / updating - this takes a minute the first time...
-    call "!PY_EXE!" -m pip install -r requirements.txt --disable-pip-version-check --no-warn-script-location -q
+    call "!PY_EXE!" -m pip install -r "app\requirements.txt" --disable-pip-version-check --no-warn-script-location -q
     if errorlevel 1 (
         echo.
         echo   [ERROR] Couldn't install the packages.
@@ -77,7 +77,7 @@ if "!NEED_INSTALL!"=="0" (
         pause
         exit /b 1
     )
-    copy /y "requirements.txt" "!CACHE!\requirements.txt" >nul
+    copy /y "app\requirements.txt" "!CACHE!\requirements.txt" >nul
     echo                       done
 )
 
@@ -95,7 +95,7 @@ REM [3/3] Start
 REM ---------------------------------------------------------------------------
 echo [3/3] Starting ...... the macro window opens in a moment
 echo.
-call "!PY_EXE!" main.py
+call "!PY_EXE!" "app\main.py"
 if errorlevel 1 (
     echo.
     echo   [CRASH] The macro stopped unexpectedly - see the error above.
