@@ -357,8 +357,14 @@ class RouteNav(BaseLogic):
     def is_recording(self):
         return self._rec_thread is not None and self._rec_thread.is_alive()
 
+    def rec_key(self):
+        """The record key as shown to people ('F9', 'Ctrl+P'); set in the Hotkeys tab (default F9)."""
+        k = (self.app.settings.get("hotkeys", {}) or {}).get("record") or "f9"
+        return "+".join(p.upper() if len(p) <= 3 and p[:1] in "fF" and p[1:].isdigit() or len(p) == 1 else p.capitalize()
+                        for p in k.split("+"))
+
     def toggle_recording(self):
-        """Ctrl+P: start recording into the selected route, or finish the recording."""
+        """Record key (default F9): start recording into the selected route, or finish the recording."""
         if self.is_recording():
             self._rec_stop = True
             return
@@ -368,13 +374,13 @@ class RouteNav(BaseLogic):
         if self.is_locked():
             name = self.active_route()
             self.app.log(f"🔒 '{name}' is a built-in route and can't be recorded over. "
-                         "Press New to make your own route, then Ctrl+P.")
+                         f"Press New to make your own route, then {self.rec_key()}.")
             try:
                 from tkinter import messagebox
                 self.app.root.after(0, lambda: messagebox.showinfo(
                     "Built-in route",
                     f"🔒 '{name}' is a built-in route - it can't be recorded over.\n\n"
-                    "Click  New  (next to the route list) to create your own route, then press Ctrl+P "
+                    f"Click  New  (next to the route list) to create your own route, then press {self.rec_key()} "
                     "to record it.", parent=self.app.root))
             except Exception:
                 pass
@@ -409,10 +415,10 @@ class RouteNav(BaseLogic):
         lock = threading.Lock()
         if self.ROUTE_TARGET == "ore":
             self.app.log(f"● RECORDING '{name}'. Walk the route, TAP E at each ore (as many as you like), then walk "
-                         f"back to the start and press Ctrl+P. Everything after the last E = the walk back.")
+                         f"back to the start and press {self.rec_key()}. Everything after the last E = the walk back.")
         else:
             self.app.log(f"● RECORDING '{name}'. Walk to the {self.ROUTE_TARGET} (jumps, E... all recorded), "
-                         f"then press Ctrl+P there.")
+                         f"then press {self.rec_key()} there.")
         if hasattr(self.app, "set_recording_ui"):
             self.app.root.after(0, lambda: self.app.set_recording_ui(True))
 
@@ -455,7 +461,7 @@ class RouteNav(BaseLogic):
                         self.app.log(f"   ore {idx} marked ({seg['duration']:.1f}s walk, "
                                      f"{len(seg['checkpoints'])} checkpoints)")
                     else:
-                        self.app.log(f"   {self.ROUTE_TARGET} reached ({seg['duration']:.1f}s walk) — press Ctrl+P to finish")
+                        self.app.log(f"   {self.ROUTE_TARGET} reached ({seg['duration']:.1f}s walk) — press {self.rec_key()} to finish")
                     st["cp_taken"] = True
                     return
                 if name_ in self.RECORD_KEYS or (name_ == "e" and not self.E_MARKS_TARGET):

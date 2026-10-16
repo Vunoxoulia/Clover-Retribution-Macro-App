@@ -90,7 +90,8 @@ class SpatialSettings:
                 "test_movement": "f2",
                 "test_path": "f3",
                 "test_find": "f4",
-                "test_full": "f5"
+                "test_full": "f5",
+                "record": "f9"
             },
             "positions": {
                 "clover_training": [0, 0],
@@ -199,6 +200,7 @@ class SpatialSettings:
             self.settings["hotkeys"].setdefault("test_path", "f3")
             self.settings["hotkeys"].setdefault("test_find", "f4")
             self.settings["hotkeys"].setdefault("test_full", "f5")
+            self.settings["hotkeys"].setdefault("record", "f9")
 
     def save(self):
         """Write to a temp file, then swap it in: a crash can't leave a half-written settings.json.

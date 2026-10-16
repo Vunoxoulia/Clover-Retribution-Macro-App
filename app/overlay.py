@@ -126,8 +126,9 @@ class RecordingBadge:
     It NEVER takes keyboard focus (or the keys you press would stop reaching Roblox / the recording),
     clicks go straight through it, and it isn't in the taskbar."""
 
-    def __init__(self, x, y):
+    def __init__(self, x, y, key="F9"):
         import time as _t
+        self._key = key
         self._t0 = _t.time()
         self._time = _t.time
         self.root = tk.Toplevel()
@@ -164,7 +165,7 @@ class RecordingBadge:
     def _tick(self, first=False):
         try:
             secs = int(self._time() - self._t0)
-            self.lbl.configure(text=f"● REC  {secs // 60}:{secs % 60:02d}   ·   Ctrl+P to stop")
+            self.lbl.configure(text=f"● REC  {secs // 60}:{secs % 60:02d}   ·   {self._key} to stop")
             self.root.after(500, self._tick)
         except Exception:
             pass

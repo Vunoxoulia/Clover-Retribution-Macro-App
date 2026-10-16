@@ -317,8 +317,8 @@ class SpatialGUI:
 
         self._route_card(tab, None, None,
                          "Test Path (F2)", self.logic.test_movement,
-                         "Recording: stand at the start, press Ctrl+P, walk the loop, TAP E once at each ore, "
-                         "pause ~0.5s at corners (checkpoints), press Ctrl+P again back at the start.")
+                         f"Recording: stand at the start, press {self.logic.rec_key()}, walk the loop, TAP E once at each ore, "
+                         f"pause ~0.5s at corners (checkpoints), press {self.logic.rec_key()} again back at the start.")
 
         # Movement / alignment
         mc = card(); mc.pack(fill="x", padx=15, pady=4)
@@ -369,7 +369,7 @@ class SpatialGUI:
     def setup_library_settings(self, tab):
         self._route_card(tab, "Dialogue (F1)", self.logic.test_detection,
                          "Test Path (F3)", self.logic.test_path,
-                         "At the desk: Ctrl+P → walk to the wisp (jumps and E are recorded too) → Ctrl+P.")
+                         f"At the desk: {self.logic.rec_key()} → walk to the wisp (jumps and E are recorded too) → {self.logic.rec_key()}.")
         mc = self._moves_card = ctk.CTkFrame(tab, fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
         mc.pack(fill="x", padx=15, pady=4)
         ctk.CTkLabel(mc, text="✨ Moves to train", font=("Arial", 13, "bold")).pack(anchor="w", padx=8, pady=(6, 0))
@@ -747,7 +747,7 @@ class SpatialGUI:
         if not hasattr(self, "rec_label"):
             return
         if recording:
-            self.rec_label.configure(text="● RECORDING… (Ctrl+P to finish)", text_color="#ea868f")
+            self.rec_label.configure(text=f"● RECORDING… ({self.logic.rec_key()} to finish)", text_color="#ea868f")
             return
         r = self.logic.load_route()
         if r:
@@ -757,7 +757,12 @@ class SpatialGUI:
             lock = "🔒 built-in · " if self.logic.is_locked() else ""
             self.rec_label.configure(text=f"✓ {lock}{what}", text_color="#75b798")
         else:
-            self.rec_label.configure(text="Not recorded yet — press Ctrl+P", text_color="#ced4da")
+            builtins = list(self.logic._builtins()) if hasattr(self.logic, "_builtins") else []
+            if builtins:
+                self.rec_label.configure(text=f"Not recorded — '{builtins[0]}' will be used ({self.logic.rec_key()} to record your own)",
+                                         text_color="#ffc107")
+            else:
+                self.rec_label.configure(text=f"Not recorded yet — press {self.logic.rec_key()}", text_color="#ced4da")
 
     def _rec_badge(self, on):
         """Red '● REC' badge on top of the Roblox window while recording (never takes focus)."""
@@ -768,7 +773,7 @@ class SpatialGUI:
             try:
                 l, t, r, b = self.logic.get_roblox_window_region()
                 from overlay import RecordingBadge
-                self._badge = RecordingBadge((l + r) / 2, t + 40)
+                self._badge = RecordingBadge((l + r) / 2, t + 40, key=self.logic.rec_key())
             except Exception as e:
                 print(f"REC badge: {e}")
 
@@ -789,7 +794,7 @@ class SpatialGUI:
         name = self._ask("New route", "Name for the new route (e.g. Tundra, Cave):")
         if name and self.logic.create_route(name):
             self.refresh_routes()
-            self.log(f"Route '{name}' created. Stand at its start spot and press Ctrl+P to record.")
+            self.log(f"Route '{name}' created. Stand at its start spot and press {self.logic.rec_key()} to record.")
         elif name:
             self.log("That name is empty or already used.")
 
@@ -832,7 +837,7 @@ class SpatialGUI:
             w.destroy()
         route = self.logic.load_route()
         if not route:
-            ctk.CTkLabel(self.route_panel, text="No recording for this route yet.\nStand at the start spot in-game and press Ctrl+P.",
+            ctk.CTkLabel(self.route_panel, text=f"No recording for this route yet.\nStand at the start spot in-game and press {self.logic.rec_key()}.",
                          font=("Arial", 12), text_color="#ced4da").pack(pady=20)
             return
         items = [(f"Ore {i}", i - 1, seg) for i, seg in enumerate(route["segments"], start=1)]
@@ -1390,7 +1395,13 @@ class SpatialGUI:
             f = ctk.CTkFrame(tab, fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
             f.pack(pady=3, fill="x", padx=20)
             ctk.CTkLabel(f, text="Record route", width=120, font=("Arial", 12, "bold"), anchor="w").pack(side="left", padx=10, pady=6)
-            ctk.CTkLabel(f, text="Ctrl+P (start / stop)", font=("Arial", 12), text_color="#ced4da").pack(side="right", padx=10)
+            e = ctk.CTkEntry(f, width=80, font=("Arial", 12))
+            e.insert(0, hotkeys.get("record", "f9"))
+            e.pack(side="right", padx=10, pady=6)
+            e.bind("<FocusOut>", lambda ev: self.update_hotkey("record"))
+            self.hotkey_entries["record"] = e
+            ctk.CTkLabel(f, text="start / stop  (e.g. f9, ctrl+p)", font=("Arial", 11),
+                         text_color="#adb5bd").pack(side="right", padx=4)
         ctk.CTkButton(tab, text="Apply Hotkeys", font=("Arial", 12, "bold"), fg_color="#0d6efd", hover_color="#0b5ed7", command=self.register_hotkeys).pack(pady=20)
 
     def register_hotkeys(self):
@@ -1427,7 +1438,7 @@ class SpatialGUI:
 
         if hasattr(self.logic, "toggle_recording"):
             try:
-                keyboard.add_hotkey("ctrl+p", self.logic.toggle_recording)
+                keyboard.add_hotkey(hk.get("record") or "f9", self.logic.toggle_recording)
             except Exception as e:
                 self.log(f"Hotkey Error (record): {e}")
 

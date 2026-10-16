@@ -115,7 +115,7 @@ class MiningLogic(RouteNav):
         """Test Path: one lap of the selected route without mining."""
         route = self.load_route()
         if not route:
-            self.app.log("No recorded route yet. Select a route and press Ctrl+P to record.")
+            self.app.log(f"No recorded route yet. Select a route and press {self.rec_key()} to record.")
             return
         if not self.wait_focus_for_test():
             return
@@ -146,11 +146,11 @@ class MiningLogic(RouteNav):
         from logic_events import WATCHER
         try:
             if self.is_recording():
-                self.app.log("Finish the recording (Ctrl+P) before starting.")
+                self.app.log(f"Finish the recording ({self.rec_key()}) before starting.")
                 return
             route = self.load_route()
             if not route:
-                self.app.log("No recorded route yet. Select a route and press Ctrl+P to record.")
+                self.app.log(f"No recorded route yet. Select a route and press {self.rec_key()} to record.")
                 return
             if not self.wait_for_roblox_focus():
                 return

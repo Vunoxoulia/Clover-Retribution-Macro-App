@@ -1,3 +1,4 @@
+import os
 import time
 import threading
 import webbrowser
@@ -307,6 +308,7 @@ class SmartMacroGUI:
         ctk.CTkButton(row, text="③ 📸 Snapshot all", width=140, height=28, **BLUE,
                       command=self.snapshot_all).pack(side="left", padx=(10, 3))
         ctk.CTkButton(row, text="Show", width=56, **BTN, command=self.flash_slots).pack(side="right", padx=3)
+        ctk.CTkButton(row, text="🖼 Snapshots", width=96, **BTN, command=self.view_snapshots).pack(side="right", padx=3)
         ctk.CTkButton(row, text="Test", width=56, **BTN, command=self.test_rotation).pack(side="right", padx=3)
         ctk.CTkButton(row, text="🪄 Find hotbar", width=110, height=28, **BLUE,
                       command=self.auto_tune).pack(side="right", padx=3)
@@ -736,8 +738,9 @@ class SmartMacroGUI:
                              hover_color="#343a40", command=lambda: self.toggle_options(slot))
         gear.pack(side="right", padx=2)
         ctk.CTkButton(r1, text="📸", width=32, command=lambda: self.snapshot([slot]), **BTN).pack(side="right", padx=2)
-        score = ctk.CTkLabel(r1, text="✔" if has else "no img", width=64, font=("Arial", 12),
-                             text_color="#75b798" if has else "#ea868f")
+        # the snapshot itself (what 'ready' looks like for this slot); 'no img' until one is taken
+        score = ctk.CTkLabel(r1, text="" if has else "no img", width=64, font=("Arial", 12),
+                             text_color="#ea868f", image=self._thumb(slot))
         score.pack(side="right", padx=2)
         self.score_labels[slot] = score
         summary = ctk.CTkLabel(r1, text="", font=("Arial", 12), text_color="#ced4da", anchor="w")
@@ -805,6 +808,47 @@ class SmartMacroGUI:
             w["opts"] = self._make_opts(w["frame"], slot, self.logic.moves()[slot - 1])
             w["opts"].pack(fill="x", padx=(40, 6), pady=(0, 6))
 
+    def _thumb(self, slot, height=28):
+        """A small picture of this slot's snapshot for its card (None when there's none)."""
+        try:
+            from PIL import Image
+            path = self.logic.template_path(slot)
+            if not os.path.exists(path):
+                return None
+            im = Image.open(path).convert("RGB")
+            w = max(1, int(im.width * height / max(1, im.height)))
+            return ctk.CTkImage(light_image=im, dark_image=im, size=(min(w, 64), height))
+        except Exception:
+            return None
+
+    def view_snapshots(self):
+        """All of this loadout's snapshots side by side, each with its own 📸 Retake."""
+        old = getattr(self, "_snap_win", None)
+        if old is not None and old.winfo_exists():
+            old.destroy()
+        win = ctk.CTkToplevel(self.root)
+        win.title(f"Snapshots - {self.logic.active_loadout()}")
+        win.transient(self.root); win.after(150, win.lift)
+        self._snap_win = win
+        ctk.CTkLabel(win, text="What each slot looks like when READY. Retake one while that skill is off cooldown.",
+                     font=("Arial", 12), text_color="#ced4da").pack(anchor="w", padx=12, pady=(10, 6))
+        grid = ctk.CTkFrame(win, fg_color="transparent"); grid.pack(padx=10, pady=(0, 10))
+        moves = self.logic.moves()
+        for i, m in enumerate(moves, start=1):
+            cell = ctk.CTkFrame(grid, fg_color="#212529", corner_radius=6)
+            cell.grid(row=(i - 1) // 5, column=(i - 1) % 5, padx=4, pady=4)
+            ctk.CTkLabel(cell, text=f"Slot {i}" + (f" · {m['name'][:12]}" if m.get("name") else ""),
+                         font=("Arial", 11, "bold")).pack(padx=6, pady=(4, 2))
+            img = self._thumb(i, height=72)
+            ctk.CTkLabel(cell, text="" if img else "no snapshot", image=img, width=90, height=72,
+                         text_color="#ea868f").pack(padx=6)
+
+            def retake(slot=i):
+                win.destroy()
+                self.snapshot([slot])
+                self.root.after(300, self.view_snapshots)
+            ctk.CTkButton(cell, text="📸 Retake", width=80, command=retake, **BTN).pack(padx=6, pady=(4, 6))
+
     def snapshot_all(self):
         self.snapshot(None)
 
@@ -825,7 +869,10 @@ class SmartMacroGUI:
         if not w:
             return
         has = self.logic.has_template(slot)
-        self.score_labels[slot].configure(text="✔" if has else "no img", text_color="#75b798" if has else "#ea868f")
+        img = self._thumb(slot)
+        self.score_labels[slot].configure(text="" if img else "no img", image=img, text_color="#ea868f")
+        if img is None:
+            self.score_labels[slot]._image = None
         self._refresh_opts(slot)                     # Cooldown row depends on the snapshot
         self._update_summary(slot)
 

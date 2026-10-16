@@ -239,15 +239,24 @@ class LibraryLogic(RouteNav):
 
     # ================= Getting to the wisp =================
     def go_to_wisp(self):
-        route = self.load_route()
+        route, name = self.load_route(), self.active_route()
         if not route:
-            self.app.log("No recorded route to the wisp - using the old D/S/W walk. (Record one with Ctrl+P.)")
+            # the selected route was never recorded (e.g. made with New): use the built-in route instead of
+            # asking for a recording - nobody has to press Ctrl+P to use the macro
+            for b in self._builtins():
+                route = self.load_route(b)
+                if route:
+                    self.app.log(f"Route '{name}' has no recording - using the built-in '{b}' instead.")
+                    name = b
+                    break
+        if not route:
+            self.app.log(f"No recorded route to the wisp - using the old D/S/W walk. (Record one with {self.rec_key()}.)")
             self.perform_approach_movement()
             return
         # New recordings: the whole walk is one piece ('return'). Old ones: the walk up to the first E.
         seg = route["segments"][0] if route["segments"] else route["return"]
         self.align_home()
-        self.app.log(f"Walking to the wisp (route '{self.active_route()}')...")
+        self.app.log(f"Walking to the wisp (route '{name}')...")
         self.play_segment(seg, label="wisp")
         self._wait_still()
 
