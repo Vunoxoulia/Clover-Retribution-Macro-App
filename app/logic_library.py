@@ -708,6 +708,17 @@ class LibraryLogic(RouteNav):
             time.sleep(0.25)
         return []
 
+    def _best_name_hit(self, name, buttons):
+        """The button that shows `name` BEST: an exact match beats one that only contains it
+        ('Flameball' must pick 'Flameball', not 'Great Flameball')."""
+        import difflib
+        hits = [b for b in buttons if b[2] and self._same_name(name, b[2])]
+        if not hits:
+            return None
+        n = self._norm_name(name)
+        return max(hits, key=lambda b: (self._norm_name(b[2]) == n,
+                                        difflib.SequenceMatcher(None, n, self._norm_name(b[2])).ratio()))
+
     def pick_move_button(self, move_idx):
         """In the move menu: find the move by its captured picture or its name; if it isn't visible,
         scroll ONE notch down and look again. Nevermind is always last: seeing it = end of the list."""
@@ -727,10 +738,12 @@ class LibraryLogic(RouteNav):
             if not buttons:
                 self.app.log(f"-> The move list didn't show up (only 'Skip' / no buttons).")
                 return False
-            if name:
-                hit = next((b for b in buttons if self._same_name(name, b[2])), None)
+            at_end = any("never" in (b[2] or "").lower() for b in buttons)
+            # Image mode: the PICTURE leads - the name is only a last try once the whole list was checked
+            if name and (not has_pic or at_end):
+                hit = self._best_name_hit(name, buttons)
                 if hit:
-                    self.app.log(f"[2/2] Found {label} (name) - clicking")
+                    self.app.log(f"[2/2] Found {label} (name{' - picture not found' if has_pic else ''}) - clicking")
                     self.human_click(hit[0], hit[1], duration=0.15)
                     return True
             elif not has_pic and step == 0:
@@ -1206,12 +1219,16 @@ class LibraryLogic(RouteNav):
                         continue
                     key, name = f"move_{i + 1}", self.move_names()[i]
                     pt, how = None, ""
-                    if mode == "image" and self.has_dialog_template(key):
+                    pic = mode == "image" and self.has_dialog_template(key)
+                    if pic:
                         pt = self.find_dialog_button(key); how = "picture"
-                    if not pt and name:
-                        hit = next((b for b in buttons if self._same_name(name, b[2])), None)
+                    at_end = any("never" in (b[2] or "").lower() for b in buttons)
+                    # the picture leads; the name is only tried once the whole list was checked for the picture
+                    if not pt and name and (not pic or at_end):
+                        hit = self._best_name_hit(name, buttons)
                         if hit:
-                            pt, how = (hit[0], hit[1]), f"name '{hit[2]}'"
+                            pt, how = (hit[0], hit[1]), (f"name '{hit[2]}' (picture not found)" if pic
+                                                         else f"name '{hit[2]}'")
                     if pt:
                         found[i] = how
                         self.app.log(f"   ✔ {self.move_label(i)} found ({how}) - hovering, not clicking")

@@ -1,3 +1,7 @@
+WHAT'S NEW IN V6.3.1
+====================
+- fixed Library (Image mode) clicking a move by its name before checking its picture (e.g. 'Great Flameball' for Flameball) - the picture is now always tried first, scrolling down the whole list, and the name is only a last try at the end; a name now picks the closest button ('Flameball', not 'Great Flameball')
+
 WHAT'S NEW IN V6.3
 ==================
 - Library: new Auto setup for 'Moves to train' - reads the hotbar slots of the moves you ticked, opens the wisp's move list (scrolling down) and matches them, saving ONE word only that move has (e.g. 'Cage' for Sovereign Magic: Cage Gates); words every move shares are ignored, so misreads like 'Cagt' / 'Cate' still find 'Cage'. If a move has no unique word it suggests Image mode (which also saves each move's picture)
