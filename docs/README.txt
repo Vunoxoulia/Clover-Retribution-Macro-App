@@ -3,6 +3,7 @@ HOW TO RUN SPATIAL MACRO
 
 WHAT'S NEW IN V6.3.1
 ====================
+- Library: tests split up - Test Path (F3) only walks the route, 🔎 Find moves (F4) only reads the move list that's already open (no walking, nothing clicked), and the new 🧪 Full test (F5) walks the route, opens the dialogue and finds the moves
 - fixed Library (Image mode) clicking a move by its name before checking its picture (e.g. 'Great Flameball' for Flameball) - the picture is now always tried first, scrolling down the whole list, and the name is only a last try at the end; a name now picks the closest button ('Flameball', not 'Great Flameball')
 
 WHAT'S NEW IN V6.3

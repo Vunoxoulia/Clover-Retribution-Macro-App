@@ -549,17 +549,26 @@ class SpatialGUI:
             w.destroy()
         self.setup_library_settings(holder)
 
-    def test_find_moves(self):
-        """Run the find-moves dry run in the background and show its result in a pop-up."""
-        key = (self.settings.get("hotkeys", {}).get("test_find") or "f4").upper()
-        self.log(f"Find moves (test): click into Roblox within 10 s (or press {key} while in Roblox) - it walks to "
-                 "the wisp, opens the menu and hovers each move it finds (no move is clicked).")
+    def test_find_moves(self, walk=False):
+        """F4 (walk=False): find the moves in the move list that's ALREADY open - no walking, no clicks.
+        F5 (walk=True): full test - walk the route, open the dialogue, then find the moves.
+        Runs in the background and shows the result in a pop-up."""
+        hk = self.settings.get("hotkeys", {})
+        if walk:
+            key = (hk.get("test_full") or "f5").upper()
+            self.log(f"Full test: click into Roblox within 10 s (or press {key} while in Roblox) - it walks the route, "
+                     "opens the wisp's dialogue and hovers each move it finds (no move is clicked).")
+        else:
+            key = (hk.get("test_find") or "f4").upper()
+            self.log(f"Find moves (test): open the wisp's MOVE LIST, then click into Roblox within 10 s (or press {key} "
+                     "while in Roblox) - it hovers each move it finds (no walking, nothing is clicked).")
+        name = "Full test" if walk else "Find moves"
 
         def run():
-            res = self.logic.test_find_moves()
+            res = self.logic.test_find_moves(walk=walk)
             if res["lines"]:
                 from tkinter import messagebox
-                title = "Find moves - all found" if res["ok"] else "Find moves - results"
+                title = f"{name} - all found" if res["ok"] else f"{name} - results"
                 self.root.after(0, lambda: messagebox.showinfo(title, "\n\n".join(res["lines"]), parent=self.root))
         threading.Thread(target=run, daemon=True).start()
 
@@ -607,6 +616,10 @@ class SpatialGUI:
                           width=130, height=24, font=("Arial", 11, "bold"),
                           fg_color="#0d6efd", hover_color="#0b5ed7",
                           command=self.test_find_moves).pack(side="right")
+            ctk.CTkButton(head, text=f"🧪 Full test ({(self.settings.get('hotkeys', {}).get('test_full') or 'f5').upper()})",
+                          width=110, height=24, font=("Arial", 11, "bold"),
+                          fg_color="#198754", hover_color="#157347",
+                          command=lambda: self.test_find_moves(walk=True)).pack(side="right", padx=6)
         seg = ctk.CTkSegmentedButton(card, values=["Auto", "Image", "Manual"], font=("Arial", 12, "bold"),
                                      command=lambda v: (self.settings.set("dialog_mode", v.lower()), self.build_dialog_card()))
         seg.set(mode.capitalize())
@@ -1337,7 +1350,7 @@ class SpatialGUI:
 
         if hasattr(self.logic, 'test_movement'): actions.append('test_movement')
         if hasattr(self.logic, 'test_path') and not hasattr(self.logic, 'test_movement'): actions.append('test_path')
-        if hasattr(self.logic, 'test_find_moves'): actions.append('test_find')
+        if hasattr(self.logic, 'test_find_moves'): actions += ['test_find', 'test_full']
 
         for a in actions:
             f = ctk.CTkFrame(tab, fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
@@ -1347,7 +1360,8 @@ class SpatialGUI:
             if "Mining" in self.root.title():
                 display_names.update({"test_btn": "Test Prompt", "test_movement": "Test Path"})
             elif "Library" in self.root.title():
-                display_names.update({"test_btn": "Test Dialogue", "test_path": "Test Path", "test_find": "Find moves (test)"})
+                display_names.update({"test_btn": "Test Dialogue", "test_path": "Test Path", "test_find": "Find moves (list open)",
+                                      "test_full": "Full test (route + moves)"})
             label_text = display_names.get(a, a.replace("_", " ").capitalize())
             ctk.CTkLabel(f, text=label_text, width=120, font=("Arial", 12, "bold"), anchor="w").pack(side="left", padx=10, pady=6)
             e = ctk.CTkEntry(f, width=80, font=("Arial", 12))
@@ -1391,7 +1405,8 @@ class SpatialGUI:
             elif hasattr(self.logic, 'test_path'):          # Library: its own key so it doesn't share F2 with Test Color
                 try_add('test_path', lambda: self._run_test(self.logic.test_path))
         if hasattr(self.logic, 'test_find_moves'):
-            try_add('test_find', self.test_find_moves)       # Library: walk + find moves (hover only)
+            try_add('test_find', self.test_find_moves)                        # F4: move list already open
+            try_add('test_full', lambda: self.test_find_moves(walk=True))     # F5: route + dialogue + moves
 
         if hasattr(self.logic, "toggle_recording"):
             try:

@@ -85,12 +85,12 @@ class SpatialSettings:
                 "start": "f6",
                 "stop": "f7",
                 "pause": "f8",
-                "refresh": "f5",
                 "test_btn": "f1",
                 "test_color": "f2",
                 "test_movement": "f2",
                 "test_path": "f3",
-                "test_find": "f4"
+                "test_find": "f4",
+                "test_full": "f5"
             },
             "positions": {
                 "clover_training": [0, 0],
@@ -198,6 +198,7 @@ class SpatialSettings:
             # hotkeys are replaced as a whole on load: re-add actions added since that file was saved
             self.settings["hotkeys"].setdefault("test_path", "f3")
             self.settings["hotkeys"].setdefault("test_find", "f4")
+            self.settings["hotkeys"].setdefault("test_full", "f5")
 
     def save(self):
         """Write to a temp file, then swap it in: a crash can't leave a half-written settings.json.

@@ -1163,10 +1163,11 @@ class LibraryLogic(RouteNav):
                 cv2.imwrite(self.dialog_template_path(f"move_{i + 1}"), pic)
         self.app.settings.save()
 
-    def test_find_moves(self):
-        """Dry run: walk to the wisp, open the dialogue, click Clover Training, then go down the move list
-        ONCE and only HOVER each ticked move it finds (never clicks a move). Returns a result dict:
-        {'lines': [...], 'ok': bool} - also logged."""
+    def test_find_moves(self, walk=False):
+        """Dry run of the move search: go down the move list ONCE and only HOVER each ticked move it finds
+        (never clicks a move). walk=False (F4): the move list must already be open - no walking, no clicks.
+        walk=True (full test, F5): walk the route, open the dialogue and click Clover Training first.
+        Returns a result dict: {'lines': [...], 'ok': bool} - also logged."""
         mode = self.dialog_mode()
         result = {"lines": [], "ok": False}
         say = lambda m: (result["lines"].append(m), self.app.log(m))
@@ -1185,27 +1186,37 @@ class LibraryLogic(RouteNav):
         seen = []                                    # every button text read on the way (for suggestions)
         found = {}                                   # move index -> how it was found
         try:
-            self.app.log("--- Find moves (test): walking to the wisp ---")
-            self.go_to_wisp()
-            if not self.running or not self.open_dialogue():
-                say("✖ Couldn't open the wisp's dialogue (are you at the wisp?)."); return result
-            # first menu -> Clover Training (this one IS clicked, it's the only way to reach the move list)
-            deadline = time.time() + 20
-            target = None
-            while self.running and time.time() < deadline and not target:
-                if mode == "image" and self.has_dialog_template("clover_training"):
-                    pt = self.find_dialog_button("clover_training")
-                    target = (pt, "picture") if pt else None
-                else:
-                    t = self.find_training_button()
-                    target = t if t else None
+            if not walk:
+                self.app.log("--- Find moves (test): reading the open move list (no walking, no clicks) ---")
+                if not self.wait_move_list(timeout=4):
+                    if self.find_training_button():
+                        say("✖ That's the first menu - click 'Clover Training' to open the move list, then test again.")
+                    else:
+                        say("✖ No move list on screen. Open the wisp's move list (Clover Training) first - "
+                            "or use the Full test, which walks there and opens it.")
+                    return result
+            else:
+                self.app.log("--- Full test: walking to the wisp ---")
+                self.go_to_wisp()
+                if not self.running or not self.open_dialogue():
+                    say("✖ Couldn't open the wisp's dialogue (are you at the wisp?)."); return result
+                # first menu -> Clover Training (this one IS clicked, it's the only way to reach the move list)
+                deadline = time.time() + 20
+                target = None
+                while self.running and time.time() < deadline and not target:
+                    if mode == "image" and self.has_dialog_template("clover_training"):
+                        pt = self.find_dialog_button("clover_training")
+                        target = (pt, "picture") if pt else None
+                    else:
+                        t = self.find_training_button()
+                        target = t if t else None
+                    if not target:
+                        time.sleep(0.4)
                 if not target:
-                    time.sleep(0.4)
-            if not target:
-                say("✖ Couldn't find 'Clover Training' in the first menu."); return result
-            self.human_click(*target[0], duration=0.15)
-            self._park_mouse()
-            time.sleep(2.0)                          # move list fades in
+                    say("✖ Couldn't find 'Clover Training' in the first menu."); return result
+                self.human_click(*target[0], duration=0.15)
+                self._park_mouse()
+                time.sleep(2.0)                      # move list fades in
             for step in range(MAX_MOVES + 3):
                 if not self.running:
                     break
