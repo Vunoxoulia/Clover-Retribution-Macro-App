@@ -3,7 +3,7 @@
 # One link per line:   name = link        Lines starting with # are notes.
 
 # --- video tutorials ---
-video_library  = https://youtu.be/oTvYkCcnIrc
+video_library  = https://youtu.be/F14jSpM0mfQ
 video_mining   = https://youtu.be/mD85aJdDbfE
 video_fishing  = https://youtu.be/a_4odPOc3e4
 video_skill    = https://youtu.be/CwSAvulD4Ac
