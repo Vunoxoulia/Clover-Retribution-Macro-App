@@ -1,3 +1,8 @@
+WHAT'S NEW IN V6.3.2
+====================
+- Library: new 'Wait after Clover Training' (default 1.5 s, editable in Wisp dialogue) - it waits that long before reading the move list, so it no longer scrolls past a move that's right at the top
+- main menu: 'Devil Union' is now 'Umbral Abyss Stone' - auto farm lesser devil Juggernaut (coming soon)
+
 WHAT'S NEW IN V6.3.1
 ====================
 - Library: tests split up - Test Path (F3) only walks the route, 🔎 Find moves (F4) only reads the move list that's already open (no walking, nothing clicked), and the new 🧪 Full test (F5) walks the route, opens the dialogue and finds the moves

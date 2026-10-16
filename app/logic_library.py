@@ -454,6 +454,14 @@ class LibraryLogic(RouteNav):
         while self.running and time.time() < end:
             time.sleep(0.05)
 
+    def after_training_wait(self):
+        """Seconds to wait after clicking Clover Training before reading the move list (editable in
+        Settings > Wisp dialogue). Reading too early sees a half-faded list and scrolls past the move."""
+        try:
+            return max(0.0, float(self.app.settings.get("after_training_wait", 1.5)))
+        except (TypeError, ValueError):
+            return 1.5
+
     def run_dialogue_fixed(self, move_idx):
         """Image / Manual mode: click Clover Training, then the move's button."""
         mode = self.dialog_mode()
@@ -462,7 +470,7 @@ class LibraryLogic(RouteNav):
         self._park_mouse()
         for n, (key, label) in enumerate(steps, start=1):
             if n == 2 and mode == "image":
-                self._skip_typing(0.6)
+                time.sleep(self.after_training_wait())   # let the move list fully show before reading it
                 return self.pick_move_button(move_idx)
             if mode == "manual":
                 pt = self.manual_point(key)
@@ -861,6 +869,7 @@ class LibraryLogic(RouteNav):
                 self.app.log(f"[1/2] First menu: clicking {why}")
                 self.human_click(tx, ty, duration=0.15)
                 self._park_mouse()
+                time.sleep(self.after_training_wait())  # let the move list fully show before reading it
                 stage, menu1_text = "moves", text_img
             else:
                 return self.pick_move_button(move_idx)     # picture / name, scrolling if needed
@@ -1216,7 +1225,7 @@ class LibraryLogic(RouteNav):
                     say("✖ Couldn't find 'Clover Training' in the first menu."); return result
                 self.human_click(*target[0], duration=0.15)
                 self._park_mouse()
-                time.sleep(2.0)                      # move list fades in
+                time.sleep(self.after_training_wait())  # move list fades in
             for step in range(MAX_MOVES + 3):
                 if not self.running:
                     break

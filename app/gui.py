@@ -6,7 +6,7 @@ from updater import SpatialUpdater
 from logic_library import LibraryLogic
 from logic_mining import MiningLogic
 from logic_fishing import FishingLogic
-from logic_devil_union import DevilUnionLogic
+from logic_umbral_abyss import UmbralAbyssLogic
 import keyboard
 from ui_style import big_toggle, style_toggle, save_while_typing, sound_picker
 import os
@@ -60,7 +60,7 @@ class MacroSelector:
         self.create_card("Event Notifier", "Posts server events from\nchat to Discord.", "Launch",
                          self.launch_events, 4)
 
-        self.create_card("Devil Union", "Automated training for\nDevil Union progression.", "Coming Soon", None, 5)
+        self.create_card("Umbral Abyss Stone", "Auto farm lesser devil\nJuggernaut.", "Coming Soon", None, 5)
 
         footer = ctk.CTkFrame(self.root, fg_color="transparent")
         footer.pack(fill="x", side="bottom", pady=10, padx=20)
@@ -682,6 +682,23 @@ class SpatialGUI:
                                    command=lambda v: self.settings.set("dialog_wait", float(v)))
             om.set(f"{self.settings.get('dialog_wait', 1.5):g}")
             om.pack(side="left", padx=6)
+        if mode != "manual":
+            row = ctk.CTkFrame(card, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(4, 2))
+            ctk.CTkLabel(row, text="Wait after Clover Training (s)", font=("Arial", 12)).pack(side="left")
+
+            def set_after(v=None):
+                try:
+                    self.settings.set("after_training_wait", max(0.0, float((v if v is not None else cb.get()).strip())))
+                except (TypeError, ValueError):
+                    pass
+            cb = ctk.CTkComboBox(row, values=["0.5", "1", "1.5", "2", "3"], width=70, height=26, command=set_after)
+            cb.set(f"{self.logic.after_training_wait():g}")
+            cb._entry.bind("<FocusOut>", lambda e: set_after())
+            cb._entry.bind("<Return>", lambda e: set_after())
+            save_while_typing(cb._entry, set_after)
+            cb.pack(side="left", padx=6)
+            ctk.CTkLabel(row, text="before reading the move list", font=("Arial", 11),
+                         text_color="#adb5bd").pack(side="left")
         ctk.CTkLabel(card, text="Talk to the wisp first so the buttons are on screen, then capture / pick. "
                                 "Press Test Dialogue (F1) to check.", font=("Arial", 12), text_color="#ced4da",
                      justify="left", wraplength=410).pack(fill="x", padx=8, pady=(2, 6))
