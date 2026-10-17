@@ -11,6 +11,7 @@ WHAT'S NEW IN V6.3.3
 - Skill Macro: Find hotbar and Snapshot all now replace drawn boxes with the automatic ones (they used to stay and overlap)
 - Skill Macro: fixed the Find hotbar button showing as 'Find hot'
 - cleaner look: removed all emoji / icons from buttons, menus, pages, pop-ups and messages
+- Event Notifier: the events list has a search box and pages (8 per page) instead of one long scrolling list; the 'who to ping' button now reads '+ ping' / '2 pings'
 
 WHAT'S NEW IN V6.3.2
 ====================

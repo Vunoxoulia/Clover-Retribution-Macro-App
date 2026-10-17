@@ -190,9 +190,57 @@ class EventsPage:
         ctk.CTkButton(lh, text="+ Add event", width=100, command=self.add_event, **{**BTN, **BLUE}).pack(side="right")
         ctk.CTkLabel(p, text="on  ·  name  ·  words from its chat message  ·  who to ping  ·  role ID",
                      font=("Arial", 12), text_color="#adb5bd").pack(anchor="w", padx=8)
+        # search + pages, so a long list doesn't mean scrolling forever
+        sr = ctk.CTkFrame(p, fg_color="transparent"); sr.pack(fill="x", padx=4, pady=(4, 2))
+        self._search = ctk.CTkEntry(sr, placeholder_text="Search events (name or words)...", height=28,
+                                    font=("Arial", 12))
+        self._search.pack(side="left", fill="x", expand=True, padx=(4, 6))
+        self._search.bind("<KeyRelease>", lambda e: (setattr(self, "_page_no", 0), self.render_events()))
+        ctk.CTkButton(sr, text="Clear", width=56, command=lambda: (self._search.delete(0, "end"),
+                                                                  setattr(self, "_page_no", 0),
+                                                                  self.render_events()), **BTN).pack(side="left")
         self.list_box = ctk.CTkFrame(p, fg_color="transparent"); self.list_box.pack(fill="x")
-        for ev in cfg["events"]:
+        pg = ctk.CTkFrame(p, fg_color="transparent"); pg.pack(fill="x", pady=(4, 2))
+        self._prev = ctk.CTkButton(pg, text="Prev", width=60, command=lambda: self._turn(-1), **BTN)
+        self._prev.pack(side="left", padx=(4, 4))
+        self._page_lbl = ctk.CTkLabel(pg, text="", font=("Arial", 12))
+        self._page_lbl.pack(side="left", padx=6)
+        self._next = ctk.CTkButton(pg, text="Next", width=60, command=lambda: self._turn(1), **BTN)
+        self._next.pack(side="left", padx=4)
+        self._page_no = 0
+        self.render_events()
+
+    PER_PAGE = 8
+
+    def _matching_events(self):
+        q = (self._search.get() if hasattr(self, "_search") else "").strip().lower()
+        evs = self.cfg["events"]
+        if not q:
+            return evs
+        return [e for e in evs if q in (e.get("name") or "").lower() or q in (e.get("keyword") or "").lower()]
+
+    def render_events(self):
+        """Show one page of (matching) events."""
+        for w in self.list_box.winfo_children():
+            w.destroy()
+        evs = self._matching_events()
+        pages = max(1, -(-len(evs) // self.PER_PAGE))
+        self._page_no = max(0, min(getattr(self, "_page_no", 0), pages - 1))
+        start = self._page_no * self.PER_PAGE
+        for ev in evs[start:start + self.PER_PAGE]:
             self._event_row(ev)
+        if not evs:
+            ctk.CTkLabel(self.list_box, text="No event matches that search.", font=("Arial", 12),
+                         text_color="#adb5bd").pack(pady=8)
+        total = len(self.cfg["events"])
+        self._page_lbl.configure(text=f"Page {self._page_no + 1} of {pages}   ·   "
+                                      + (f"{len(evs)} of {total} events" if len(evs) != total else f"{total} events"))
+        self._prev.configure(state="normal" if self._page_no > 0 else "disabled")
+        self._next.configure(state="normal" if self._page_no < pages - 1 else "disabled")
+
+    def _turn(self, step):
+        self._page_no = getattr(self, "_page_no", 0) + step
+        self.render_events()
 
     def _show_clear_options(self):
         """Global-tab option + tab buttons only make sense while 'Clear it' is ticked."""
@@ -226,7 +274,8 @@ class EventsPage:
         def remove():
             lst = self.cfg["events"]
             del lst[next(i for i, x in enumerate(lst) if x is ev)]
-            self._save(); r.destroy()
+            self._save()
+            self.render_events()
         ctk.CTkButton(r, text="X", width=28, height=26, command=remove, **RED).pack(side="right", padx=6)
         self._people_button(r, ev, "mention", ev.get("name") or "this event").pack(side="left", padx=2)
         self._entry(r, ev, "role", 70, "role ID",
@@ -263,7 +312,10 @@ class EventsPage:
         ev = {"enabled": True, "name": "", "keyword": "", "mention": ""}
         self.cfg["events"].append(ev)
         self._save()
-        self._event_row(ev)
+        if hasattr(self, "_search"):
+            self._search.delete(0, "end")                 # show it: no filter, last page
+        self._page_no = 10 ** 6
+        self.render_events()
 
     # ---------- people (saved Discord users to ping) ----------
     def _people(self):
@@ -272,15 +324,15 @@ class EventsPage:
     def _people_label(self, value, wide):
         ids = (value or "").split()
         if not ids:
-            return "nobody — click to pick" if wide else ""
+            return "nobody — click to pick" if wide else "+ ping"
         names = {p["id"]: p["name"] for p in self._people()}
         shown = [names.get(i.strip("<@!&>"), i) for i in ids]
         if wide:
             return "" + ", ".join(shown)
-        return f"{len(shown)}"
+        return f"{len(shown)} ping" if len(shown) == 1 else f"{len(shown)} pings"
 
     def _people_button(self, parent, d, key, where, wide=False):
-        btn = ctk.CTkButton(parent, text=self._people_label(d.get(key), wide), width=200 if wide else 54, height=28,
+        btn = ctk.CTkButton(parent, text=self._people_label(d.get(key), wide), width=200 if wide else 64, height=28,
                             anchor="w" if wide else "center", font=("Arial", 12), fg_color="#343638",
                             hover_color="#495057", border_width=1, border_color="#565b5e")
         btn.configure(command=lambda: PeoplePicker(self, d, key, where,
