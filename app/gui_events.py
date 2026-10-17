@@ -202,7 +202,7 @@ class EventsPage:
         lh = ctk.CTkFrame(p, fg_color="transparent"); lh.pack(fill="x", padx=4, pady=(6, 2))
         ctk.CTkLabel(lh, text="Events", font=("Arial", 14, "bold")).pack(side="left", padx=4)
         ctk.CTkButton(lh, text="+ Add event", width=100, command=self.add_event, **{**BTN, **BLUE}).pack(side="right")
-        ctk.CTkLabel(p, text="name · chat words · ping · role ID · again after (min) · Test",
+        ctk.CTkLabel(p, text="name · chat words · ping · role ID · Test",
                      font=("Arial", 12), text_color="#adb5bd").pack(anchor="w", padx=8)
         bulk = ctk.CTkFrame(p, fg_color="transparent"); bulk.pack(fill="x", padx=4, pady=(2, 0))
         ctk.CTkButton(bulk, text="Tick shown", width=84, command=lambda: self._tick_shown(True), **BTN).pack(side="left", padx=2)
@@ -298,9 +298,8 @@ class EventsPage:
         ctk.CTkButton(r, text="X", width=26, height=26, command=remove, **RED).pack(side="right", padx=(2, 6))
         ctk.CTkButton(r, text="Test", width=40, command=lambda: self.test_event(ev),
                       **BTN).pack(side="right", padx=2)
-        self._entry(r, ev, "cooldown_min", 32, "min").pack(side="right", padx=2)
         self._people_button(r, ev, "mention", ev.get("name") or "this event").pack(side="left", padx=2)
-        self._entry(r, ev, "role", 64, "role ID",
+        self._entry(r, ev, "role", 90, "role ID",
                     on_save=lambda v, n=ev: self._check_role(v, n.get("name") or "this event")
                     ).pack(side="left", padx=2, fill="x", expand=True)
 
@@ -360,7 +359,7 @@ class EventsPage:
                                             initialfile="Event list.json", filetypes=[("Event list", "*.json")])
         if not path:
             return
-        keep = ("enabled", "name", "keyword", "role", "mention", "cooldown_min")
+        keep = ("enabled", "name", "keyword", "role", "mention")
         data = {"type": "event_list", "events": [{k: ev[k] for k in keep if ev.get(k) not in (None, "")}
                                                  for ev in self.cfg["events"]]}
         with open(path, "w", encoding="utf-8") as f:
@@ -387,7 +386,7 @@ class EventsPage:
         for it in items:
             if not isinstance(it, dict) or not (it.get("name") or "").strip():
                 continue
-            clean = {k: it[k] for k in ("enabled", "name", "keyword", "role", "mention", "cooldown_min") if k in it}
+            clean = {k: it[k] for k in ("enabled", "name", "keyword", "role", "mention") if k in it}
             cur = by_name.get(clean["name"].strip().lower())
             if cur is not None:
                 cur.update(clean); updated += 1

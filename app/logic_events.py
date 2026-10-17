@@ -542,15 +542,7 @@ class EventWatcher:
         except Exception as e:
             self.log(f"/clear failed: {e}")
 
-    # ---------- extras: cooldown per event, recent list, unreadable chat, test ----------
-    def cooldown_for(self, ev):
-        """Seconds before this event may be posted again: its own 'again after' (minutes) or the shared one."""
-        try:
-            own = float(ev.get("cooldown_min") or 0)
-        except (TypeError, ValueError):
-            own = 0
-        return own * 60 if own > 0 else float(self.cfg.get("cooldown", 120))
-
+    # ---------- extras: recent list, unreadable chat, test ----------
     def note(self, name, win_no, what):
         self.recent.append((time.time(), name, win_no, what))
         del self.recent[:-30]
@@ -651,7 +643,7 @@ class EventWatcher:
         for ev, w, win_no in found:
             # The cooldown counts per window: each window can post the same event on its own
             key = (ev["name"], w.getHandle())
-            if time.time() - self._last_post.get(key, 0) < self.cooldown_for(ev):
+            if time.time() - self._last_post.get(key, 0) < float(self.cfg.get("cooldown", 120)):
                 continue
             self._last_post[key] = time.time()
             new.append((ev, w))
