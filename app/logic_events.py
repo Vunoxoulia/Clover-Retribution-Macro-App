@@ -38,7 +38,7 @@ DEFAULT_CFG = {
     "sound_on_alert": False,   # play a Windows sound when an event is posted (optional, off by default)
     "clear_in_global": True,   # /clear doesn't always work in 'Here': click Global, clear, click Here again
     "hover_chat": True,        # move the mouse onto the chat before reading (it fades out otherwise)
-    "unreadable_warn": 5,      # minutes a window's chat can be unreadable before a warning (0 = never)
+    "unreadable_warn": 10,     # minutes a window's chat can be unreadable before a warning (0 = never)
     "events": [{"enabled": True, "name": n, "keyword": k, "mention": ""} for n, k in DEFAULT_EVENTS],
 }
 
@@ -549,7 +549,7 @@ class EventWatcher:
 
     def _check_unreadable(self, key, win_no, post):
         """Warn once when a window's chat has had no readable text for a while (moved / closed chat)."""
-        mins = float(self.cfg.get("unreadable_warn", 5) or 0)
+        mins = float(self.cfg.get("unreadable_warn", 10) or 0)
         first = self._readable_at.setdefault(key, time.time())
         if mins <= 0 or key in self._warned or time.time() - first < mins * 60:
             return

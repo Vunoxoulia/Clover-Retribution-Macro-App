@@ -149,7 +149,7 @@ class EventsPage:
         uw_opts = {"never": 0, "3 min": 3, "5 min": 5, "10 min": 10, "15 min": 15}
         uw = ctk.CTkOptionMenu(row, values=list(uw_opts), width=80, height=26,
                                command=lambda v: (self.cfg.__setitem__("unreadable_warn", uw_opts[v]), self._save()))
-        uw.set(next((k for k, v in uw_opts.items() if v == int(cfg.get("unreadable_warn", 5) or 0)), "5 min"))
+        uw.set(next((k for k, v in uw_opts.items() if v == int(cfg.get("unreadable_warn", 10) or 0)), "10 min"))
         uw.pack(side="left", padx=4)
         row = ctk.CTkFrame(ck, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(6, 2))
         ctk.CTkButton(row, text="Test read", width=80, command=self.test_read, **BTN).pack(side="left")
