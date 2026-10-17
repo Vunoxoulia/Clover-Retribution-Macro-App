@@ -1427,7 +1427,9 @@ class SpatialGUI:
             "WHAT IS 'TOL'? (TOLERANCE)\n\n"
             "This controls how much the color can vary from your 'Picked' color.\n"
             "• Lower (1-10): Very strict. Best for stable lighting.\n"
-            "• Higher (20-40): More lenient for in-game lighting shifts."
+            "• Higher (20-40): More lenient for in-game lighting shifts.\n\n"
+            "Clicking everywhere (wrong spots)? LOWER the number.\n"
+            "Not clicking the clovers? RAISE the number."
         )
         ctk.CTkLabel(explanation_frame, text=explanation_text, font=("Arial", 12), text_color="#6edff6", justify="left", wraplength=360).pack(padx=12, pady=10, fill="x")
 
