@@ -5,7 +5,7 @@ WHAT'S NEW IN V6.3.2
 ====================
 - Library and Mining: the record key is now F9 (was Ctrl+P) and can be changed any time in the Hotkeys tab - every hint, the REC badge and the log show whichever key you set
 - Library: if the selected route was never recorded (e.g. made with New), it now uses the built-in route instead of asking you to record one
-- Skill Macro: each slot shows its snapshot picture, and the new 🖼 Snapshots button shows them all bigger, each with its own 📸 Retake
+- Skill Macro: snapshots now only take the inside of each hotbar box (not the gaps / ground beside it); each slot shows its picture (click it to see it big), the new 🖼 Snapshots button shows them all with 📸 Retake, and ✂ Draw box lets you drag your own box for a slot
 - Library: new 'Wait after Clover Training' (default 1.5 s, editable in Wisp dialogue) - it waits that long before reading the move list, so it no longer scrolls past a move that's right at the top
 - main menu: 'Devil Union' is now 'Umbral Abyss Stone' - auto farm lesser devil Juggernaut (coming soon)
 

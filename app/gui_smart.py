@@ -738,11 +738,14 @@ class SmartMacroGUI:
                              hover_color="#343a40", command=lambda: self.toggle_options(slot))
         gear.pack(side="right", padx=2)
         ctk.CTkButton(r1, text="📸", width=32, command=lambda: self.snapshot([slot]), **BTN).pack(side="right", padx=2)
+        ctk.CTkButton(r1, text="✂", width=32, command=lambda: self.draw_slot_box(slot), **BTN).pack(side="right", padx=2)
         # the snapshot itself (what 'ready' looks like for this slot); 'no img' until one is taken
         score = ctk.CTkLabel(r1, text="" if has else "no img", width=64, font=("Arial", 12),
                              text_color="#ea868f", image=self._thumb(slot))
         score.pack(side="right", padx=2)
         self.score_labels[slot] = score
+        score.configure(cursor="hand2")
+        score.bind("<Button-1>", lambda e: self.show_snapshot(slot))
         summary = ctk.CTkLabel(r1, text="", font=("Arial", 12), text_color="#ced4da", anchor="w")
         summary.pack(side="left", padx=8, fill="x", expand=True)
         self._cards[slot] = w = {"frame": c, "badge": badge, "up": up, "down": down, "gear": gear,
@@ -821,6 +824,47 @@ class SmartMacroGUI:
         except Exception:
             return None
 
+    def draw_slot_box(self, slot):
+        """✂ Draw your own box for this slot: drag around just the inside of its hotbar box. That box is used
+        for this slot from now on (snapshot AND ready check) and a new snapshot is taken of it right away."""
+        m = self.logic.moves()[slot - 1]
+        self.log(f"Slot {slot}: drag a box around the INSIDE of its hotbar box (the skill must be ready).")
+
+        def done():
+            self.logic._templates.clear()
+            self.snapshot([slot])
+            if getattr(self, "_snap_win", None) is not None and self._snap_win.winfo_exists():
+                self.view_snapshots()
+        self.pick_region(m, "box", after=done)
+
+    def reset_slot_box(self, slot):
+        """Go back to the automatic box for this slot (and retake its snapshot)."""
+        self.logic.moves()[slot - 1]["box"] = None
+        self.save()
+        self.logic._templates.clear()
+        self.snapshot([slot])
+
+    def show_snapshot(self, slot):
+        """The whole snapshot, big, in its own window."""
+        path = self.logic.template_path(slot)
+        if not os.path.exists(path):
+            self.log(f"Slot {slot} has no snapshot yet - press 📸 (or ✂ to draw its box).")
+            return
+        try:
+            from PIL import Image
+            im = Image.open(path).convert("RGB")
+        except Exception:
+            return
+        scale = max(1, min(6, 300 // max(1, max(im.width, im.height))))
+        big = im.resize((im.width * scale, im.height * scale), Image.NEAREST)
+        win = ctk.CTkToplevel(self.root)
+        win.title(f"Slot {slot} snapshot ({im.width}x{im.height} px)")
+        win.transient(self.root); win.after(150, win.lift)
+        ctk.CTkLabel(win, text="", image=ctk.CTkImage(light_image=big, dark_image=big, size=big.size)).pack(padx=12, pady=12)
+        own = bool(self.logic.moves()[slot - 1].get("box"))
+        ctk.CTkLabel(win, text=("Your own drawn box" if own else "Automatic box") + f" · {im.width}x{im.height} px",
+                     font=("Arial", 11), text_color="#adb5bd").pack(pady=(0, 10))
+
     def view_snapshots(self):
         """All of this loadout's snapshots side by side, each with its own 📸 Retake."""
         old = getattr(self, "_snap_win", None)
@@ -830,7 +874,8 @@ class SmartMacroGUI:
         win.title(f"Snapshots - {self.logic.active_loadout()}")
         win.transient(self.root); win.after(150, win.lift)
         self._snap_win = win
-        ctk.CTkLabel(win, text="What each slot looks like when READY. Retake one while that skill is off cooldown.",
+        ctk.CTkLabel(win, text="What each slot looks like when READY (click one to see it big). Retake one while that "
+                               "skill is off cooldown, or ✂ draw your own box around just the inside of its hotbar box.",
                      font=("Arial", 12), text_color="#ced4da").pack(anchor="w", padx=12, pady=(10, 6))
         grid = ctk.CTkFrame(win, fg_color="transparent"); grid.pack(padx=10, pady=(0, 10))
         moves = self.logic.moves()
@@ -840,14 +885,29 @@ class SmartMacroGUI:
             ctk.CTkLabel(cell, text=f"Slot {i}" + (f" · {m['name'][:12]}" if m.get("name") else ""),
                          font=("Arial", 11, "bold")).pack(padx=6, pady=(4, 2))
             img = self._thumb(i, height=72)
-            ctk.CTkLabel(cell, text="" if img else "no snapshot", image=img, width=90, height=72,
-                         text_color="#ea868f").pack(padx=6)
+            pic = ctk.CTkLabel(cell, text="" if img else "no snapshot", image=img, width=90, height=72,
+                               text_color="#ea868f", cursor="hand2")
+            pic.pack(padx=6)
+            pic.bind("<Button-1>", lambda e, slot=i: self.show_snapshot(slot))
 
             def retake(slot=i):
                 win.destroy()
                 self.snapshot([slot])
                 self.root.after(300, self.view_snapshots)
-            ctk.CTkButton(cell, text="📸 Retake", width=80, command=retake, **BTN).pack(padx=6, pady=(4, 6))
+            ctk.CTkButton(cell, text="📸 Retake", width=80, command=retake, **BTN).pack(padx=6, pady=(4, 2))
+
+            def draw(slot=i):
+                win.destroy()
+                self.draw_slot_box(slot)
+            ctk.CTkButton(cell, text="✂ Draw box", width=80, command=draw, **BTN).pack(padx=6, pady=2)
+            if m.get("box"):
+                def auto(slot=i):
+                    win.destroy()
+                    self.reset_slot_box(slot)
+                    self.root.after(300, self.view_snapshots)
+                ctk.CTkButton(cell, text="↺ Auto box", width=80, command=auto, **BTN).pack(padx=6, pady=(2, 6))
+            else:
+                ctk.CTkLabel(cell, text="", height=4).pack()
 
     def snapshot_all(self):
         self.snapshot(None)
