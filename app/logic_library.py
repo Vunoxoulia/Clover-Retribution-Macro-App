@@ -944,7 +944,17 @@ class LibraryLogic(RouteNav):
             if not done:
                 time.sleep(1.0)
                 continue
-            self.perform_clover_scoring()
+            played = self.perform_clover_scoring()
+            if played is False and self.running:
+                # never saw it start: still at the wisp? pick the move again here instead of walking off
+                if self.dialog_mode() != "manual" and self.dialogue_visible():
+                    self.app.log("The dialogue is still open - picking the move again.")
+                    if self.run_dialogue(self.current_move_idx):
+                        played = self.perform_clover_scoring()
+                if played is False:
+                    self.app.log("No minigame - starting the cycle again.")
+                    time.sleep(1.0)
+                    continue
             self.app.log("Cycle Complete")
             WATCHER.checkpoint("Library")   # minigame done: safe moment to check chat
             self.handle_ok_popup()
@@ -1390,7 +1400,16 @@ class LibraryLogic(RouteNav):
         if not found_any:
             self.app.log("Test: No clover colors found.")
 
+    def minigame_start_wait(self):
+        """How long to wait for the minigame to show up after picking a move (editable, default 30 s)."""
+        try:
+            return max(5.0, float(self.app.settings.get("minigame_start_wait", 30)))
+        except (TypeError, ValueError):
+            return 30.0
+
     def perform_clover_scoring(self):
+        """Wait until the minigame is SEEN, then click clovers until it's gone. Returns False if it never
+        started (nothing was played), True once a minigame was played."""
         settings = self.app.settings.settings
         region = settings["regions"]["score"]  
         clover_colors = settings.get("clover_colors", self.DEFAULT_CLOVER_COLORS)
@@ -1406,18 +1425,28 @@ class LibraryLogic(RouteNav):
             h = b - t
             region = [l, t + int(h * 0.10), r, t + int(h * 0.90)]
 
-        self.app.log("Waiting for the minigame to start...")
-        start_wait = time.time()
+        # The minigame must be SEEN first (a few checks in a row, so a flash doesn't count) - only then can
+        # 'it's gone' mean it ended. Until it has been seen, nothing is decided and nothing is clicked.
+        limit = self.minigame_start_wait()
+        self.app.log(f"Waiting for the minigame to start (up to {limit:g} s)...")
+        start_wait, seen = time.time(), 0
         while self.running:
-            if not self.wait_for_roblox_focus(): return
-            if self.in_minigame():
+            if not self.wait_for_roblox_focus():
+                self.minigame_running = False
+                return False
+            seen = seen + 1 if self.in_minigame() else 0
+            if seen >= 3:
                 self.app.log("Minigame started.")
                 self.toggle_chat("hide")
                 break
-            if time.time() - start_wait > 20:
-                self.app.log("Timeout waiting for minigame start.")
-                return
+            if time.time() - start_wait > limit:
+                self.app.log(f"The minigame didn't start within {limit:g} s - the move probably wasn't picked.")
+                self.minigame_running = False
+                return False
             time.sleep(0.15)
+        if not self.running:
+            self.minigame_running = False
+            return False
 
         def end_detector():
             gone_since = None
@@ -1516,6 +1545,7 @@ class LibraryLogic(RouteNav):
             move_stats[self.current_move_idx] += 250
             self.app.settings.set("move_stats", move_stats)
         self.app.root.after(0, self.app.update_gold_display)
+        return True
 
     def test_active_movement(self):
         """Tests the 5-pixel toggle movement"""

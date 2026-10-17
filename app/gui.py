@@ -765,6 +765,22 @@ class SpatialGUI:
             cb.pack(side="left", padx=6)
             ctk.CTkLabel(row, text="before reading the move list", font=("Arial", 11),
                          text_color="#adb5bd").pack(side="left")
+        row = ctk.CTkFrame(card, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(2, 2))
+        ctk.CTkLabel(row, text="Wait for the minigame up to (s)", font=("Arial", 12)).pack(side="left")
+
+        def set_mg(v=None):
+            try:
+                self.settings.set("minigame_start_wait", max(5.0, float((v if v is not None else mg.get()).strip())))
+            except (TypeError, ValueError):
+                pass
+        mg = ctk.CTkComboBox(row, values=["15", "20", "30", "45", "60"], width=70, height=26, command=set_mg)
+        mg.set(f"{self.logic.minigame_start_wait():g}")
+        mg._entry.bind("<FocusOut>", lambda e: set_mg())
+        mg._entry.bind("<Return>", lambda e: set_mg())
+        save_while_typing(mg._entry, set_mg)
+        mg.pack(side="left", padx=6)
+        ctk.CTkLabel(row, text="it must SEE it start before it can end", font=("Arial", 11),
+                     text_color="#adb5bd").pack(side="left")
         ctk.CTkLabel(card, text="Talk to the wisp first so the buttons are on screen, then capture / pick. "
                                 "Press Test Dialogue (F1) to check.", font=("Arial", 12), text_color="#ced4da",
                      justify="left", wraplength=410).pack(fill="x", padx=8, pady=(2, 6))
