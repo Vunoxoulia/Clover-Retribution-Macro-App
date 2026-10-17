@@ -51,7 +51,7 @@ def sound_picker(parent, kind):
         st.save()
         show()
 
-    ctk.CTkButton(f, text="🎵 Choose sound…", width=118, height=26, command=choose, **{k: v for k, v in BTN.items() if k != "height"}).pack(side="left")
+    ctk.CTkButton(f, text="Choose sound…", width=118, height=26, command=choose, **{k: v for k, v in BTN.items() if k != "height"}).pack(side="left")
     ctk.CTkButton(f, text="▶", width=30, height=26, command=lambda: play_sound(kind), **{k: v for k, v in BTN.items() if k != "height"}).pack(side="left", padx=4)
     ctk.CTkButton(f, text="Reset", width=50, height=26, command=reset, **{k: v for k, v in BTN.items() if k != "height"}).pack(side="left")
     name.pack(side="left", padx=6)

@@ -79,8 +79,8 @@ class SmartMacroGUI:
         ctk.CTkButton(lb, text="Rename", width=64, command=self.rename_loadout, **btn).pack(side="left", padx=2)
         ctk.CTkButton(lb, text="Delete", width=56, command=self.delete_loadout,
                       **{**btn, "hover_color": "#bb2d3b"}).pack(side="left", padx=2)
-        ctk.CTkButton(lb, text="📤 Export", width=76, command=self.export_loadout, **btn).pack(side="left", padx=(10, 2))
-        ctk.CTkButton(lb, text="📥 Import", width=76, command=self.import_loadout, **btn).pack(side="left", padx=2)
+        ctk.CTkButton(lb, text="Export", width=76, command=self.export_loadout, **btn).pack(side="left", padx=(10, 2))
+        ctk.CTkButton(lb, text="Import", width=76, command=self.import_loadout, **btn).pack(side="left", padx=2)
         self._refresh_loadout_menu()
         self.on_state_change(False)
 
@@ -308,17 +308,17 @@ class SmartMacroGUI:
         ctk.CTkLabel(top, text="Casts the highest READY move (top of the list first). READY = its icon matches the snapshot.",
                      font=("Arial", 12), text_color="#ced4da").pack(anchor="w", padx=10)
         row = ctk.CTkFrame(top, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(6, 8))
-        ctk.CTkButton(row, text="🔲 Hotbar region", width=140, height=28, **BLUE,
+        ctk.CTkButton(row, text="Hotbar region", width=140, height=28, **BLUE,
                       command=lambda: self.pick_region(rot, "region")).pack(side="left", padx=3)
         ctk.CTkLabel(row, text="Slots", font=("Arial", 12, "bold")).pack(side="left", padx=(8, 2))
         self._pick(row, rot, "slot_count", [str(i) for i in range(1, 11)], 56, int, editable=False,
                    on_save=self.build_cards).pack(side="left")
-        ctk.CTkButton(row, text="📸 Snapshot all", width=140, height=28, **BLUE,
+        ctk.CTkButton(row, text="Snapshot all", width=140, height=28, **BLUE,
                       command=self.snapshot_all).pack(side="left", padx=(10, 3))
         ctk.CTkButton(row, text="Show", width=56, **BTN, command=self.flash_slots).pack(side="right", padx=3)
-        ctk.CTkButton(row, text="🖼 Snapshots", width=96, **BTN, command=self.view_snapshots).pack(side="right", padx=3)
+        ctk.CTkButton(row, text="Snapshots", width=96, **BTN, command=self.view_snapshots).pack(side="right", padx=3)
         ctk.CTkButton(row, text="Test", width=56, **BTN, command=self.test_rotation).pack(side="right", padx=3)
-        ctk.CTkButton(row, text="🪄 Find hotbar", width=130, height=28, **BLUE,
+        ctk.CTkButton(row, text="Find hotbar", width=130, height=28, **BLUE,
                       command=self.auto_tune).pack(side="right", padx=3)
 
         self.build_aim_panel(p)
@@ -401,7 +401,7 @@ class SmartMacroGUI:
         def clear():
             d["check_region"] = [0, 0, 0, 0]; self.save()
             status.configure(text="📸 Check: off", text_color="#adb5bd")
-        ctk.CTkButton(row2, text="📸 Pick spot", width=90, height=24,
+        ctk.CTkButton(row2, text="Pick spot", width=90, height=24,
                       command=lambda: self.pick_region(d, "check_region", after=picked)).pack(side="left")
         ctk.CTkButton(row2, text="✖", width=26, height=24, fg_color="#495057",
                       command=clear).pack(side="left", padx=4)
@@ -557,7 +557,7 @@ class SmartMacroGUI:
         self.aim_chips_box = ctk.CTkFrame(row, fg_color="transparent", width=1, height=1)
         self.aim_chips_box.pack(side="left")
         ctk.CTkButton(row, text="✖ Clear", width=70, **BTN, command=self.clear_aim).pack(side="right", padx=3)
-        ctk.CTkButton(row, text="🎯 Pick spot", width=100, height=28, **BLUE, command=self.pick_aim).pack(side="right", padx=3)
+        ctk.CTkButton(row, text="Pick spot", width=100, height=28, **BLUE, command=self.pick_aim).pack(side="right", padx=3)
         self.aim_info = ctk.CTkLabel(card, text="", font=("Arial", 12), text_color="#ced4da", justify="left", anchor="w",
                                      wraplength=660)
         self.aim_info.pack(fill="x", padx=12, pady=(0, 6))
@@ -765,7 +765,7 @@ class SmartMacroGUI:
         gear = ctk.CTkButton(r1, text="⚙ ▾", width=44, height=26, font=("Arial", 12), fg_color="#495057",
                              hover_color="#343a40", command=lambda: self.toggle_options(slot))
         gear.pack(side="right", padx=2)
-        ctk.CTkButton(r1, text="📸", width=32, command=lambda: self.snapshot([slot]), **BTN).pack(side="right", padx=2)
+        ctk.CTkButton(r1, text="Snap", width=44, command=lambda: self.snapshot([slot]), **BTN).pack(side="right", padx=2)
         ctk.CTkButton(r1, text="✂", width=32, command=lambda: self.draw_slot_box(slot), **BTN).pack(side="right", padx=2)
         # the snapshot itself (what 'ready' looks like for this slot); 'no img' until one is taken
         score = ctk.CTkLabel(r1, text="" if has else "no img", width=64, font=("Arial", 12),
@@ -922,7 +922,7 @@ class SmartMacroGUI:
                 win.destroy()
                 self.snapshot([slot])
                 self.root.after(300, self.view_snapshots)
-            ctk.CTkButton(cell, text="📸 Retake", width=80, command=retake, **BTN).pack(padx=6, pady=(4, 2))
+            ctk.CTkButton(cell, text="Retake", width=80, command=retake, **BTN).pack(padx=6, pady=(4, 2))
 
             def draw(slot=i):
                 win.destroy()
@@ -1168,7 +1168,7 @@ class SmartMacroGUI:
         row = ctk.CTkFrame(top, fg_color="transparent"); row.pack(fill="x", padx=8, pady=6)
         self._switch(row, "Enabled", "items").pack(side="left", padx=4)
         has_area = self.logic.items_region() is not None
-        ctk.CTkButton(row, text="🔲 Set Scan Area", width=130, height=28, **BLUE,
+        ctk.CTkButton(row, text="Set Scan Area", width=130, height=28, **BLUE,
                       command=lambda: self.pick_region(it, "region", after=self.build_items)).pack(side="left", padx=4)
         ctk.CTkLabel(row, text="✔ set" if has_area else "not set", font=("Arial", 12),
                      text_color="#75b798" if has_area else "#ea868f").pack(side="left", padx=(0, 6))

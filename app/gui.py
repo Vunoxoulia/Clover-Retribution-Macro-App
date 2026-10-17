@@ -77,7 +77,7 @@ class MacroSelector:
         link_btn = dict(height=32, width=118, corner_radius=16, font=("Arial", 13, "bold"))
         ctk.CTkButton(links_frame, text="▶  YouTube", fg_color="#c4302b", hover_color="#9e2622", **link_btn,
                       command=lambda: links.open_link("youtube")).pack(side="left", padx=4)
-        ctk.CTkButton(links_frame, text="💬  Discord", fg_color="#5865F2", hover_color="#4752c4", **link_btn,
+        ctk.CTkButton(links_frame, text="Discord", fg_color="#5865F2", hover_color="#4752c4", **link_btn,
                       command=lambda: links.open_link("discord")).pack(side="left", padx=4)
 
         # Donate: pick Robux (Roblox group store) or real money (Ko-fi)
@@ -400,7 +400,7 @@ class SpatialGUI:
         mc = self._moves_card = ctk.CTkFrame(tab, fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
         mc.pack(fill="x", padx=15, pady=4)
         ctk.CTkLabel(mc, text="✨ Moves to train", font=("Arial", 13, "bold")).pack(anchor="w", padx=8, pady=(6, 0))
-        ctk.CTkButton(mc, text="🪄 Auto setup", width=110, height=24, font=("Arial", 11, "bold"),
+        ctk.CTkButton(mc, text="Auto setup", width=110, height=24, font=("Arial", 11, "bold"),
                       fg_color="#0d6efd", hover_color="#0b5ed7",
                       command=self.auto_setup_moves).place(relx=1.0, x=-10, y=6, anchor="ne")
         self._moves_desc = ctk.CTkLabel(mc, text="", font=("Arial", 12), text_color="#ced4da",
@@ -435,9 +435,9 @@ class SpatialGUI:
         share = ctk.CTkFrame(tab, fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
         share.pack(fill="x", padx=15, pady=4)
         ctk.CTkLabel(share, text="📦 Share setup", font=("Arial", 13, "bold")).pack(side="left", padx=8, pady=6)
-        ctk.CTkButton(share, text="📥 Import", width=80, height=26, fg_color="#495057", hover_color="#343a40",
+        ctk.CTkButton(share, text="Import", width=80, height=26, fg_color="#495057", hover_color="#343a40",
                       command=self.import_library_setup).pack(side="right", padx=(2, 8))
-        ctk.CTkButton(share, text="📤 Export", width=80, height=26, fg_color="#495057", hover_color="#343a40",
+        ctk.CTkButton(share, text="Export", width=80, height=26, fg_color="#495057", hover_color="#343a40",
                       command=self.export_library_setup).pack(side="right", padx=2)
         ctk.CTkLabel(share, text="moves, dialogue, pictures + your route in one file", font=("Arial", 11),
                      text_color="#adb5bd").pack(side="left", padx=4)
@@ -683,11 +683,11 @@ class SpatialGUI:
         if mode != "manual":                             # manual never scrolls the move list
             ctk.CTkButton(head, text="↕ Test scroll", width=100, height=24, font=("Arial", 11, "bold"), fg_color="#495057",
                           hover_color="#343a40", command=lambda: self._run_test(self.logic.test_scroll)).pack(side="right", padx=6)
-        ctk.CTkButton(head, text=f"🔎 {'Hover spots' if mode == 'manual' else 'Find moves'} ({(self.settings.get('hotkeys', {}).get('test_find') or 'f4').upper()})",
+        ctk.CTkButton(head, text=f"{'Hover spots' if mode == 'manual' else 'Find moves'} ({(self.settings.get('hotkeys', {}).get('test_find') or 'f4').upper()})",
                       width=130, height=24, font=("Arial", 11, "bold"),
                       fg_color="#0d6efd", hover_color="#0b5ed7",
                       command=self.test_find_moves).pack(side="right")
-        ctk.CTkButton(head, text=f"🧪 Full test ({(self.settings.get('hotkeys', {}).get('test_full') or 'f5').upper()})",
+        ctk.CTkButton(head, text=f"Full test ({(self.settings.get('hotkeys', {}).get('test_full') or 'f5').upper()})",
                       width=110, height=24, font=("Arial", 11, "bold"),
                       fg_color="#198754", hover_color="#157347",
                       command=lambda: self.test_find_moves(walk=True)).pack(side="right", padx=6)
@@ -711,7 +711,7 @@ class SpatialGUI:
             ctk.CTkLabel(row, text=text, width=150, anchor="w", font=("Arial", 12, "bold")).pack(side="left")
             if mode == "image":
                 ok = self.logic.has_dialog_template(key)
-                ctk.CTkButton(row, text="📸 Capture" if not ok else "📸 Re-capture", width=110, height=26,
+                ctk.CTkButton(row, text="Capture" if not ok else "Re-capture", width=110, height=26,
                               fg_color="#0d6efd", hover_color="#0b5ed7",
                               command=lambda k=key: self.capture_dialog_button(k)).pack(side="left", padx=4)
                 ctk.CTkLabel(row, text="✔ captured" if ok else "not captured", font=("Arial", 12),
@@ -720,7 +720,7 @@ class SpatialGUI:
                     self._dialog_preview(card, key)
             else:
                 pt = self.logic.manual_point(key)
-                ctk.CTkButton(row, text="🎯 Pick spot", width=110, height=26, fg_color="#0d6efd", hover_color="#0b5ed7",
+                ctk.CTkButton(row, text="Pick spot", width=110, height=26, fg_color="#0d6efd", hover_color="#0b5ed7",
                               command=lambda k=key: self.pick_dialog_point(k)).pack(side="left", padx=4)
                 ctk.CTkLabel(row, text=f"({pt[0]}, {pt[1]})" if pt else "not set", font=("Arial", 12),
                              text_color="#75b798" if pt else "#ea868f").pack(side="left", padx=6)
@@ -734,7 +734,7 @@ class SpatialGUI:
                                 command=lambda i=i, v=var: (self.logic.manual_moves()[i].__setitem__("train", bool(v.get())),
                                                             self.settings.save())).pack(side="left")
                 pt = self.logic.manual_point(key)
-                ctk.CTkButton(row, text="🎯 Pick spot", width=96, height=26, fg_color="#0d6efd", hover_color="#0b5ed7",
+                ctk.CTkButton(row, text="Pick spot", width=96, height=26, fg_color="#0d6efd", hover_color="#0b5ed7",
                               command=lambda k=key: self.pick_dialog_point(k)).pack(side="left", padx=2)
                 ctk.CTkLabel(row, text=f"({pt[0]}, {pt[1]})" if pt else "not set", font=("Arial", 12),
                              text_color="#75b798" if pt else "#ea868f", width=62).pack(side="left", padx=2)
@@ -1022,20 +1022,20 @@ class SpatialGUI:
 
         self.ok_btn_status, row = self._ok_card(tab, 1, "Capture OK Button",
             "Open an OK popup in Roblox, then drag a tight box around the OK button.")
-        ctk.CTkButton(row, text="📷 Capture", command=self.pick_ok_button, **btn_kw).pack(side="left")
+        ctk.CTkButton(row, text="Capture", command=self.pick_ok_button, **btn_kw).pack(side="left")
         self.ok_preview = ctk.CTkLabel(row, text="")
         self.ok_preview.pack(side="left", padx=12)
 
         self.ok_area_status, row = self._ok_card(tab, 2, "Scan Area  (optional)",
             "Where to look for the button. Defaults to the captured box plus a small margin.")
-        ctk.CTkButton(row, text="🔲 Set Area", command=lambda: self.pick_region("ok_scan_area"), **btn_kw).pack(side="left")
+        ctk.CTkButton(row, text="Set Area", command=lambda: self.pick_region("ok_scan_area"), **btn_kw).pack(side="left")
         ctk.CTkButton(row, text="Clear", command=lambda: self._clear_ok_setting("ok_scan_area", [0, 0, 0, 0]), **sub_kw).pack(side="left", padx=6)
         self.ok_area_switch = ctk.CTkSwitch(row, text="Show on screen", font=("Arial", 12), command=self.toggle_ok_area_overlay)
         self.ok_area_switch.pack(side="left", padx=6)
 
         self.ok_click_status, row = self._ok_card(tab, 3, "Click Spot  (optional)",
             "A fixed point to click when the popup is found. Defaults to the button itself.")
-        ctk.CTkButton(row, text="🖱 Set Spot", command=lambda: self.pick_point("ok_click_pos"), **btn_kw).pack(side="left")
+        ctk.CTkButton(row, text="Set Spot", command=lambda: self.pick_point("ok_click_pos"), **btn_kw).pack(side="left")
         ctk.CTkButton(row, text="Clear", command=lambda: self._clear_ok_setting("ok_click_pos", [0, 0]), **sub_kw).pack(side="left", padx=6)
 
         _, row = self._ok_card(tab, 4, "Test & Tune",
@@ -1154,7 +1154,7 @@ class SpatialGUI:
                               "again to open it after.", font=("Arial", 12), text_color="#ced4da", justify="left",
                      wraplength=420).pack(fill="x", padx=8)
         row = ctk.CTkFrame(hc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(4, 8))
-        ctk.CTkButton(row, text="🎯 Pick chat button", width=150, height=28, fg_color="#0d6efd", hover_color="#0b5ed7",
+        ctk.CTkButton(row, text="Pick chat button", width=150, height=28, fg_color="#0d6efd", hover_color="#0b5ed7",
                       command=lambda: self.pick_point("chat_button")).pack(side="left")
         pos = self.settings.get("regions", {}).get("chat_button", [0, 0])
         self.chat_btn_lbl = ctk.CTkLabel(row, text=f"✔ ({pos[0]}, {pos[1]})" if any(pos) else "not set",
@@ -1206,9 +1206,9 @@ class SpatialGUI:
                      font=("Arial", 12), text_color="#ced4da", justify="left", wraplength=420).pack(fill="x", padx=8)
         hb = self.settings.settings.setdefault("gold_hotbar", {"region": [0, 0, 0, 0], "slots": 6})
         row = ctk.CTkFrame(gc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(6, 2))
-        ctk.CTkButton(row, text="🪄 Auto", width=62, height=28, fg_color="#0d6efd", hover_color="#0b5ed7",
+        ctk.CTkButton(row, text="Auto", width=62, height=28, fg_color="#0d6efd", hover_color="#0b5ed7",
                       command=self.auto_gold_hotbar).pack(side="left", padx=(0, 4))
-        ctk.CTkButton(row, text="🔲 Set hotbar", width=96, height=28, fg_color="#495057", hover_color="#343a40",
+        ctk.CTkButton(row, text="Set hotbar", width=96, height=28, fg_color="#495057", hover_color="#343a40",
                       command=self.pick_gold_hotbar).pack(side="left")
         ok = self.logic.gold_hotbar()[0] is not None
         ctk.CTkLabel(row, text="✔ set" if ok else "not set", font=("Arial", 12),
@@ -1285,7 +1285,7 @@ class SpatialGUI:
                      font=("Arial", 12), text_color="#ced4da", justify="left", wraplength=420).pack(fill="x", padx=8, pady=(2, 4))
         row = ctk.CTkFrame(card, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(0, 4))
         ok = self.logic.has_minigame_snapshot()
-        ctk.CTkButton(row, text="📸 Re-capture" if ok else "📸 Capture", width=120, height=28, fg_color="#0d6efd",
+        ctk.CTkButton(row, text="Re-capture" if ok else "Capture", width=120, height=28, fg_color="#0d6efd",
                       hover_color="#0b5ed7", command=self.capture_minigame).pack(side="left")
         ctk.CTkLabel(row, text="✔ captured" if ok else "not captured", font=("Arial", 12),
                      text_color="#75b798" if ok else "#ea868f").pack(side="left", padx=8)

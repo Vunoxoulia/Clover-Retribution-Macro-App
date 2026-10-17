@@ -174,7 +174,7 @@ class EventsPage:
         wh = ctk.CTkFrame(wc, fg_color="transparent"); wh.pack(fill="x", padx=10, pady=(8, 0))
         ctk.CTkLabel(wh, text="🖥 Roblox windows", font=("Arial", 13, "bold")).pack(side="left")
         ctk.CTkButton(wh, text="↻ Refresh", width=80, command=self.build_windows, **BTN).pack(side="right")
-        ctk.CTkButton(wh, text="👁 Show all", width=90, command=self.show_all_windows,
+        ctk.CTkButton(wh, text="Show all", width=90, command=self.show_all_windows,
                       **{**BTN, **BLUE}).pack(side="right", padx=6)
         ctk.CTkLabel(wc, text="Numbered top-left first. 👁 Show = which window is which.",
                      font=("Arial", 12), text_color="#ced4da", wraplength=420, justify="left").pack(anchor="w", padx=10)
@@ -381,7 +381,7 @@ class EventsPage:
                                                                  self._save()))
             seg.set(WATCHER.world_for(i))
             seg.pack(side="left")
-            ctk.CTkButton(r, text="👁 Show", width=70, command=lambda win=w, n=i: self.show_window(win, n),
+            ctk.CTkButton(r, text="Show", width=70, command=lambda win=w, n=i: self.show_window(win, n),
                           **BTN).pack(side="right", padx=(6, 0))
             r2 = ctk.CTkFrame(card, fg_color="transparent"); r2.pack(fill="x", padx=6, pady=(0, 2))
             ctk.CTkLabel(r2, text="PS code", width=72, anchor="w", font=("Arial", 12)).pack(side="left")
