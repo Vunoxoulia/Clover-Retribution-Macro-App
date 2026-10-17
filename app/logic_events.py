@@ -467,7 +467,7 @@ class EventWatcher:
         return False
 
     def find_chat_tabs(self, w):
-        """Where the chat's 'Here' and 'Global' tabs are in this window: the spots picked with 📍 Tabs on the
+        """Where the chat's 'Here' and 'Global' tabs are in this window: the spots picked with Tabs on the
         Events page, or (not picked yet) read with OCR just above the window's chat box.
         Returns {"here": (x, y), "global": (x, y)} in screen pixels (missing ones left out)."""
         key = str(self.window_number(w))
@@ -639,7 +639,7 @@ class EventWatcher:
         while self.running:
             try:
                 if not self.has_chat_area():
-                    self.log("Set a chat box for each window first (🔲 Chat on the Events page).")
+                    self.log("Set a chat box for each window first (Chat on the Events page).")
                     self.running = False
                     break
                 if not self._holders:                    # Mining/Library running: they call checkpoint()

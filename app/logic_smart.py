@@ -24,7 +24,7 @@ DEFAULT_MOVE = {
     "click_btn": "m2",        # which mouse button 'then click' uses (Items always use M1)
     "after_click": 0.1,       # keep the mouse still this long after the click, so the cast lands where it was aimed
     "delay_before": 0.0, "delay_after": 0.0,
-    "box": None,              # a box the user drew for this slot (✂), else the automatic one
+    "box": None,              # a box the user drew for this slot (), else the automatic one
     "ready_at": 0.0,          # this slot's own match level for READY (0 = use the global one); Auto-tune sets it
 }
 
@@ -229,7 +229,7 @@ class SmartMacroLogic:
         return [[int(x1 + i * w), y1, int(x1 + (i + 1) * w), y2] for i in range(n)]
 
     def clear_drawn_boxes(self, save=True):
-        """Forget every ✂ drawn box, so all slots use the automatic box again."""
+        """Forget every drawn box, so all slots use the automatic box again."""
         for m in self.cfg["rotation"].get("moves", []):
             m["box"] = None
         self._templates.clear()
@@ -263,8 +263,8 @@ class SmartMacroLogic:
 
     def slot_regions(self):
         """What each slot's picture is taken of - only the INSIDE of its hotbar box, not the gaps around it:
-        1. a box you drew yourself for that slot (✂ Draw box), else
-        2. the exact box 🪄 Find hotbar saw (while the hotbar region is still the one it set), else
+        1. a box you drew yourself for that slot (Draw box), else
+        2. the exact box Find hotbar saw (while the hotbar region is still the one it set), else
         3. a square in the middle of the slot's cell."""
         cells = self.slot_cells()
         if not cells:
@@ -483,7 +483,7 @@ class SmartMacroLogic:
         img = self.utils.capture_screen_bgr(reg)
         slots = self.find_hotbar_slots(img) if img is not None else []
         if not slots:
-            self.app.log("Auto-find: couldn't see the hotbar - set it with 🔲 Hotbar region instead.")
+            self.app.log("Auto-find: couldn't see the hotbar - set it with Hotbar region instead.")
             return None
         filled = max((i for i, s in enumerate(slots, start=1) if s[4]), default=0)
         if not filled:
@@ -623,7 +623,7 @@ class SmartMacroLogic:
         msg = roblox_admin_problem()
         if not msg:
             return
-        self.app.log("⚠ Roblox is running as administrator - the macro's keys can't reach it.")
+        self.app.log("Roblox is running as administrator - the macro's keys can't reach it.")
         try:
             from tkinter import messagebox
             self.app.root.after(0, lambda: messagebox.showwarning("Roblox runs as administrator", msg,

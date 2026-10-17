@@ -12,7 +12,7 @@ from logic_smart import SmartMacroLogic
 from gui import SidebarNav, NAV_ICONS
 from ui_style import save_while_typing
 
-NAV_ICONS.update({"Rotation": "🔁", "Skill Combo": "⚔", "Items": "🧪", "Settings": "⚙"})
+NAV_ICONS.update({"Rotation": "", "Skill Combo": "", "Items": "", "Settings": ""})
 
 CARD = dict(fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
 BTN = dict(height=26, font=("Arial", 12), fg_color="#495057", hover_color="#343a40")
@@ -40,7 +40,7 @@ class SmartMacroGUI:
         self.settings = SpatialSettings()
         self.logic = SmartMacroLogic(self)
         self.overlays = []
-        self._expanded = set()       # move cards whose ⚙ options are open
+        self._expanded = set()       # move cards whose options are open
         self._sfs = {}               # page name -> its persistent scroll frame
         self._switches = {}          # section -> its Enabled switch
         self._cards = {}             # slot -> widgets of its move card
@@ -72,7 +72,7 @@ class SmartMacroGUI:
         # Loadouts: saved builds (moves, aim, combos, items + snapshots), like the Mining routes
         lb = ctk.CTkFrame(self.nav.content, **CARD); lb.pack(fill="x", pady=(0, 8))
         btn = dict(height=28, font=("Arial", 12), fg_color="#495057", hover_color="#343a40")
-        ctk.CTkLabel(lb, text="🎒 Loadout:", font=("Arial", 13, "bold")).pack(side="left", padx=(10, 6), pady=6)
+        ctk.CTkLabel(lb, text="Loadout:", font=("Arial", 13, "bold")).pack(side="left", padx=(10, 6), pady=6)
         self.loadout_menu = ctk.CTkOptionMenu(lb, values=["Default"], width=180, command=self.select_loadout)
         self.loadout_menu.pack(side="left")
         ctk.CTkButton(lb, text="New", width=50, command=self.new_loadout, **btn).pack(side="left", padx=(6, 2))
@@ -84,8 +84,8 @@ class SmartMacroGUI:
         self._refresh_loadout_menu()
         self.on_state_change(False)
 
-        NAV_ICONS["Events"] = "📣"
-        NAV_ICONS["OK Popup"] = "🔔"
+        NAV_ICONS["Events"] = ""
+        NAV_ICONS["OK Popup"] = ""
         for name in ["Rotation", "Skill Combo", "Items", "Events", "OK Popup", "Settings"]:
             self.nav.add(name)
         if self.on_back:
@@ -331,16 +331,16 @@ class SmartMacroGUI:
     # ---------- meditation ----------
     def build_meditation(self, parent):
         """Optional: when the mana bar is empty, put weapon/grimoire away, meditate until full, take them out.
-        The page only shows a one-line card; all settings are in their own pop-up (⚙ Settings)."""
+        The page only shows a one-line card; all settings are in their own pop-up (Settings)."""
         d = self.logic.med()
         card = ctk.CTkFrame(parent, **CARD); card.pack(fill="x", pady=4)
         head = ctk.CTkFrame(card, fg_color="transparent"); head.pack(fill="x", padx=10, pady=8)
-        ctk.CTkLabel(head, text="🧘 Meditation", font=("Arial", 13, "bold")).pack(side="left")
+        ctk.CTkLabel(head, text="Meditation", font=("Arial", 13, "bold")).pack(side="left")
         sw = ctk.CTkSwitch(head, text="", width=40, command=lambda: self._set(d, "enabled", bool(sw.get())))
         if d["enabled"]:
             sw.select()
         sw.pack(side="left", padx=8)
-        ctk.CTkButton(head, text="⚙ Settings", width=96, height=28, **BLUE,
+        ctk.CTkButton(head, text="Settings", width=96, height=28, **BLUE,
                       command=self.open_meditation).pack(side="right")
         self._med_summary = ctk.CTkLabel(head, text="", font=("Arial", 12), text_color="#adb5bd")
         self._med_summary.pack(side="left", padx=4)
@@ -353,7 +353,7 @@ class SmartMacroGUI:
             return
         d = self.logic.med()
         if not d["region"][2] > d["region"][0]:
-            lbl.configure(text="refills mana when it runs out — set the mana bar in ⚙ Settings", text_color="#ffc107")
+            lbl.configure(text="refills mana when it runs out — set the mana bar in Settings", text_color="#ffc107")
             return
         out = {"weapon": "Weapon", "grimoire": "Grimoire", "both": "Weapon + Grimoire"}.get(d["out"], "Weapon")
         lbl.configure(text=f"at {float(d.get('below', 5)):g}% mana · {out} out · keys "
@@ -365,7 +365,7 @@ class SmartMacroGUI:
         d = self.logic.anti_shake()
         card = ctk.CTkFrame(parent, **CARD); card.pack(fill="x", pady=4)
         row = ctk.CTkFrame(card, fg_color="transparent"); row.pack(fill="x", padx=10, pady=8)
-        ctk.CTkLabel(row, text="🎥 Anti screen-shake", font=("Arial", 13, "bold")).pack(side="left")
+        ctk.CTkLabel(row, text="Anti screen-shake", font=("Arial", 13, "bold")).pack(side="left")
         sw = ctk.CTkSwitch(row, text="", width=40, command=lambda: self._set(d, "enabled", bool(sw.get())))
         if d["enabled"]:
             sw.select()
@@ -384,9 +384,9 @@ class SmartMacroGUI:
         row2 = ctk.CTkFrame(card, fg_color="transparent"); row2.pack(fill="x", padx=10, pady=(0, 8))
         r = d.get("check_region") or [0, 0, 0, 0]
         has = r[2] > r[0] and r[3] > r[1]
-        status = ctk.CTkLabel(row2, text=("📸 Check: on - after the presses it screenshots that spot and presses ',' "
+        status = ctk.CTkLabel(row2, text=("Check: on - after the presses it screenshots that spot and presses ',' "
                                           "again if it still looks like ','" if has else
-                                          "📸 Check: off - pick a spot that looks different while in ',' "
+                                          "Check: off - pick a spot that looks different while in ',' "
                                           "(e.g. an icon / UI that changes) to make sure it got out"),
                               font=("Arial", 11), text_color="#75b798" if has else "#adb5bd",
                               wraplength=430, justify="left")
@@ -394,16 +394,16 @@ class SmartMacroGUI:
         def picked():
             # the picture is taken right away: be OUT of ',' (normal play) when you pick
             ok = self.logic.save_anti_shake_ref()
-            status.configure(text=("📸 Check: on - saved how that spot looks in normal play" if ok
-                                   else "📸 Couldn't take the picture - try again"),
+            status.configure(text=("Check: on - saved how that spot looks in normal play" if ok
+                                   else "Couldn't take the picture - try again"),
                              text_color="#75b798" if ok else "#ea868f")
 
         def clear():
             d["check_region"] = [0, 0, 0, 0]; self.save()
-            status.configure(text="📸 Check: off", text_color="#adb5bd")
+            status.configure(text="Check: off", text_color="#adb5bd")
         ctk.CTkButton(row2, text="Pick spot", width=90, height=24,
                       command=lambda: self.pick_region(d, "check_region", after=picked)).pack(side="left")
-        ctk.CTkButton(row2, text="✖", width=26, height=24, fg_color="#495057",
+        ctk.CTkButton(row2, text="X", width=26, height=24, fg_color="#495057",
                       command=clear).pack(side="left", padx=4)
         status.pack(side="left", padx=6)
 
@@ -481,7 +481,7 @@ class SmartMacroGUI:
     def _fill_med_bar_btn(self, btn):
         d = self.logic.med()
         has = d["region"][2] > d["region"][0]
-        btn.configure(text="✔ Mana bar" if has else "🔲 Mana bar",
+        btn.configure(text="Mana bar" if has else "Mana bar",
                       fg_color="#198754" if has else "#0d6efd", hover_color="#157347" if has else "#0b5ed7")
 
     def _med_steps_ui(self):
@@ -550,13 +550,13 @@ class SmartMacroGUI:
         self._aim_mode = "move"
         card = ctk.CTkFrame(parent, **CARD); card.pack(fill="x", pady=4)
         head = ctk.CTkFrame(card, fg_color="transparent"); head.pack(fill="x", padx=10, pady=(6, 0))
-        ctk.CTkLabel(head, text="🎯 Mouse aim", font=("Arial", 13, "bold")).pack(side="left")
+        ctk.CTkLabel(head, text="Mouse aim", font=("Arial", 13, "bold")).pack(side="left")
         ctk.CTkLabel(head, text="optional — tick slots, then Pick spot. Order: move mouse → delay before → press → M2/M1 (if ticked) → delay after.",
                      font=("Arial", 12), text_color="#ced4da").pack(side="left", padx=8)
         row = ctk.CTkFrame(card, fg_color="transparent"); row.pack(fill="x", padx=8, pady=4)
         self.aim_chips_box = ctk.CTkFrame(row, fg_color="transparent", width=1, height=1)
         self.aim_chips_box.pack(side="left")
-        ctk.CTkButton(row, text="✖ Clear", width=70, **BTN, command=self.clear_aim).pack(side="right", padx=3)
+        ctk.CTkButton(row, text="Clear", width=70, **BTN, command=self.clear_aim).pack(side="right", padx=3)
         ctk.CTkButton(row, text="Pick spot", width=100, height=28, **BLUE, command=self.pick_aim).pack(side="right", padx=3)
         self.aim_info = ctk.CTkLabel(card, text="", font=("Arial", 12), text_color="#ced4da", justify="left", anchor="w",
                                      wraplength=660)
@@ -684,7 +684,7 @@ class SmartMacroGUI:
     def toggle_options(self, slot):
         w, m = self._cards[slot], self.logic.moves()[slot - 1]
         if not m["enabled"] and slot not in self._expanded:
-            return                                   # ⚙ is greyed out while the slot is off
+            return                                   # is greyed out while the slot is off
         if slot in self._expanded:
             self._expanded.discard(slot)
             if w["opts"] is not None:
@@ -707,7 +707,7 @@ class SmartMacroGUI:
     def _style_card(self, slot):
         w, m = self._cards[slot], self.logic.moves()[slot - 1]
         open_ = slot in self._expanded
-        w["gear"].configure(text="⚙ ▴" if open_ else "⚙ ▾", fg_color="#0d6efd" if open_ else "#495057",
+        w["gear"].configure(text="▴" if open_ else "▾", fg_color="#0d6efd" if open_ else "#495057",
                             text_color="#ffffff" if m["enabled"] else "#6c757d")
         self._update_summary(slot)
 
@@ -738,7 +738,7 @@ class SmartMacroGUI:
         if has_snapshot and float(m.get("ready_at") or 0):
             parts.append(f"ready at {float(m['ready_at']):g}")
         if m.get("mouse_mode", "none") != "none":
-            parts.append("🎯 aim")
+            parts.append("aim")
         if not has_snapshot and float(m.get("cooldown") or 0):
             parts.append(f"cd {float(m['cooldown']):g}s")
         return " · ".join(parts) or "default"
@@ -762,11 +762,11 @@ class SmartMacroGUI:
         ctk.CTkLabel(r1, text="Key", font=("Arial", 12)).pack(side="left", padx=(4, 2))
         self._pick(r1, m, "key", [str(i % 10) for i in range(1, 11)], 52, str).pack(side="left")
         has = self.logic.has_template(slot)
-        gear = ctk.CTkButton(r1, text="⚙ ▾", width=44, height=26, font=("Arial", 12), fg_color="#495057",
+        gear = ctk.CTkButton(r1, text="More ▾", width=44, height=26, font=("Arial", 12), fg_color="#495057",
                              hover_color="#343a40", command=lambda: self.toggle_options(slot))
         gear.pack(side="right", padx=2)
         ctk.CTkButton(r1, text="Snap", width=44, command=lambda: self.snapshot([slot]), **BTN).pack(side="right", padx=2)
-        ctk.CTkButton(r1, text="✂", width=32, command=lambda: self.draw_slot_box(slot), **BTN).pack(side="right", padx=2)
+        ctk.CTkButton(r1, text="Box", width=32, command=lambda: self.draw_slot_box(slot), **BTN).pack(side="right", padx=2)
         # the snapshot itself (what 'ready' looks like for this slot); 'no img' until one is taken
         score = ctk.CTkLabel(r1, text="" if has else "no img", width=64, font=("Arial", 12),
                              text_color="#ea868f", image=self._thumb(slot))
@@ -785,7 +785,7 @@ class SmartMacroGUI:
         return w
 
     def _make_opts(self, parent, slot, m):
-        """The ⚙ panel of one card (built the first time it's opened)."""
+        """The panel of one card (built the first time it's opened)."""
         box = ctk.CTkFrame(parent, fg_color="transparent")
         refresh = lambda: self._update_summary(slot)
 
@@ -793,9 +793,9 @@ class SmartMacroGUI:
             ctk.CTkLabel(row, text=t, font=("Arial", 12)).pack(side="left", padx=(8, 2))
         delays = ["0", "0.05", "0.1", "0.2", "0.3", "0.5", "0.8", "1", "1.5", "2", "3"]
         r1 = ctk.CTkFrame(box, fg_color="transparent"); r1.pack(fill="x", pady=(0, 2))
-        lab(r1, "⏱ Delay before (s)")
+        lab(r1, "Delay before (s)")
         self._pick(r1, m, "delay_before", delays, 64, on_save=refresh).pack(side="left")
-        lab(r1, "⏱ Delay after (s)")
+        lab(r1, "Delay after (s)")
         self._pick(r1, m, "delay_after", delays, 64, on_save=refresh).pack(side="left")
         ctk.CTkLabel(r1, text="mouse move → before → key → click → after", font=("Arial", 11),
                      text_color="#ced4da").pack(side="left", padx=10)
@@ -829,7 +829,7 @@ class SmartMacroGUI:
         return box
 
     def _refresh_opts(self, slot):
-        """Rebuild one card's ⚙ panel (its rows depend on snapshot / aim), keeping it open if it was."""
+        """Rebuild one card's panel (its rows depend on snapshot / aim), keeping it open if it was."""
         w = self._cards.get(slot)
         if not w or w["opts"] is None:
             return
@@ -853,7 +853,7 @@ class SmartMacroGUI:
             return None
 
     def draw_slot_box(self, slot):
-        """✂ Draw your own box for this slot: drag around just the inside of its hotbar box. That box is used
+        """Draw your own box for this slot: drag around just the inside of its hotbar box. That box is used
         for this slot from now on (snapshot AND ready check) and a new snapshot is taken of it right away."""
         m = self.logic.moves()[slot - 1]
         self.log(f"Slot {slot}: drag a box around the INSIDE of its hotbar box (the skill must be ready).")
@@ -876,7 +876,7 @@ class SmartMacroGUI:
         """The whole snapshot, big, in its own window."""
         path = self.logic.template_path(slot)
         if not os.path.exists(path):
-            self.log(f"Slot {slot} has no snapshot yet - press 📸 (or ✂ to draw its box).")
+            self.log(f"Slot {slot} has no snapshot yet - press (or to draw its box).")
             return
         try:
             from PIL import Image
@@ -894,7 +894,7 @@ class SmartMacroGUI:
                      font=("Arial", 11), text_color="#adb5bd").pack(pady=(0, 10))
 
     def view_snapshots(self):
-        """All of this loadout's snapshots side by side, each with its own 📸 Retake."""
+        """All of this loadout's snapshots side by side, each with its own Retake."""
         old = getattr(self, "_snap_win", None)
         if old is not None and old.winfo_exists():
             old.destroy()
@@ -903,7 +903,7 @@ class SmartMacroGUI:
         win.transient(self.root); win.after(150, win.lift)
         self._snap_win = win
         ctk.CTkLabel(win, text="What each slot looks like when READY (click one to see it big). Retake one while that "
-                               "skill is off cooldown, or ✂ draw your own box around just the inside of its hotbar box.",
+                               "skill is off cooldown, or draw your own box around just the inside of its hotbar box.",
                      font=("Arial", 12), text_color="#ced4da").pack(anchor="w", padx=12, pady=(10, 6))
         grid = ctk.CTkFrame(win, fg_color="transparent"); grid.pack(padx=10, pady=(0, 10))
         moves = self.logic.moves()
@@ -927,7 +927,7 @@ class SmartMacroGUI:
             def draw(slot=i):
                 win.destroy()
                 self.draw_slot_box(slot)
-            ctk.CTkButton(cell, text="✂ Draw box", width=80, command=draw, **BTN).pack(padx=6, pady=2)
+            ctk.CTkButton(cell, text="Draw box", width=80, command=draw, **BTN).pack(padx=6, pady=2)
             if m.get("box"):
                 def auto(slot=i):
                     win.destroy()
@@ -985,7 +985,7 @@ class SmartMacroGUI:
         self.log(f"Would cast: {pick[1]['name'] or 'slot ' + str(pick[0])}" if pick else "Nothing ready.")
 
     def auto_tune(self):
-        """🪄 Find hotbar: find the hotbar in the Roblox window you click into and move the hotbar region onto
+        """Find hotbar: find the hotbar in the Roblox window you click into and move the hotbar region onto
         your FILLED slots. Nothing is cast and the snapshots aren't touched."""
         if self.logic.running:
             self.log("Stop the macro first (F6), then Find hotbar.")
@@ -998,10 +998,10 @@ class SmartMacroGUI:
                 self.log("Find hotbar cancelled: Roblox wasn't the focused window.")
                 return
             if not self.logic.auto_find_hotbar():
-                self.log("Couldn't find the hotbar in this Roblox window - set it with 🔲 Hotbar region.")
+                self.log("Couldn't find the hotbar in this Roblox window - set it with Hotbar region.")
                 return
             self.root.after(0, lambda: (self.build_cards(), self.flash_slots()))   # show where it put the slots
-            self.log("Hotbar region moved onto your slots. If your skills changed, press 📸 Snapshot all "
+            self.log("Hotbar region moved onto your slots. If your skills changed, press Snapshot all "
                      "while they're all ready.")
         threading.Thread(target=run, daemon=True).start()
 
@@ -1076,7 +1076,7 @@ class SmartMacroGUI:
         ctk.CTkButton(c, text="+ Step", width=70, **BTN, command=add_step).pack(anchor="w", padx=10, pady=6)
 
     def _step_row(self, box, combo, step):
-        """One step, read as a sentence: Press [key] [N times], then wait [s] (or 'then M2 after [s]').  ⚙ = click / mouse."""
+        """One step, read as a sentence: Press [key] [N times], then wait [s] (or 'then M2 after [s]').  = click / mouse."""
         s = ctk.CTkFrame(box, fg_color="#1a1d20", corner_radius=6); s.pack(fill="x", padx=10, pady=2)
         line = ctk.CTkFrame(s, fg_color="transparent"); line.pack(fill="x")
         s.num = ctk.CTkLabel(line, text=f"Step {index_obj(combo['steps'], step) + 1}", width=52, font=("Arial", 12, "bold"))
@@ -1120,7 +1120,7 @@ class SmartMacroGUI:
             remove_obj(combo["steps"], step); self._combos_changed(); s.destroy()
             for i, row in enumerate(box.winfo_children(), start=1):      # renumber the rest
                 row.num.configure(text=f"Step {i}")
-        ctk.CTkButton(line, text="✕", width=26, height=24, **RED, command=rm).pack(side="right", padx=4)
+        ctk.CTkButton(line, text="X", width=26, height=24, **RED, command=rm).pack(side="right", padx=4)
 
         # Extras (hold click / mouse) folded away like the Rotation cards
         extra_lbl = ctk.CTkLabel(line, text="", font=("Arial", 12), text_color="#ced4da")
@@ -1130,7 +1130,7 @@ class SmartMacroGUI:
             wait_word.configure(text=wait_text())
             parts = []
             if step.get("mouse_mode", "none") != "none":
-                parts.append("🎯 aim")
+                parts.append("aim")
             extra_lbl.configure(text="" if more["open"] else " · ".join(parts))
 
         def toggle():
@@ -1145,11 +1145,11 @@ class SmartMacroGUI:
                 more["box"] = b
             more["open"] = not more["open"]
             if not more["open"]:
-                more["box"].pack_forget(); gear.configure(text="⚙ ▾", fg_color="#495057")
+                more["box"].pack_forget(); gear.configure(text="More ▾", fg_color="#495057")
             else:
-                more["box"].pack(fill="x", pady=(0, 4)); gear.configure(text="⚙ ▴", fg_color="#0d6efd")
+                more["box"].pack(fill="x", pady=(0, 4)); gear.configure(text="▴", fg_color="#0d6efd")
             recap()
-        gear = ctk.CTkButton(line, text="⚙ ▾", width=44, height=24, font=("Arial", 12), fg_color="#495057",
+        gear = ctk.CTkButton(line, text="More ▾", width=44, height=24, font=("Arial", 12), fg_color="#495057",
                              hover_color="#343a40", command=toggle)
         gear.pack(side="right", padx=2)
         extra_lbl.pack(side="left", padx=10)
@@ -1170,7 +1170,7 @@ class SmartMacroGUI:
         has_area = self.logic.items_region() is not None
         ctk.CTkButton(row, text="Set Scan Area", width=130, height=28, **BLUE,
                       command=lambda: self.pick_region(it, "region", after=self.build_items)).pack(side="left", padx=4)
-        ctk.CTkLabel(row, text="✔ set" if has_area else "not set", font=("Arial", 12),
+        ctk.CTkLabel(row, text="set" if has_area else "not set", font=("Arial", 12),
                      text_color="#75b798" if has_area else "#ea868f").pack(side="left", padx=(0, 6))
         ctk.CTkButton(row, text="Test OCR", width=80, **BTN, command=self.test_items).pack(side="left", padx=4)
         ctk.CTkButton(row, text="+ Add Item", width=90, height=28, **BLUE, command=self.add_item).pack(side="left", padx=4)
@@ -1309,7 +1309,7 @@ class SmartMacroGUI:
             return
         self.logic.new_loadout(name)
         self._loadout_switched()
-        self.log(f"Loadout '{name}' created (empty) — press 🪄 Find hotbar, then 📸 Snapshot all.")
+        self.log(f"Loadout '{name}' created (empty) — press Find hotbar, then Snapshot all.")
 
     def export_loadout(self):
         from tkinter import filedialog, messagebox
@@ -1340,7 +1340,7 @@ class SmartMacroGUI:
         self._loadout_switched()
         messagebox.showinfo("Import", f"Loadout '{name}' added and selected (your other loadouts are untouched)."
                                       "\n\nIts hotbar region and snapshots come from the other person's screen - "
-                                      "if yours differs, press 🪄 Find hotbar, then 📸 Snapshot all.",
+                                      "if yours differs, press Find hotbar, then Snapshot all.",
                             parent=self.root)
 
     def rename_loadout(self):

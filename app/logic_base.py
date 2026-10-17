@@ -47,7 +47,7 @@ class BaseLogic:
         msg = roblox_admin_problem()
         if not msg:
             return False
-        self.app.log("⚠ " + msg.split("\n")[0])
+        self.app.log("" + msg.split("\n")[0])
         try:
             from tkinter import messagebox
             self.app.root.after(0, lambda: messagebox.showwarning("Roblox runs as administrator", msg,
@@ -311,7 +311,7 @@ class BaseLogic:
         search = self.get_ok_search_region()
         if not search:
             if not getattr(self, "_ok_region_warned", False):
-                self.app.log("OK detection not set up — capture the OK button on the 🔔 OK Popup page.")
+                self.app.log("OK detection not set up — capture the OK button on the OK Popup page.")
                 self._ok_region_warned = True
             return None
         sx, sy = search[0], search[1]

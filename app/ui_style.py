@@ -13,7 +13,7 @@ TITLE_FONT = ("Arial", 16, "bold")
 
 
 def sound_picker(parent, kind):
-    """🎵 Choose sound… / ▶ / Reset for one alert sound. The file is copied into the app's 'sounds' folder
+    """Choose sound… / ▶ / Reset for one alert sound. The file is copied into the app's 'sounds' folder
     so updates never delete it. kind = 'event' or 'done'."""
     import os, shutil
     from tkinter import filedialog
@@ -90,7 +90,7 @@ def big_toggle(parent, command):
                          border_width=1, border_color="#495057", command=command)
 
 
-def style_toggle(btn, on, name, icon_on="🔔", icon_off="🔕"):
+def style_toggle(btn, on, name, icon_on="", icon_off=""):
     """Green with 'ON' when running, grey with 'OFF' when not, same wording on every page."""
     if on:
         btn.configure(text=f"{icon_on}  {name}: ON   (click to turn off)", fg_color=GREEN, hover_color=GREEN_HOVER,

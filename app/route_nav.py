@@ -373,13 +373,13 @@ class RouteNav(BaseLogic):
             return
         if self.is_locked():
             name = self.active_route()
-            self.app.log(f"🔒 '{name}' is a built-in route and can't be recorded over. "
+            self.app.log(f"'{name}' is a built-in route and can't be recorded over. "
                          f"Press New to make your own route, then {self.rec_key()}.")
             try:
                 from tkinter import messagebox
                 self.app.root.after(0, lambda: messagebox.showinfo(
                     "Built-in route",
-                    f"🔒 '{name}' is a built-in route - it can't be recorded over.\n\n"
+                    f"'{name}' is a built-in route - it can't be recorded over.\n\n"
                     f"Click  New  (next to the route list) to create your own route, then press {self.rec_key()} "
                     "to record it.", parent=self.app.root))
             except Exception:
@@ -508,16 +508,16 @@ class RouteNav(BaseLogic):
         self.save_route(route, name)
         n_cp = sum(len(sg["checkpoints"]) for sg in segments) + len(ret["checkpoints"])
         if self.ROUTE_TARGET == "ore":
-            self.app.log(f"✓ Route '{name}' saved: {len(segments)} ore{'s' if len(segments) != 1 else ''} "
+            self.app.log(f"Route '{name}' saved: {len(segments)} ore{'s' if len(segments) != 1 else ''} "
                          f"+ the walk back to the start ({ret['duration']:.1f}s), {n_cp} checkpoints.")
         elif not self.E_MARKS_TARGET:
             n_keys = sum(1 for e in ret["events"] if e[2] == "down")
-            self.app.log(f"✓ Route '{name}' saved: walk to the {self.ROUTE_TARGET} ({ret['duration']:.1f}s, "
+            self.app.log(f"Route '{name}' saved: walk to the {self.ROUTE_TARGET} ({ret['duration']:.1f}s, "
                          f"{n_keys} key presses incl. jumps / E).")
         elif segments:
-            self.app.log(f"✓ Route '{name}' saved: walk to the {self.ROUTE_TARGET} ({segments[0]['duration']:.1f}s).")
+            self.app.log(f"Route '{name}' saved: walk to the {self.ROUTE_TARGET} ({segments[0]['duration']:.1f}s).")
         else:
-            self.app.log(f"✓ Route '{name}' saved, but E was never tapped — the whole walk "
+            self.app.log(f"Route '{name}' saved, but E was never tapped — the whole walk "
                          f"({ret['duration']:.1f}s) will be used to reach the {self.ROUTE_TARGET}.")
         if hasattr(self.app, "refresh_routes"):
             self.app.root.after(0, self.app.refresh_routes)

@@ -126,7 +126,7 @@ class LibraryLogic(RouteNav):
         slots = SmartMacroLogic.find_hotbar_slots(img) if img is not None else []
         filled = max((i for i, s in enumerate(slots, start=1) if s[4]), default=0)
         if not filled:
-            self.app.log("Auto-find: couldn't see the hotbar - drag it with 🔲 Set hotbar instead.")
+            self.app.log("Auto-find: couldn't see the hotbar - drag it with Set hotbar instead.")
             return None
         side = slots[0][3]
         bottom_img = slots[0][1] + side
@@ -186,7 +186,7 @@ class LibraryLogic(RouteNav):
         if not r or not 1 <= slot <= n:
             return None
         spots = (self.app.settings.get("gold_hotbar") or {}).get("spots") or []
-        if slot <= len(spots):                           # 🪄 Auto: pinned to each slot's top-right corner
+        if slot <= len(spots):                           # Auto: pinned to each slot's top-right corner
             return list(spots[slot - 1])
         sw, h = (r[2] - r[0]) / n, r[3] - r[1]
         x = r[0] + (slot - 1) * sw
@@ -422,7 +422,7 @@ class LibraryLogic(RouteNav):
         s = self.minigame_score()
         if s is None:
             if not getattr(self, "_warned_no_mg", False):
-                self.app.log("Minigame detector: no snapshot yet — Areas tab → 🎮 Minigame detector → Capture.")
+                self.app.log("Minigame detector: no snapshot yet — Areas tab → Minigame detector → Capture.")
                 self._warned_no_mg = True
             return False
         return s >= float(self.app.settings.get("minigame_threshold", 0.8))
@@ -997,10 +997,10 @@ class LibraryLogic(RouteNav):
         after = self.dialog_buttons()
         moved = [b[2] for b in before] != [b[2] for b in after]
         self.app.log(f"Test scroll: before: {names(before)}  →  after: {names(after)}  "
-                     + ("✔ the list scrolled" if moved else "✖ nothing changed (already at the bottom, or scrolling "
+                     + ("the list scrolled" if moved else "nothing changed (already at the bottom, or scrolling "
                                                            "doesn't reach the list)"))
 
-    # ---------- 🪄 Auto setup: hotbar names -> wisp move list -> 'Moves to train' ----------
+    # ---------- Auto setup: hotbar names -> wisp move list -> 'Moves to train' ----------
     @staticmethod
     def _norm_name(t):
         return "".join(ch for ch in (t or "").lower() if ch.isalnum())
@@ -1199,7 +1199,7 @@ class LibraryLogic(RouteNav):
         ct = self.manual_point("clover_training")
         spots = [(i, self.manual_point(f"move_{i + 1}")) for i, m in enumerate(self.manual_moves()) if m.get("train")]
         if walk and not ct:
-            say("✖ Clover Training: no spot set - 🎯 Pick spot in Wisp dialogue."); return result
+            say("Clover Training: no spot set - Pick spot in Wisp dialogue."); return result
         if not spots:
             say("Tick at least one Move spot in Wisp dialogue first."); return result
         if not self.wait_focus_for_test():
@@ -1210,22 +1210,22 @@ class LibraryLogic(RouteNav):
                 self.app.log("--- Full test (Manual): walking to the wisp ---")
                 self.go_to_wisp()
                 if not self.running or not self.open_dialogue():
-                    say("✖ Couldn't open the wisp's dialogue."); return result
+                    say("Couldn't open the wisp's dialogue."); return result
                 time.sleep(float(self.app.settings.get("dialog_wait", 1.5)))
                 self.app.log("Clicking your Clover Training spot")
                 self.human_click(*ct, duration=0.15)
                 self._park_mouse()
                 time.sleep(self.after_training_wait())
-                say(f"✔ Clover Training: clicked your spot {ct}")
+                say(f"Clover Training: clicked your spot {ct}")
             for i, pt in spots:
                 if not self.running:
                     break
                 if not pt:
-                    say(f"✖ Move spot {i + 1}: no spot set - 🎯 Pick spot in Wisp dialogue")
+                    say(f"Move spot {i + 1}: no spot set - Pick spot in Wisp dialogue")
                     continue
                 self.utils.mouse_move(*pt)
                 time.sleep(0.9)
-                say(f"✔ Move spot {i + 1}: hovered {pt} - check the mouse was on the right move")
+                say(f"Move spot {i + 1}: hovered {pt} - check the mouse was on the right move")
         finally:
             self.running = False
         result["ok"] = all(pt for _, pt in spots)
@@ -1258,16 +1258,16 @@ class LibraryLogic(RouteNav):
                 self.app.log("--- Find moves (test): reading the open move list (no walking, no clicks) ---")
                 if not self.wait_move_list(timeout=4):
                     if self.find_training_button():
-                        say("✖ That's the first menu - click 'Clover Training' to open the move list, then test again.")
+                        say("That's the first menu - click 'Clover Training' to open the move list, then test again.")
                     else:
-                        say("✖ No move list on screen. Open the wisp's move list (Clover Training) first - "
+                        say("No move list on screen. Open the wisp's move list (Clover Training) first - "
                             "or use the Full test, which walks there and opens it.")
                     return result
             else:
                 self.app.log("--- Full test: walking to the wisp ---")
                 self.go_to_wisp()
                 if not self.running or not self.open_dialogue():
-                    say("✖ Couldn't open the wisp's dialogue (are you at the wisp?)."); return result
+                    say("Couldn't open the wisp's dialogue (are you at the wisp?)."); return result
                 # first menu -> Clover Training (this one IS clicked, it's the only way to reach the move list)
                 deadline = time.time() + 20
                 target = None
@@ -1281,7 +1281,7 @@ class LibraryLogic(RouteNav):
                     if not target:
                         time.sleep(0.4)
                 if not target:
-                    say("✖ Couldn't find 'Clover Training' in the first menu."); return result
+                    say("Couldn't find 'Clover Training' in the first menu."); return result
                 self.human_click(*target[0], duration=0.15)
                 self._park_mouse()
                 time.sleep(self.after_training_wait())  # move list fades in
@@ -1290,7 +1290,7 @@ class LibraryLogic(RouteNav):
                     break
                 buttons = self.wait_move_list()
                 if not buttons:
-                    say("✖ The move list didn't show up (only 'Skip' while the text was typing?) - try again.")
+                    say("The move list didn't show up (only 'Skip' while the text was typing?) - try again.")
                     break
                 seen.extend(b[2] for b in buttons if b[2] and b[2] not in seen and not self._is_skip(b[2]))
                 for i in wanted:
@@ -1310,7 +1310,7 @@ class LibraryLogic(RouteNav):
                                                          else f"name '{hit[2]}'")
                     if pt:
                         found[i] = how
-                        self.app.log(f"   ✔ {self.move_label(i)} found ({how}) - hovering, not clicking")
+                        self.app.log(f"   {self.move_label(i)} found ({how}) - hovering, not clicking")
                         self.utils.mouse_move(*pt)
                         time.sleep(0.9)
                 if all(i in found for i in wanted):
@@ -1324,14 +1324,14 @@ class LibraryLogic(RouteNav):
         for i in wanted:
             label = self.move_label(i)
             if i in found:
-                say(f"✔ {label}: found by {found[i]}")
+                say(f"{label}: found by {found[i]}")
                 continue
             name = self.move_names()[i]
             has_pic = self.has_dialog_template(f"move_{i + 1}")
             if not name and not has_pic:
-                say(f"✖ {label}: no name{' or picture' if mode == 'image' else ''} set - nothing to look for")
+                say(f"{label}: no name{' or picture' if mode == 'image' else ''} set - nothing to look for")
                 continue
-            line = f"✖ {label}: not found"
+            line = f"{label}: not found"
             options = [t for t in seen if t and "never" not in t.lower() and not self._is_skip(t)]
             close = difflib.get_close_matches(name, options, n=2, cutoff=0.35) if name else []
             if close:

@@ -6,7 +6,7 @@
 
 Nothing private goes in: no webhook, no Discord / event settings, no stats.
 Positions and pictures come from the sharer's screen - if the other PC's screen or Roblox window size
-differs, run 🪄 Find hotbar / Snapshot all (Skill Macro) or re-pick the spots (Library)."""
+differs, run Find hotbar / Snapshot all (Skill Macro) or re-pick the spots (Library)."""
 import copy
 import json
 import os

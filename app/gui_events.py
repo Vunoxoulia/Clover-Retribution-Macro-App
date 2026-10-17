@@ -74,7 +74,7 @@ class EventsPage:
         cfg, p = self.cfg, self.sf
         top = ctk.CTkFrame(p, **CARD); top.pack(fill="x", pady=4)
         head = ctk.CTkFrame(top, fg_color="transparent"); head.pack(fill="x", padx=10, pady=(8, 0))
-        ctk.CTkLabel(head, text="📣 Event Notifier", font=("Arial", 16, "bold"), text_color="#0d6efd").pack(side="left")
+        ctk.CTkLabel(head, text="Event Notifier", font=("Arial", 16, "bold"), text_color="#0d6efd").pack(side="left")
         ctk.CTkButton(head, text="▶ Video", width=64, height=24, font=("Arial", 11, "bold"), fg_color="#343a40",
                       hover_color="#495057", text_color="#ff6b6b",
                       command=lambda: links.open_link("video_events")).pack(side="right")
@@ -87,7 +87,7 @@ class EventsPage:
         ctk.CTkLabel(top, text="", height=2).pack()
 
         # ---- Discord ----
-        dc = self._section(p, "💬 Discord")
+        dc = self._section(p, "Discord")
         row = ctk.CTkFrame(dc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(2, 2))
         ctk.CTkLabel(row, text="Webhook", width=70, anchor="w", font=("Arial", 12, "bold")).pack(side="left")
         ctk.CTkButton(row, text="Send test", width=80, command=self.send_test, **BTN).pack(side="right", padx=(6, 0))
@@ -101,7 +101,7 @@ class EventsPage:
         self.mention_hint.pack(fill="x", padx=(86, 8), pady=(0, 4))
 
         # ---- Checking ----
-        ck = self._section(p, "⏱ Checking the chat")
+        ck = self._section(p, "Checking the chat")
         row = ctk.CTkFrame(ck, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(2, 2))
         ctk.CTkLabel(row, text="Check every", font=("Arial", 12)).pack(side="left")
         iv_opts = {"15 s": 15, "30 s": 30, "1 min": 60, "2 min": 120, "5 min": 300}
@@ -130,7 +130,7 @@ class EventsPage:
         def flip_sound():
             self.cfg["sound_on_alert"] = bool(snd.get()); self._save()
             sound_row.pack(anchor="w", padx=38, pady=(0, 2), after=snd) if snd.get() else sound_row.pack_forget()
-        snd = ctk.CTkCheckBox(ck, text="🔊 Play a sound when an event is posted", font=("Arial", 12), command=flip_sound)
+        snd = ctk.CTkCheckBox(ck, text="Play a sound when an event is posted", font=("Arial", 12), command=flip_sound)
         if cfg.get("sound_on_alert", False):
             snd.select()
         snd.pack(anchor="w", padx=10, pady=2)
@@ -145,7 +145,7 @@ class EventsPage:
         ctk.CTkLabel(ck, text="", height=4).pack()
 
         # ---- Clear chat ----
-        cc = self._section(p, "🧹 Clear the chat after an alert")
+        cc = self._section(p, "Clear the chat after an alert")
         row = ctk.CTkFrame(cc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(2, 2))
         clr = ctk.CTkCheckBox(row, text="Clear it, using", font=("Arial", 12),
                               command=lambda: (self.cfg.__setitem__("clear_chat", bool(clr.get())), self._save(),
@@ -172,11 +172,11 @@ class EventsPage:
         # ---- one PS code per Roblox window ----
         wc = ctk.CTkFrame(p, **CARD); wc.pack(fill="x", pady=4)
         wh = ctk.CTkFrame(wc, fg_color="transparent"); wh.pack(fill="x", padx=10, pady=(8, 0))
-        ctk.CTkLabel(wh, text="🖥 Roblox windows", font=("Arial", 13, "bold")).pack(side="left")
+        ctk.CTkLabel(wh, text="Roblox windows", font=("Arial", 13, "bold")).pack(side="left")
         ctk.CTkButton(wh, text="↻ Refresh", width=80, command=self.build_windows, **BTN).pack(side="right")
         ctk.CTkButton(wh, text="Show all", width=90, command=self.show_all_windows,
                       **{**BTN, **BLUE}).pack(side="right", padx=6)
-        ctk.CTkLabel(wc, text="Numbered top-left first. 👁 Show = which window is which.",
+        ctk.CTkLabel(wc, text="Numbered top-left first. Show = which window is which.",
                      font=("Arial", 12), text_color="#ced4da", wraplength=420, justify="left").pack(anchor="w", padx=10)
         self.win_box = ctk.CTkFrame(wc, fg_color="transparent"); self.win_box.pack(fill="x", padx=8, pady=(4, 8))
         self._show_clear_options()                       # also builds the window list
@@ -188,7 +188,7 @@ class EventsPage:
         lh = ctk.CTkFrame(p, fg_color="transparent"); lh.pack(fill="x", padx=4, pady=(6, 2))
         ctk.CTkLabel(lh, text="Events", font=("Arial", 14, "bold")).pack(side="left", padx=4)
         ctk.CTkButton(lh, text="+ Add event", width=100, command=self.add_event, **{**BTN, **BLUE}).pack(side="right")
-        ctk.CTkLabel(p, text="on  ·  name  ·  words from its chat message  ·  👥 who to ping  ·  role ID",
+        ctk.CTkLabel(p, text="on  ·  name  ·  words from its chat message  ·  who to ping  ·  role ID",
                      font=("Arial", 12), text_color="#adb5bd").pack(anchor="w", padx=8)
         self.list_box = ctk.CTkFrame(p, fg_color="transparent"); self.list_box.pack(fill="x")
         for ev in cfg["events"]:
@@ -227,7 +227,7 @@ class EventsPage:
             lst = self.cfg["events"]
             del lst[next(i for i, x in enumerate(lst) if x is ev)]
             self._save(); r.destroy()
-        ctk.CTkButton(r, text="✕", width=28, height=26, command=remove, **RED).pack(side="right", padx=6)
+        ctk.CTkButton(r, text="X", width=28, height=26, command=remove, **RED).pack(side="right", padx=6)
         self._people_button(r, ev, "mention", ev.get("name") or "this event").pack(side="left", padx=2)
         self._entry(r, ev, "role", 70, "role ID",
                     on_save=lambda v, n=ev: self._check_role(v, n.get("name") or "this event")
@@ -237,14 +237,14 @@ class EventsPage:
         from logic_events import role_text
         bad = [x for x in (value or "").replace(",", " ").split() if not role_text(x)]
         if bad:
-            self._log(f"⚠ Role for {where}: {', '.join(bad)} isn't a role ID. Server Settings → Roles → "
+            self._log(f"Role for {where}: {', '.join(bad)} isn't a role ID. Server Settings → Roles → "
                       f"right-click the role → Copy Role ID (Developer Mode on).")
         elif value:
-            self._log(f"✔ {where} will ping {len(value.replace(',', ' ').split())} role(s).")
+            self._log(f"{where} will ping {len(value.replace(',', ' ').split())} role(s).")
 
     # ---------- actions ----------
     def _style_toggle(self):
-        style_toggle(self.toggle, WATCHER.running, "Event alerts", icon_on="📣", icon_off="📣")
+        style_toggle(self.toggle, WATCHER.running, "Event alerts", icon_on="", icon_off="")
 
     def flip(self):
         if WATCHER.running:
@@ -252,7 +252,7 @@ class EventsPage:
             self.cfg["enabled"] = False
         else:
             if not WATCHER.has_chat_area():
-                self._log("Press 🔲 Chat next to each Roblox window first.")
+                self._log("Press Chat next to each Roblox window first.")
                 return
             WATCHER.start()
             self.cfg["enabled"] = True
@@ -272,12 +272,12 @@ class EventsPage:
     def _people_label(self, value, wide):
         ids = (value or "").split()
         if not ids:
-            return "👥 nobody — click to pick" if wide else "👥"
+            return "nobody — click to pick" if wide else ""
         names = {p["id"]: p["name"] for p in self._people()}
         shown = [names.get(i.strip("<@!&>"), i) for i in ids]
         if wide:
-            return "👥 " + ", ".join(shown)
-        return f"👥 {len(shown)}"
+            return "" + ", ".join(shown)
+        return f"{len(shown)}"
 
     def _people_button(self, parent, d, key, where, wide=False):
         btn = ctk.CTkButton(parent, text=self._people_label(d.get(key), wide), width=200 if wide else 54, height=28,
@@ -292,13 +292,13 @@ class EventsPage:
         from logic_events import check_mentions
         ok, bad = check_mentions(value)
         if bad:
-            text = (f"⚠ {', '.join(bad)} won't ping{' (' + where + ')' if where else ''}: Discord needs the ID, "
+            text = (f"{', '.join(bad)} won't ping{' (' + where + ')' if where else ''}: Discord needs the ID, "
                     f"not the name. Turn on Developer Mode (Settings → Advanced), right-click the user → Copy User ID. "
                     f"Role: right-click it → Copy Role ID, put & in front.")
             color = "#ffc107"
         elif ok:
             kinds = ["role" if "&" in x else "user" for x in ok]
-            text, color = f"✔ will ping {len(ok)} {'/'.join(sorted(set(kinds)))}{'s' if len(ok) > 1 else ''}", "#75b798"
+            text, color = f"will ping {len(ok)} {'/'.join(sorted(set(kinds)))}{'s' if len(ok) > 1 else ''}", "#75b798"
         else:
             text, color = "", "#adb5bd"
         if where is None:
@@ -313,7 +313,7 @@ class EventsPage:
         def done(x1, y1, x2, y2):
             self.root.deiconify()
             if WATCHER.set_window_chat(n, x1, y1, x2, y2):
-                self._log(f"Window {n}'s chat area saved. Press 👁 Show to check the yellow box.")
+                self._log(f"Window {n}'s chat area saved. Press Show to check the yellow box.")
             else:
                 self._log(f"Window {n} isn't open any more — press ↻ Refresh.")
             self.build_windows()
@@ -390,13 +390,13 @@ class EventsPage:
             ctk.CTkLabel(r3, text="", width=72).pack(side="left")
             green = {"fg_color": "#198754", "hover_color": "#157347"}
             own = str(i) in self.cfg.get("window_chat", {})
-            ctk.CTkButton(r3, text="✔ Chat box" if own else "🔲 Drag chat box", width=130,
+            ctk.CTkButton(r3, text="Chat box" if own else "Drag chat box", width=130,
                           command=lambda n=i: self.pick_window_chat(n),
                           **{**BTN, **(green if own else BLUE)}).pack(side="left")
             if self.cfg.get("clear_chat") and self.cfg.get("clear_in_global", True):   # only used by /clear in Global
                 tabs = self.cfg.get("window_tabs", {}).get(str(i), {})
                 has_tabs = "here" in tabs and "global" in tabs
-                ctk.CTkButton(r3, text="✔ Here / Global tabs" if has_tabs else "Set Here / Global tabs", width=160,
+                ctk.CTkButton(r3, text="Here / Global tabs" if has_tabs else "Set Here / Global tabs", width=160,
                               command=lambda n=i: self.pick_window_tabs(n),
                               **{**BTN, **(green if has_tabs else {})}).pack(side="left", padx=6)
         if hasattr(self, "win_lbl"):
@@ -452,7 +452,7 @@ class EventsPage:
     def test_read(self):
         self._refresh_area()
         if not WATCHER.has_chat_area():
-            self._log("Press 🔲 Chat next to each Roblox window first."); return
+            self._log("Press Chat next to each Roblox window first."); return
         self._log("Reading chat…")
 
         def run():
@@ -485,7 +485,7 @@ class EventsPage:
                         msgs.append(f"[TEST] {WATCHER.format_message(ev, win_no)}\n> Window {win_no} chat: {hit}")
             if not msgs:
                 if not WATCHER.has_chat_area():
-                    why = "no chat box set yet (🔲 Chat next to each window)"
+                    why = "no chat box set yet (Chat next to each window)"
                 elif not wins:
                     why = "no Roblox window found"
                 else:
@@ -546,12 +546,12 @@ class PeoplePicker(ctk.CTkToplevel):
                             command=lambda pid=p["id"], v=var: (self.chosen.add(pid) if v.get() else self.chosen.discard(pid))
                             ).pack(side="left")
             ctk.CTkLabel(r, text=p["id"], font=("Arial", 11), text_color="#ced4da").pack(side="left", padx=6)
-            ctk.CTkButton(r, text="✕", width=26, height=24, command=lambda pp=p: self.remove(pp), **RED).pack(side="right")
+            ctk.CTkButton(r, text="X", width=26, height=24, command=lambda pp=p: self.remove(pp), **RED).pack(side="right")
 
     def add(self):
         name, pid = self.name_e.get().strip(), self.id_e.get().strip().strip("<@!>")
         if not pid.isdigit() or len(pid) < 15:
-            self.msg.configure(text="⚠ That's not a user ID (a long number). Usernames like rushe7201 can't be pinged.",
+            self.msg.configure(text="That's not a user ID (a long number). Usernames like rushe7201 can't be pinged.",
                                text_color="#ffc107")
             return
         people = self.page._people()

@@ -5,8 +5,9 @@ WHAT'S NEW IN V6.3.3
 - new: Keep Roblox in focus (on by default) - if the game loses focus while a macro runs, the macro brings its Roblox window back to the front instead of waiting (works with multiple windows: it remembers the one you started in)
 - new: a small bar on top of the game shows what the macro is doing right now (casting a slot, clicking OK, anti screen-shake, meditating, walking...) so you can see where something goes wrong - can be turned off
 - Skill Macro: snapshots only take the MIDDLE of each hotbar box, so a new clover on a move that isn't maxed yet doesn't make a ready slot look different (old snapshots are cut the same way automatically - retaking them is still best)
-- Skill Macro: 🪄 Find hotbar and Snapshot all now replace ✂ drawn boxes with the automatic ones (they used to stay and overlap)
-- Skill Macro: fixed the 🪄 Find hotbar button showing as 'Find hot'
+- Skill Macro: Find hotbar and Snapshot all now replace drawn boxes with the automatic ones (they used to stay and overlap)
+- Skill Macro: fixed the Find hotbar button showing as 'Find hot'
+- cleaner look: removed all emoji / icons from buttons, menus, pages, pop-ups and messages
 
 WHAT'S NEW IN V6.3.2
 ====================
@@ -17,12 +18,12 @@ WHAT'S NEW IN V6.3.2
 - Library: if the selected route was never recorded (e.g. made with New), it now uses the built-in route instead of asking you to record one
 - Library: after picking a move it must SEE the minigame start (a few checks in a row, so a flash doesn't count) before it can decide the minigame is over; it waits up to 30 s (editable: 'Wait for the minigame' in Wisp dialogue), and if it never starts while the dialogue is still open it picks the move again instead of walking off
 - Library: new 'Wait after Clover Training' (default 1.5 s, editable in Wisp dialogue) - it waits that long before reading the move list, so it no longer scrolls past a move that's right at the top
-- Library (Manual mode): the tests now work with your spots - 🔎 Hover spots (F4) hovers your move spots, 🧪 Full test (F5) walks, presses E, clicks your Clover Training spot and hovers the moves - no pictures needed
-- Skill Macro: snapshots now only take the inside of each hotbar box (not the gaps / ground beside it); each slot shows its picture (click it to see it big), the new 🖼 Snapshots button shows them all with 📸 Retake, and ✂ Draw box lets you drag your own box for a slot
+- Library (Manual mode): the tests now work with your spots - Hover spots (F4) hovers your move spots, Full test (F5) walks, presses E, clicks your Clover Training spot and hovers the moves - no pictures needed
+- Skill Macro: snapshots now only take the inside of each hotbar box (not the gaps / ground beside it); each slot shows its picture (click it to see it big), the new Snapshots button shows them all with Retake, and Draw box lets you drag your own box for a slot
 
 WHAT'S NEW IN V6.3.1
 ====================
-- Library: tests split up - Test Path (F3) only walks the route, 🔎 Find moves (F4) only reads the move list that's already open (no walking, nothing clicked), and the new 🧪 Full test (F5) walks the route, opens the dialogue and finds the moves
+- Library: tests split up - Test Path (F3) only walks the route, Find moves (F4) only reads the move list that's already open (no walking, nothing clicked), and the new Full test (F5) walks the route, opens the dialogue and finds the moves
 - fixed Library (Image mode) clicking a move by its name before checking its picture (e.g. 'Great Flameball' for Flameball) - the picture is now always tried first, scrolling down the whole list, and the name is only a last try at the end; a name now picks the closest button ('Flameball', not 'Great Flameball')
 
 WHAT'S NEW IN V6.3
@@ -30,7 +31,7 @@ WHAT'S NEW IN V6.3
 - Library: new Auto setup for 'Moves to train' - reads the hotbar slots of the moves you ticked, opens the wisp's move list (scrolling down) and matches them, saving ONE word only that move has (e.g. 'Cage' for Sovereign Magic: Cage Gates); words every move shares are ignored, so misreads like 'Cagt' / 'Cate' still find 'Cage'. If a move has no unique word it suggests Image mode (which also saves each move's picture)
 - Library: Auto setup's confirm window lists every move seen in the dialogue - if a match is wrong, just pick the right one
 - Library: small, pixelated button text is read far better (e.g. 'Cage Gates' no longer reads as blank or 'Cagt')
-- Library: new 🔎 Find moves (test, F4) - walks to the wisp, opens the move list and only hovers each ticked move it finds, then shows which were found and suggests names for the ones it couldn't find
+- Library: new Find moves (test, F4) - walks to the wisp, opens the move list and only hovers each ticked move it finds, then shows which were found and suggests names for the ones it couldn't find
 - Library: Manual dialogue mode now just clicks your spots: Clover Training + up to 3 move spots (each with its own tick and hotbar slot for the gold check) - no names, no reading, no scrolling. Image and Auto still use 'Moves to train' and scroll to reach all 9
 - Library: the move list is recognized as soon as a button looks ~50% like one of your moves (hotbar / saved names), or when 2+ buttons hold still - 'Skip', Clover Training and Nevermind never count, so it never scrolls while the text is still typing
 - Library: the dialogue is found even when it blends into the macro window or a dark floor
@@ -38,7 +39,7 @@ WHAT'S NEW IN V6.3
 - Library: if the wisp's dialogue closes (e.g. Nevermind) after it was found, it stays where it is and double jumps + presses E until the dialogue opens again, instead of walking the route again
 - Library: new built-in route 'VunVun's route 2' (locked like the first one)
 - Library: pressing Ctrl+P on a built-in route now tells you to click New to create your own route
-- Skill Macro: Anti screen-shake has an optional 📸 screenshot check - pick a spot that looks different while in ',' and after the presses it checks you're really out, pressing ',' again if not
+- Skill Macro: Anti screen-shake has an optional screenshot check - pick a spot that looks different while in ',' and after the presses it checks you're really out, pressing ',' again if not
 - changes apply right away: text boxes save almost instantly while typing, and Mining picks up route edits from the next lap without restarting
 - Mac and Linux support removed (it couldn't be tested and relied on Windows-only parts) - the macro is Windows 10 / 11 only
 - updating from an older version: if the macro doesn't reopen by itself after the update, just open Windows_Launcher.bat again
@@ -46,7 +47,7 @@ WHAT'S NEW IN V6.3
 WHAT'S NEW IN V6.2.9
 =====================
 - fixed Library's 'slot' dropdowns (Moves to train) not being used: after a gold check the macro could keep using old slots and skip moves
-- Library: 🪄 Auto now pins each gold-clover check to the top-right corner of its own hotbar slot (it could sit too high before), and reads gold reliably in small windows
+- Library: Auto now pins each gold-clover check to the top-right corner of its own hotbar slot (it could sit too high before), and reads gold reliably in small windows
 
 WHAT'S NEW IN V6.2.8
 =====================
@@ -58,9 +59,9 @@ WHAT'S NEW IN V6.2.7
 - fixed the launcher failing for people with Python 3.15 (or 3.10): it now picks Python 3.11 - 3.14, which the text reader supports, and offers to install 3.12 next to the other one
 - fixed Library's gold clover check possibly counting the gold-tinted move name text as a gold clover - it now only counts the strong clover gold
 - faster launcher: finds Python quickly and remembers it, only installs packages when something changed (starts in about half a second after the first time), cleaner window
-- Library: comes with a ready-made route to the wisp (🔒 VunVun's route), selected by default and locked; press New to record your own
+- Library: comes with a ready-made route to the wisp (VunVun's route), selected by default and locked; press New to record your own
 - route recording now shows a red '● REC 0:12 · Ctrl+P to stop' badge on top of the game (it never takes focus or blocks clicks)
-- Skill Macro: new optional 🎥 Anti screen-shake - every few seconds (your choice) it presses , → waits → , again between casts; every wait is adjustable
+- Skill Macro: new optional Anti screen-shake - every few seconds (your choice) it presses , → waits → , again between casts; every wait is adjustable
 
 WHAT'S NEW IN V6.2.6
 =====================
@@ -70,8 +71,8 @@ WHAT'S NEW IN V6.2.6
 
 WHAT'S NEW IN V6.2.5
 =====================
-- Skill Macro: 'Auto-tune' is now 🪄 Find hotbar - it only moves the hotbar region onto your filled slots (no more casting your skills or retaking snapshots)
-- Skill Macro: new optional 🧘 Meditation - when the mana bar runs out it puts your weapon/grimoire away, meditates until mana is full, then takes them back out ('Meditate at' sets how low mana may get first, default 5%; every key has its own adjustable wait so animations finish - 'All waits' sets them all, default 1 s; 'Give up after' is adjustable)
+- Skill Macro: 'Auto-tune' is now Find hotbar - it only moves the hotbar region onto your filled slots (no more casting your skills or retaking snapshots)
+- Skill Macro: new optional Meditation - when the mana bar runs out it puts your weapon/grimoire away, meditates until mana is full, then takes them back out ('Meditate at' sets how low mana may get first, default 5%; every key has its own adjustable wait so animations finish - 'All waits' sets them all, default 1 s; 'Give up after' is adjustable)
 - fixed route recordings losing quick repeated key presses (e.g. 10 jumps playing back as 2); every tap is now held long enough for Roblox to see it
 - removed lag compensation (Smart Movement, Motion slider, Test Sensor) from Mining and routes: walks now follow the recorded timing exactly
 - Event Notifier: /clear can now be typed in the Global tab and then go back to Here - set each window's tabs with 'Set Here / Global tabs' (click Here, then Global); you can also pick /clear or /cls
@@ -81,7 +82,7 @@ WHAT'S NEW IN V6.2.5
 - cleaner Event Notifier page: Discord, Checking and Clear chat sections, and each window's buttons are clearly labelled
 - Library now just stops (instead of closing the app) when every selected move is trained, with an optional sound (Main tab)
 - Event Notifier: optional sound when an event is posted (Checking the chat section)
-- sounds: pick your own sound file (mp3, wav, m4a, mp4...) with 🎵 Choose sound… for both alert sounds
+- sounds: pick your own sound file (mp3, wav, m4a, mp4...) with Choose sound… for both alert sounds
 
 WHAT'S NEW IN V6.2.4
 =====================
@@ -101,7 +102,7 @@ WHAT'S NEW IN V6.2.2
 
 WHAT'S NEW IN V6.2.1
 =====================
-- Library: new 🪄 Auto button for Gold Clover detection - finds the hotbar and your filled slots by itself
+- Library: new Auto button for Gold Clover detection - finds the hotbar and your filled slots by itself
 - Skill Macro: "then M1" has its own delay (how long to wait after the key before clicking, default 0.3 s), in Rotation and Skill Combo; Items also wait 0.3 s before M1
 - fixed the 'OK detection not set up' message pointing to the old main tab (it's on the OK Popup page)
 
@@ -109,7 +110,7 @@ WHAT'S NEW IN V6.2
 ===================
 - fixed Windows_Launcher.bat closing instantly / not opening for some people (wrong line endings, Python in a folder with spaces, or brackets in the folder name)
 - fixed Skill Macro slots always showing 'on cooldown' when the hotbar region is a few pixels off or the icon glows
-- Skill Macro: new 🪄 Auto-tune: finds the hotbar by itself (only your filled slots), snapshots it and learns each slot's ready line by casting it once (waits for each move to come off cooldown first)
+- Skill Macro: new Auto-tune: finds the hotbar by itself (only your filled slots), snapshots it and learns each slot's ready line by casting it once (waits for each move to come off cooldown first)
 - Skill Macro: per-slot 'Ready at' setting to adjust a slot by hand
 - Skill Macro: Auto-tune works with small / windowed Roblox, shows where it found the slots, and stops instead of overwriting your snapshots when it can't find the hotbar
 - Skill Macro: New loadout now starts as a fresh empty save instead of a copy of the current one

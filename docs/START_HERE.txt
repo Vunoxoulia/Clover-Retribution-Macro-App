@@ -3,18 +3,18 @@
 ║              Clover Retribution macros for Windows             ║
 ╚════════════════════════════════════════════════════════════════╝
 
-🚀 QUICK START
+QUICK START
 ═════════════════════════════════════════════════════════════════
 
    1. Unzip the download first (right-click the .zip → Extract All)
    2. Double-click: Windows_Launcher.bat  (don't "Run as administrator")
    3. Wait for Python to be found (it offers to install 3.12 if needed)
    4. Wait for the packages to install (only the first time)
-   5. The macro opens! 🎮
+   5. The macro opens! 
 
 ═════════════════════════════════════════════════════════════════
 
-📁 FOLDERS
+FOLDERS
 ═════════════════════════════════════════════════════════════════
 
 Windows_Launcher.bat  ← double-click this to start
@@ -25,18 +25,18 @@ docs\                 ← patch notes and guides
 
 ═════════════════════════════════════════════════════════════════
 
-📋 WHAT'S INCLUDED
+WHAT'S INCLUDED
 ═════════════════════════════════════════════════════════════════
 
-✅ Library, Mining, Fishing and Skill Macro
-✅ Event Notifier (server events to Discord)
-✅ Automatic Python detection and package installation
-✅ Built-in updater
-✅ Hotkey customization
+Library, Mining, Fishing and Skill Macro
+Event Notifier (server events to Discord)
+Automatic Python detection and package installation
+Built-in updater
+Hotkey customization
 
 ═════════════════════════════════════════════════════════════════
 
-✨ SYSTEM REQUIREMENTS
+SYSTEM REQUIREMENTS
 ═════════════════════════════════════════════════════════════════
 
 Minimum:
@@ -55,7 +55,7 @@ Mac and Linux are not supported.
 
 ═════════════════════════════════════════════════════════════════
 
-❓ NEED HELP?
+NEED HELP?
 ═════════════════════════════════════════════════════════════════
 
 1. Read README.txt for features, usage and antivirus warnings
@@ -65,7 +65,7 @@ Mac and Linux are not supported.
 
 ═════════════════════════════════════════════════════════════════
 
-🎮 YOU'RE ALL SET!
+YOU'RE ALL SET!
 
 Just double-click Windows_Launcher.bat.
 No prior Python knowledge needed!
