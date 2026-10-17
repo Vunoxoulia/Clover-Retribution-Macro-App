@@ -93,13 +93,20 @@ class SmartMacroGUI:
                           border_color="#495057", border_width=1, hover_color="#2b3035", text_color="#e9ecef",
                           command=self.go_back).pack(fill="x")
         self.build_rotation()
-        self.build_combos()
-        self.build_items()
-        self.build_settings()
-        from gui_events import EventsPage
-        self.events_page = EventsPage(self.nav.tab("Events"), self.root, self.settings)
-        from gui import OkPopupPage
-        self.ok_page = OkPopupPage(self.root, self.nav.tab("OK Popup"), self.settings, self.log)
+        # the other pages are built the first time they're opened (building them all froze the window)
+        from logic_events import WATCHER
+        WATCHER.attach(self.settings)
+
+        def events():
+            from gui_events import EventsPage
+            self.events_page = EventsPage(self.nav.tab("Events"), self.root, self.settings)
+
+        def ok():
+            from gui import OkPopupPage
+            self.ok_page = OkPopupPage(self.root, self.nav.tab("OK Popup"), self.settings, self.log)
+        for name, fn in (("Skill Combo", self.build_combos), ("Items", self.build_items),
+                         ("Settings", self.build_settings), ("Events", events), ("OK Popup", ok)):
+            self.nav.lazy(name, fn)
 
     def _page(self, name):
         """The page's scroll area, created once (rebuilding it is slow and loses the scroll position)."""
@@ -626,12 +633,32 @@ class SmartMacroGUI:
         for w in self.cards_box.winfo_children():
             w.destroy()
         self.score_labels, self._cards = {}, {}
-        for slot, m in enumerate(self.logic.moves(), start=1):
-            self._cards[slot] = self._make_card(slot, m)
-        self._layout_cards()
-        if hasattr(self, "aim_chips_box"):
-            self._build_aim_chips()                  # slot count may have changed
-        self.save()
+        # Cards are made two at a time between window updates, so the page shows (and the window stays
+        # responsive) straight away instead of freezing until all of them are drawn.
+        self._cards_gen = gen = getattr(self, "_cards_gen", 0) + 1
+        moves = list(enumerate(self.logic.moves(), start=1))
+
+        def step(i=0):
+            if gen != self._cards_gen:
+                return                               # rebuilt again meanwhile: this round is outdated
+            try:
+                if not self.cards_box.winfo_exists():
+                    return
+            except Exception:
+                return
+            for slot, m in moves[i:i + 2]:
+                self._cards[slot] = self._make_card(slot, m)
+                self._cards[slot]["frame"].pack(fill="x", pady=3)
+            if i + 2 < len(moves):
+                self.root.after(1, lambda: step(i + 2))
+                return
+            for w in self._cards.values():
+                w["frame"].pack_forget()
+            self._layout_cards()                     # final order by priority
+            if hasattr(self, "aim_chips_box"):
+                self._build_aim_chips()              # slot count may have changed
+            self.save()
+        step()
 
     def _layout_cards(self):
         """Put the existing cards in priority order and refresh their rank badges / arrows."""
@@ -1252,8 +1279,9 @@ class SmartMacroGUI:
             self.cfg["combos"]["enabled"] = False
         self._switches.clear()
         self.build_rotation()
-        self.build_combos()
-        self.build_items()
+        for name, fn in (("Skill Combo", self.build_combos), ("Items", self.build_items)):
+            if name not in self.nav._builders:            # only pages already built; the rest build fresh
+                fn()
         self._refresh_loadout_menu()
         self.save()
         if was_running:
@@ -1373,12 +1401,14 @@ class SmartMacroGUI:
 
     def go_back(self):
         self.logic.stop()
-        self.ok_page.close()
+        if getattr(self, "ok_page", None):
+            self.ok_page.close()
         keyboard.unhook_all()
         if self.on_back:
             self.on_back()
 
     def exit_app(self):
         self.logic.stop()
-        self.ok_page.close()
+        if getattr(self, "ok_page", None):
+            self.ok_page.close()
         self.root.destroy()

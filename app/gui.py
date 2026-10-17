@@ -189,6 +189,7 @@ class SidebarNav:
         self.content = ctk.CTkFrame(root, fg_color="transparent")
         self.content.pack(side="left", fill="both", expand=True, padx=12, pady=12)
         self.pages, self.buttons, self.current = {}, {}, None
+        self._builders = {}                  # pages built the first time they're opened (opening a macro was slow)
 
     def add(self, name):
         page = ctk.CTkFrame(self.content, fg_color="#1e2124", corner_radius=10)
@@ -212,6 +213,25 @@ class SidebarNav:
         self.pages[name].pack(fill="both", expand=True)
         self.buttons[name].configure(fg_color="#0d6efd", text_color="#ffffff", font=("Arial", 13, "bold"))
         self.current = name
+        self._build(name)
+
+    def lazy(self, name, builder):
+        """Build page `name` only when it's first shown (right away if it's showing now)."""
+        self._builders[name] = builder
+        if name == self.current:
+            self._build(name)
+
+    def _build(self, name):
+        fn = self._builders.pop(name, None)
+        if fn:
+            try:
+                fn()
+            except Exception as e:
+                print(f"Couldn't build page {name}: {e}")
+
+    def build_all(self):
+        for name in list(self._builders):
+            self._build(name)
 
     def get(self):
         return self.current
@@ -249,15 +269,17 @@ class SpatialGUI:
             ctk.CTkButton(self.tabview.footer, text="←  Back to Menu", anchor="w", height=32,
                           fg_color="transparent", border_color="#495057", border_width=1,
                           hover_color="#2b3035", text_color="#e9ecef", command=self.go_back).pack(fill="x")
-        if "Main" in self.tabs_to_show: self.setup_main_tab()
-        if "Settings" in self.tabs_to_show: self.setup_settings_tab()
-        if "Areas" in self.tabs_to_show: self.setup_areas_tab()
-        if "Clover Clicker" in self.tabs_to_show: self.setup_clover_tab()
-        if "Fishing Settings" in self.tabs_to_show: self.setup_fishing_settings_tab()
-        if "OK Popup" in self.tabs_to_show: self.setup_ok_tab()
-        if "Events" in self.tabs_to_show: self.setup_events_tab()
-        if "Hotkeys" in self.tabs_to_show: self.setup_hotkeys_tab()
-        if "Statistics" in self.tabs_to_show: self.setup_statistics_tab()
+        from logic_events import WATCHER
+        WATCHER.attach(self.settings)        # event checks work before the Events page is ever opened
+        # Only the page you see is built now; the others the first time you open them (building every
+        # page up front froze the window for seconds when a macro was opened)
+        builders = {"Main": self.setup_main_tab, "Settings": self.setup_settings_tab, "Areas": self.setup_areas_tab,
+                    "Clover Clicker": self.setup_clover_tab, "Fishing Settings": self.setup_fishing_settings_tab,
+                    "OK Popup": self.setup_ok_tab, "Events": self.setup_events_tab,
+                    "Hotkeys": self.setup_hotkeys_tab, "Statistics": self.setup_statistics_tab}
+        for name in self.tabs_to_show:
+            if name in builders:
+                self.tabview.lazy(name, builders[name])
 
     def setup_main_tab(self):
         tab = self.tabview.tab("Main")

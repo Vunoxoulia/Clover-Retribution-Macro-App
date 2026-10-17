@@ -41,6 +41,16 @@ def main():
     links.refresh_async()             # newest links.txt from GitHub (videos, Discord, donate)
     from utils import SpatialUtils
     SpatialUtils.preload_ocr()        # load the text reader now, in the background, so Start doesn't freeze
+
+    def warm_keyboard():
+        # the key hook's first start builds Windows' key-name tables (~1 s); do it now, not when a macro opens
+        try:
+            import keyboard
+            keyboard._listener.start_if_necessary()
+        except Exception:
+            pass
+    import threading
+    threading.Thread(target=warm_keyboard, daemon=True).start()
     try:
         ctypes.windll.shcore.SetProcessDpiAwareness(1)
     except Exception:

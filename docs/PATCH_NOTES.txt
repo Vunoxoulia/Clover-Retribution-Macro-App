@@ -1,6 +1,6 @@
 WHAT'S NEW IN V6.3.2
 ====================
-- fixed the window freezing / long loading when starting or stopping a macro: the text reader now loads once in the background when the app opens, and the macro no longer touches the window from its own thread
+- fixed the window freezing for seconds when opening or starting a macro: pages are now built the first time you open them (Library opens in a fraction of a second instead of ~6 s), Skill Macro cards fill in without blocking, and the text reader and key hook load in the background when the app opens
 - warns you when Roblox runs as administrator (Windows then blocks every key and click the macro sends) and how to fix it
 - new: Export / Import setups to share them as one .zip - Skill Macro loadouts (settings + snapshots, added as a new loadout) and the Library setup (moves, dialogue mode, spots, pictures + your own route); no webhook or stats are included
 - Library and Mining: the record key is now F9 (was Ctrl+P) and can be changed any time in the Hotkeys tab - every hint, the REC badge and the log show whichever key you set
