@@ -800,7 +800,7 @@ class SmartMacroLogic:
         for _ in range(2):
             if self.anti_shake_back_to_normal() is not False:
                 break
-            self.app.log("Anti screen-shake: still in ',' - pressing it once more.")
+            self.app.log("Anti screen-shake: in skill tree - pressing ',' once more.")
             with RobloxInputDriver._lock:
                 self._press(key)
             self._wait(max(0.5, float(d.get("after", 0.5) or 0)))

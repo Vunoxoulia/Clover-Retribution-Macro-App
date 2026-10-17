@@ -409,6 +409,22 @@ class SmartMacroGUI:
                       command=lambda: self.pick_region(d, "check_region", after=picked)).pack(side="left")
         ctk.CTkButton(row2, text="X", width=26, height=24, fg_color="#495057",
                       command=clear).pack(side="left", padx=4)
+
+        def test():
+            """Click into Roblox: 3 s later the spot is compared with the normal picture."""
+            self.log("Anti screen-shake test: click into Roblox - checking the spot in 3 s.")
+
+            def run():
+                time.sleep(3)
+                res = self.logic.anti_shake_back_to_normal()
+                text, col = {True: ("Not in skill tree", "#75b798"),
+                             False: ("In skill tree", "#ffc107"),
+                             None: ("Pick a spot first", "#ea868f")}[res]
+                self._safe_set(status, text=text, text_color=col)
+                self.log(text)
+            threading.Thread(target=run, daemon=True).start()
+        ctk.CTkButton(row2, text="Test", width=50, height=24, fg_color="#495057",
+                      command=test).pack(side="left", padx=(0, 4))
         status.pack(side="left", padx=6)
 
     def open_meditation(self):
