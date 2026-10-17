@@ -316,7 +316,6 @@ class SmartMacroGUI:
         ctk.CTkButton(row, text="Snapshot all", width=140, height=28, **BLUE,
                       command=self.snapshot_all).pack(side="left", padx=(10, 3))
         ctk.CTkButton(row, text="Show", width=56, **BTN, command=self.flash_slots).pack(side="right", padx=3)
-        ctk.CTkButton(row, text="Snapshots", width=96, **BTN, command=self.view_snapshots).pack(side="right", padx=3)
         ctk.CTkButton(row, text="Test", width=56, **BTN, command=self.test_rotation).pack(side="right", padx=3)
         ctk.CTkButton(row, text="Find hotbar", width=130, height=28, **BLUE,
                       command=self.auto_tune).pack(side="right", padx=3)
@@ -324,6 +323,11 @@ class SmartMacroGUI:
         self.build_aim_panel(p)
         self.build_meditation(p)
         self.build_anti_shake(p)
+        # just above the slot list: every snapshot big, with Retake / Draw box per slot
+        sh = ctk.CTkFrame(p, fg_color="transparent"); sh.pack(fill="x", pady=(6, 0))
+        ctk.CTkButton(sh, text="Snapshots", width=96, **BTN, command=self.view_snapshots).pack(side="right", padx=3)
+        ctk.CTkLabel(sh, text="Retake or draw a slot's box in Snapshots", font=("Arial", 11),
+                     text_color="#adb5bd").pack(side="right", padx=6)
         self.cards_box = ctk.CTkFrame(p, fg_color="transparent")
         self.cards_box.pack(fill="x", pady=(4, 0))
         self.build_cards()
@@ -707,7 +711,7 @@ class SmartMacroGUI:
     def _style_card(self, slot):
         w, m = self._cards[slot], self.logic.moves()[slot - 1]
         open_ = slot in self._expanded
-        w["gear"].configure(text="▴" if open_ else "▾", fg_color="#0d6efd" if open_ else "#495057",
+        w["gear"].configure(text="Less ▴" if open_ else "More ▾", fg_color="#0d6efd" if open_ else "#495057",
                             text_color="#ffffff" if m["enabled"] else "#6c757d")
         self._update_summary(slot)
 
@@ -762,11 +766,9 @@ class SmartMacroGUI:
         ctk.CTkLabel(r1, text="Key", font=("Arial", 12)).pack(side="left", padx=(4, 2))
         self._pick(r1, m, "key", [str(i % 10) for i in range(1, 11)], 52, str).pack(side="left")
         has = self.logic.has_template(slot)
-        gear = ctk.CTkButton(r1, text="More ▾", width=44, height=26, font=("Arial", 12), fg_color="#495057",
+        gear = ctk.CTkButton(r1, text="More ▾", width=66, height=26, font=("Arial", 12), fg_color="#495057",
                              hover_color="#343a40", command=lambda: self.toggle_options(slot))
         gear.pack(side="right", padx=2)
-        ctk.CTkButton(r1, text="Snap", width=44, command=lambda: self.snapshot([slot]), **BTN).pack(side="right", padx=2)
-        ctk.CTkButton(r1, text="Box", width=32, command=lambda: self.draw_slot_box(slot), **BTN).pack(side="right", padx=2)
         # the snapshot itself (what 'ready' looks like for this slot); 'no img' until one is taken
         score = ctk.CTkLabel(r1, text="" if has else "no img", width=64, font=("Arial", 12),
                              text_color="#ea868f", image=self._thumb(slot))
@@ -1152,9 +1154,9 @@ class SmartMacroGUI:
             if not more["open"]:
                 more["box"].pack_forget(); gear.configure(text="More ▾", fg_color="#495057")
             else:
-                more["box"].pack(fill="x", pady=(0, 4)); gear.configure(text="▴", fg_color="#0d6efd")
+                more["box"].pack(fill="x", pady=(0, 4)); gear.configure(text="Less ▴", fg_color="#0d6efd")
             recap()
-        gear = ctk.CTkButton(line, text="More ▾", width=44, height=24, font=("Arial", 12), fg_color="#495057",
+        gear = ctk.CTkButton(line, text="More ▾", width=66, height=24, font=("Arial", 12), fg_color="#495057",
                              hover_color="#343a40", command=toggle)
         gear.pack(side="right", padx=2)
         extra_lbl.pack(side="left", padx=10)

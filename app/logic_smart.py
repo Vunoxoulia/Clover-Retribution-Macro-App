@@ -703,7 +703,8 @@ class SmartMacroLogic:
         except Exception:
             return True
         # Keep Roblox in focus (on by default): bring the Roblox window back instead of pausing
-        if self.app.settings.get("force_roblox_focus", True) and time.time() - getattr(self, "_focus_try", 0) > 2.0:
+        # only while the macro RUNS (not for Find hotbar / tests started from the window)
+        if self.running and self.app.settings.get("force_roblox_focus", True)                 and time.time() - getattr(self, "_focus_try", 0) > 2.0:
             self._focus_try = time.time()
             from utils import focus_roblox
             if focus_roblox(getattr(self, "_roblox_hwnd", 0)):

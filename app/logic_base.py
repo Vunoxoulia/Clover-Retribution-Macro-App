@@ -143,7 +143,7 @@ class BaseLogic:
     def wait_for_roblox_focus(self):
         if self.check_focus():
             return True
-        if self.force_focus_on():
+        if self.running and self.force_focus_on():
             # Keep Roblox in focus: bring the macro's Roblox window back to the front instead of waiting
             from utils import focus_roblox
             if not getattr(self, "_roblox_hwnd", 0):
