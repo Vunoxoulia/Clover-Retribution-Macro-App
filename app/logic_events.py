@@ -38,9 +38,6 @@ DEFAULT_CFG = {
     "sound_on_alert": False,   # play a Windows sound when an event is posted (optional, off by default)
     "clear_in_global": True,   # /clear doesn't always work in 'Here': click Global, clear, click Here again
     "hover_chat": True,        # move the mouse onto the chat before reading (it fades out otherwise)
-    "quiet": False,            # quiet hours: events are still noted, but not posted / pinged
-    "quiet_from": "01:00",
-    "quiet_to": "08:00",
     "unreadable_warn": 5,      # minutes a window's chat can be unreadable before a warning (0 = never)
     "events": [{"enabled": True, "name": n, "keyword": k, "mention": ""} for n, k in DEFAULT_EVENTS],
 }
@@ -545,7 +542,7 @@ class EventWatcher:
         except Exception as e:
             self.log(f"/clear failed: {e}")
 
-    # ---------- extras: cooldown per event, quiet hours, recent list, unreadable chat, test ----------
+    # ---------- extras: cooldown per event, recent list, unreadable chat, test ----------
     def cooldown_for(self, ev):
         """Seconds before this event may be posted again: its own 'again after' (minutes) or the shared one."""
         try:
@@ -553,25 +550,6 @@ class EventWatcher:
         except (TypeError, ValueError):
             own = 0
         return own * 60 if own > 0 else float(self.cfg.get("cooldown", 120))
-
-    @staticmethod
-    def _minutes(hhmm):
-        try:
-            h, m = (int(x) for x in str(hhmm).strip().split(":"))
-            return (h % 24) * 60 + m % 60
-        except Exception:
-            return None
-
-    def is_quiet(self, now=None):
-        """True during quiet hours (they may run past midnight, e.g. 23:00 - 07:00)."""
-        if not self.cfg.get("quiet"):
-            return False
-        a, b = self._minutes(self.cfg.get("quiet_from")), self._minutes(self.cfg.get("quiet_to"))
-        if a is None or b is None or a == b:
-            return False
-        t = time.localtime(now) if now else time.localtime()
-        cur = t.tm_hour * 60 + t.tm_min
-        return a <= cur < b if a < b else (cur >= a or cur < b)
 
     def note(self, name, win_no, what):
         self.recent.append((time.time(), name, win_no, what))
@@ -588,7 +566,7 @@ class EventWatcher:
                f"Is the chat closed, covered or moved? Set its Chat area again on the Events page.")
         self.log("WARNING: " + msg)
         self.note("(chat unreadable)", win_no, "warning")
-        if post and not self.is_quiet():
+        if post:
             self.post("[Event Notifier] " + msg)
 
     def test_event(self, ev):
@@ -678,16 +656,13 @@ class EventWatcher:
             self._last_post[key] = time.time()
             new.append((ev, w))
             msg = self.format_message(ev, win_no)
-            if post and self.is_quiet():
-                self.log(f"Detected {ev['name']} (quiet hours - not posted)")
-                self.note(ev["name"], win_no, "quiet hours")
-            elif post and self.post(msg):
+            if post and self.post(msg):
                 self.log(f"Posted: {msg}")
                 self.note(ev["name"], win_no, "posted")
             elif post:
                 self.log(f"Detected {ev['name']} (not posted)")
                 self.note(ev["name"], win_no, "NOT posted: " + (getattr(self, "last_post_error", "") or "?"))
-        if post and new and self.cfg.get("sound_on_alert", False) and not self.is_quiet():
+        if post and new and self.cfg.get("sound_on_alert", False):
             from utils import play_sound
             play_sound("event")                          # once per check, however many events were new
         if post and new and self.cfg.get("clear_chat"):

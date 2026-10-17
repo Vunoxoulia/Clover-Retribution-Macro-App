@@ -144,15 +144,6 @@ class EventsPage:
         sound_picker(sound_row, "event").pack(anchor="w")
         if snd.get():
             sound_row.pack(anchor="w", padx=38, pady=(0, 2), after=snd)
-        row = ctk.CTkFrame(ck, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(4, 2))
-        qt = ctk.CTkCheckBox(row, text="Quiet hours (no posts / pings) from", font=("Arial", 12),
-                             command=lambda: (self.cfg.__setitem__("quiet", bool(qt.get())), self._save()))
-        if cfg.get("quiet"):
-            qt.select()
-        qt.pack(side="left")
-        self._entry(row, cfg, "quiet_from", 52, "01:00").pack(side="left", padx=4)
-        ctk.CTkLabel(row, text="to", font=("Arial", 12)).pack(side="left")
-        self._entry(row, cfg, "quiet_to", 52, "08:00").pack(side="left", padx=4)
         row = ctk.CTkFrame(ck, fg_color="transparent"); row.pack(fill="x", padx=8, pady=2)
         ctk.CTkLabel(row, text="Warn when a window's chat can't be read for", font=("Arial", 12)).pack(side="left")
         uw_opts = {"never": 0, "3 min": 3, "5 min": 5, "10 min": 10, "15 min": 15}

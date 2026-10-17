@@ -12,7 +12,7 @@ WHAT'S NEW IN V6.3.3
 - Skill Macro: fixed the Find hotbar button showing as 'Find hot'
 - cleaner look: removed all emoji / icons from buttons, menus, pages, pop-ups and messages
 - Event Notifier: the events list has a search box and pages (8 per page) instead of one long scrolling list; the 'who to ping' button now reads '+ ping' / '2 pings'
-- Event Notifier: Test button on each event - if its words are in a chat right now it uses that real line (so reading is tested too), otherwise it posts a test message with the same text and pings; 'Last events' list of what was posted; Tick / Untick shown (e.g. search 'wisp', then Tick shown); Export / Import the event list to share it; quiet hours (no posts or pings, still noted); a warning (in the app and on Discord) when a window's chat can't be read for a few minutes; each event can have its own 'again after' minutes
+- Event Notifier: Test button on each event - if its words are in a chat right now it uses that real line (so reading is tested too), otherwise it posts a test message with the same text and pings; 'Last events' list of what was posted; Tick / Untick shown (e.g. search 'wisp', then Tick shown); Export / Import the event list to share it; a warning (in the app and on Discord) when a window's chat can't be read for a few minutes; each event can have its own 'again after' minutes
 
 WHAT'S NEW IN V6.3.2
 ====================
