@@ -772,6 +772,11 @@ class SmartMacroGUI:
                              text_color="#ea868f", image=self._thumb(slot))
         score.pack(side="right", padx=2)
         self.score_labels[slot] = score
+        # Test's result ('ready 0.97/0.85') gets its own spot, next to the picture - not on top of it
+        result = ctk.CTkLabel(r1, text="", width=1, font=("Arial", 12))
+        result.pack(side="right", padx=(2, 4))
+        self._test_labels = getattr(self, "_test_labels", {})
+        self._test_labels[slot] = result
         score.configure(cursor="hand2")
         score.bind("<Button-1>", lambda e: self.show_snapshot(slot))
         summary = ctk.CTkLabel(r1, text="", font=("Arial", 12), text_color="#ced4da", anchor="w")
@@ -972,8 +977,8 @@ class SmartMacroGUI:
             self.log("Set the hotbar region first.")
             return
         for slot, s in scores.items():
-            lbl = self.score_labels.get(slot)
-            if not lbl:
+            lbl = getattr(self, "_test_labels", {}).get(slot)
+            if not lbl or not lbl.winfo_exists():
                 continue
             thr = self.logic.slot_threshold(slot)
             if s is None:
