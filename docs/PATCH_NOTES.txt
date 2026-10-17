@@ -1,10 +1,13 @@
-WHAT'S NEW IN V6.3.2
+WHAT'S NEW IN V6.3.3
 ====================
-- fixed the window freezing for seconds when opening or starting a macro: pages are now built the first time you open them (Library opens in a fraction of a second instead of ~6 s), Skill Macro cards fill in without blocking, and the text reader and key hook load in the background when the app opens
 - fixed the Skill Macro sometimes stopping right after an OK click: the OK clicker no longer clicks when another window (like the macro's own) covers the popup, and it never switches focus back to the macro window after clicking
 - OK popups now take ONE click: the macro brings that Roblox window to the front first, then clicks once
 - new: Keep Roblox in focus (on by default) - if the game loses focus while a macro runs, the macro brings its Roblox window back to the front instead of waiting (works with multiple windows: it remembers the one you started in)
 - new: a small bar on top of the game shows what the macro is doing right now (casting a slot, clicking OK, anti screen-shake, meditating, walking...) so you can see where something goes wrong - can be turned off
+
+WHAT'S NEW IN V6.3.2
+====================
+- fixed the window freezing for seconds when opening or starting a macro: pages are now built the first time you open them (Library opens in a fraction of a second instead of ~6 s), Skill Macro cards fill in without blocking, and the text reader and key hook load in the background when the app opens
 - warns you when Roblox runs as administrator (Windows then blocks every key and click the macro sends) and how to fix it
 - new: Export / Import setups to share them as one .zip - Skill Macro loadouts (settings + snapshots, added as a new loadout) and the Library setup (moves, dialogue mode, spots, pictures + your own route); no webhook or stats are included
 - Library and Mining: the record key is now F9 (was Ctrl+P) and can be changed any time in the Hotkeys tab - every hint, the REC badge and the log show whichever key you set
