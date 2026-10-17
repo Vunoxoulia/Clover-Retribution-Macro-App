@@ -359,7 +359,7 @@ class EventsPage:
                                             initialfile="Event list.json", filetypes=[("Event list", "*.json")])
         if not path:
             return
-        keep = ("enabled", "name", "keyword", "role", "mention")
+        keep = ("name", "keyword")            # only what the event IS - never roles or people (privacy)
         data = {"type": "event_list", "events": [{k: ev[k] for k in keep if ev.get(k) not in (None, "")}
                                                  for ev in self.cfg["events"]]}
         with open(path, "w", encoding="utf-8") as f:
@@ -386,7 +386,7 @@ class EventsPage:
         for it in items:
             if not isinstance(it, dict) or not (it.get("name") or "").strip():
                 continue
-            clean = {k: it[k] for k in ("enabled", "name", "keyword", "role", "mention") if k in it}
+            clean = {k: it[k] for k in ("name", "keyword") if k in it}   # roles / people never come from a file
             cur = by_name.get(clean["name"].strip().lower())
             if cur is not None:
                 cur.update(clean); updated += 1
