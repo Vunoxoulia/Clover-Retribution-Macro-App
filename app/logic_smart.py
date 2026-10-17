@@ -228,6 +228,39 @@ class SmartMacroLogic:
         w = (x2 - x1) / n
         return [[int(x1 + i * w), y1, int(x1 + (i + 1) * w), y2] for i in range(n)]
 
+    def clear_drawn_boxes(self, save=True):
+        """Forget every ✂ drawn box, so all slots use the automatic box again."""
+        for m in self.cfg["rotation"].get("moves", []):
+            m["box"] = None
+        self._templates.clear()
+        if save:
+            self.app.settings.save()
+
+    # Only the MIDDLE of a hotbar box is compared: its edges carry the gold / silver / bronze clovers of a
+    # move that isn't maxed yet, and a new clover there would make a 'ready' slot look different.
+    CENTER_X, CENTER_TOP, CENTER_BOTTOM = 0.15, 0.22, 0.12
+
+    @classmethod
+    def center_of(cls, box):
+        x1, y1, x2, y2 = box
+        w, h = x2 - x1, y2 - y1
+        return [int(x1 + w * cls.CENTER_X), int(y1 + h * cls.CENTER_TOP),
+                int(x2 - w * cls.CENTER_X), int(y2 - h * cls.CENTER_BOTTOM)]
+
+    def _full_boxes(self):
+        """Each slot's WHOLE automatic box (before taking its middle)."""
+        rot = self.cfg["rotation"]
+        found = rot.get("slot_boxes") if rot.get("slot_boxes_for") == list(rot["region"]) else None
+        out = []
+        for i, (cx1, cy1, cx2, cy2) in enumerate(self.slot_cells()):
+            if found and i < len(found):
+                out.append([int(v) for v in found[i]])
+            else:
+                side = min(cx2 - cx1, cy2 - cy1)
+                mx, my = (cx1 + cx2) // 2, (cy1 + cy2) // 2
+                out.append([mx - side // 2, my - side // 2, mx - side // 2 + side, my - side // 2 + side])
+        return out
+
     def slot_regions(self):
         """What each slot's picture is taken of - only the INSIDE of its hotbar box, not the gaps around it:
         1. a box you drew yourself for that slot (✂ Draw box), else
@@ -245,11 +278,11 @@ class SmartMacroLogic:
             if own and own[2] > own[0] and own[3] > own[1]:
                 out.append([int(v) for v in own])
             elif found and i < len(found):
-                out.append([int(v) for v in found[i]])
+                out.append(self.center_of([int(v) for v in found[i]]))
             else:
                 side = min(cx2 - cx1, cy2 - cy1)
                 mx, my = (cx1 + cx2) // 2, (cy1 + cy2) // 2
-                out.append([mx - side // 2, my - side // 2, mx - side // 2 + side, my - side // 2 + side])
+                out.append(self.center_of([mx - side // 2, my - side // 2, mx - side // 2 + side, my - side // 2 + side]))
         return out
 
     # ---------- templates ----------
@@ -283,10 +316,11 @@ class SmartMacroLogic:
             return 0
         rot = self.cfg["rotation"]
         if rot.get("slot_boxes_for") != list(rot["region"]):
-            rot["slot_boxes"], rot["slot_boxes_for"] = [list(r) for r in regions], list(rot["region"])
+            rot["slot_boxes"], rot["slot_boxes_for"] = self._full_boxes(), list(rot["region"])
         boxes = rot["slot_boxes"]
+        full = self._full_boxes()
         while len(boxes) < len(regions):
-            boxes.append(list(regions[len(boxes)]))
+            boxes.append(list(full[len(boxes)]))
         moves = rot.get("moves", [])
         os.makedirs(loadout_dir(self.active_loadout()), exist_ok=True)
         done = 0
@@ -300,11 +334,14 @@ class SmartMacroLogic:
                 b = self.inner_box(full) if full is not None and full.size else None
                 if b:
                     x, y, w, h = b
-                    r = [cell[0] + x, cell[1] + y, cell[0] + x + w, cell[1] + y + h]
-                    boxes[i - 1] = list(r)
+                    full_box = [cell[0] + x, cell[1] + y, cell[0] + x + w, cell[1] + y + h]
+                    boxes[i - 1] = list(full_box)           # the whole box is remembered...
+                    r = self.center_of(full_box)            # ...but only its middle is the snapshot
             img = self.utils.capture_screen_bgr(r)
             if img is not None and img.size:
                 cv2.imwrite(self.template_path(i), img)
+                if i - 1 < len(moves):
+                    moves[i - 1]["snap_center"] = not own       # this snapshot is already just the middle
                 done += 1
         self._templates.clear()
         self.app.settings.save()
@@ -316,13 +353,21 @@ class SmartMacroLogic:
     def _template(self, slot):
         if slot not in self._templates:
             img = cv2.imread(self.template_path(slot)) if self.has_template(slot) else None
-            regs = self.slot_regions()
-            if img is not None and 0 < slot <= len(regs):
-                rw, rh = regs[slot - 1][2] - regs[slot - 1][0], regs[slot - 1][3] - regs[slot - 1][1]
+            moves = self.cfg["rotation"].get("moves", [])
+            m = moves[slot - 1] if 0 < slot <= len(moves) else {}
+            if img is not None and not m.get("box") and not m.get("snap_center"):
+                # a snapshot from before 'middle only': first drop the gaps beside the box (very old ones
+                # were the whole cell), then cut the middle out the same way new ones are - so it still matches
+                full = self._full_boxes()
                 h, w = img.shape[:2]
-                if rh > 0 and w > h * rw / rh * 1.15:          # snapshot from before (cell incl. the gaps)
-                    keep = max(1, int(h * rw / rh))
-                    img = img[:, (w - keep) // 2:(w - keep) // 2 + keep]
+                if 0 < slot <= len(full):
+                    fw, fh = full[slot - 1][2] - full[slot - 1][0], full[slot - 1][3] - full[slot - 1][1]
+                    if fh > 0 and w > h * fw / fh * 1.15:
+                        keep = max(1, int(h * fw / fh))
+                        img = img[:, (w - keep) // 2:(w - keep) // 2 + keep]
+                        h, w = img.shape[:2]
+                x1, y1, x2, y2 = self.center_of([0, 0, w, h])
+                img = img[y1:y2, x1:x2]
             self._templates[slot] = img
         return self._templates[slot]
 
@@ -455,6 +500,7 @@ class SmartMacroLogic:
         # the exact inside of each box, so snapshots don't include the gaps / background around it
         rot["slot_boxes"] = [[reg[0] + x, reg[1] + y, reg[0] + x + w, reg[1] + y + h] for x, y, w, h, _ in slots[:n]]
         rot["slot_boxes_for"] = list(rot["region"])
+        self.clear_drawn_boxes(save=False)               # the hotbar may have moved: drawn boxes would be off
         self.moves()                                     # make sure there's a card per slot
         self.app.settings.save()
         self.app.log(f"Auto-find: hotbar found ({len(slots)} slots, using the {n} filled one(s)).")

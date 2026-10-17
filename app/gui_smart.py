@@ -318,7 +318,7 @@ class SmartMacroGUI:
         ctk.CTkButton(row, text="Show", width=56, **BTN, command=self.flash_slots).pack(side="right", padx=3)
         ctk.CTkButton(row, text="🖼 Snapshots", width=96, **BTN, command=self.view_snapshots).pack(side="right", padx=3)
         ctk.CTkButton(row, text="Test", width=56, **BTN, command=self.test_rotation).pack(side="right", padx=3)
-        ctk.CTkButton(row, text="🪄 Find hotbar", width=110, height=28, **BLUE,
+        ctk.CTkButton(row, text="🪄 Find hotbar", width=130, height=28, **BLUE,
                       command=self.auto_tune).pack(side="right", padx=3)
 
         self.build_aim_panel(p)
@@ -938,6 +938,8 @@ class SmartMacroGUI:
                 ctk.CTkLabel(cell, text="", height=4).pack()
 
     def snapshot_all(self):
+        # automatic for every slot: drawn boxes are dropped, or a drawn box and the auto one would overlap
+        self.logic.clear_drawn_boxes()
         self.snapshot(None)
 
     def snapshot(self, slots):

@@ -7,6 +7,9 @@ WHAT'S NEW IN V6.3.3
 - OK popups now take ONE click: the macro brings that Roblox window to the front first, then clicks once
 - new: Keep Roblox in focus (on by default) - if the game loses focus while a macro runs, the macro brings its Roblox window back to the front instead of waiting (works with multiple windows: it remembers the one you started in)
 - new: a small bar on top of the game shows what the macro is doing right now (casting a slot, clicking OK, anti screen-shake, meditating, walking...) so you can see where something goes wrong - can be turned off
+- Skill Macro: snapshots only take the MIDDLE of each hotbar box, so a new clover on a move that isn't maxed yet doesn't make a ready slot look different (old snapshots are cut the same way automatically - retaking them is still best)
+- Skill Macro: 🪄 Find hotbar and ③ Snapshot all now replace ✂ drawn boxes with the automatic ones (they used to stay and overlap)
+- Skill Macro: fixed the 🪄 Find hotbar button showing as 'Find hot'
 
 WHAT'S NEW IN V6.3.2
 ====================
