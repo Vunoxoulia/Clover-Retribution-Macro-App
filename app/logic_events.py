@@ -38,6 +38,10 @@ DEFAULT_CFG = {
     "sound_on_alert": False,   # play a Windows sound when an event is posted (optional, off by default)
     "clear_in_global": True,   # /clear doesn't always work in 'Here': click Global, clear, click Here again
     "hover_chat": True,        # move the mouse onto the chat before reading (it fades out otherwise)
+    "quiet": False,            # quiet hours: events are still noted, but not posted / pinged
+    "quiet_from": "01:00",
+    "quiet_to": "08:00",
+    "unreadable_warn": 5,      # minutes a window's chat can be unreadable before a warning (0 = never)
     "events": [{"enabled": True, "name": n, "keyword": k, "mention": ""} for n, k in DEFAULT_EVENTS],
 }
 
@@ -166,6 +170,9 @@ class EventWatcher:
         self.on_log = None         # GUI callback
         self.last_lines = []
         self.last_raw_lines = 0
+        self.recent = []           # [(time, event name, window no, what happened)] newest last
+        self._readable_at = {}     # window handle -> last time its chat had readable text
+        self._warned = set()       # windows already warned about (until readable again)
 
     # ---------- config ----------
     def attach(self, settings):
@@ -538,6 +545,80 @@ class EventWatcher:
         except Exception as e:
             self.log(f"/clear failed: {e}")
 
+    # ---------- extras: cooldown per event, quiet hours, recent list, unreadable chat, test ----------
+    def cooldown_for(self, ev):
+        """Seconds before this event may be posted again: its own 'again after' (minutes) or the shared one."""
+        try:
+            own = float(ev.get("cooldown_min") or 0)
+        except (TypeError, ValueError):
+            own = 0
+        return own * 60 if own > 0 else float(self.cfg.get("cooldown", 120))
+
+    @staticmethod
+    def _minutes(hhmm):
+        try:
+            h, m = (int(x) for x in str(hhmm).strip().split(":"))
+            return (h % 24) * 60 + m % 60
+        except Exception:
+            return None
+
+    def is_quiet(self, now=None):
+        """True during quiet hours (they may run past midnight, e.g. 23:00 - 07:00)."""
+        if not self.cfg.get("quiet"):
+            return False
+        a, b = self._minutes(self.cfg.get("quiet_from")), self._minutes(self.cfg.get("quiet_to"))
+        if a is None or b is None or a == b:
+            return False
+        t = time.localtime(now) if now else time.localtime()
+        cur = t.tm_hour * 60 + t.tm_min
+        return a <= cur < b if a < b else (cur >= a or cur < b)
+
+    def note(self, name, win_no, what):
+        self.recent.append((time.time(), name, win_no, what))
+        del self.recent[:-30]
+
+    def _check_unreadable(self, key, win_no, post):
+        """Warn once when a window's chat has had no readable text for a while (moved / closed chat)."""
+        mins = float(self.cfg.get("unreadable_warn", 5) or 0)
+        first = self._readable_at.setdefault(key, time.time())
+        if mins <= 0 or key in self._warned or time.time() - first < mins * 60:
+            return
+        self._warned.add(key)
+        msg = (f"Can't read the chat in window {win_no} for {int(mins)} min - events there are being missed. "
+               f"Is the chat closed, covered or moved? Set its Chat area again on the Events page.")
+        self.log("WARNING: " + msg)
+        self.note("(chat unreadable)", win_no, "warning")
+        if post and not self.is_quiet():
+            self.post("[Event Notifier] " + msg)
+
+    def test_event(self, ev):
+        """Test one event. If its words are in a window's chat RIGHT NOW, that real line is used (proves the
+        reading works too); otherwise a test message is posted with the same text and pings.
+        Returns a short result for the page."""
+        name = ev.get("name") or "event"
+        kw = compact(ev.get("keyword", ""))
+        hit = None
+        if kw and self.has_chat_area():
+            with RobloxInputDriver._lock:
+                for win_no, w in enumerate(roblox_windows(), start=1):
+                    lines = self.read_lines(w, win_no)
+                    line = next((t for t in lines if kw in compact(t)), None)
+                    if line:
+                        hit = (win_no, line)
+                        break
+        if hit:
+            win_no, line = hit
+            ok = self.post("[TEST - found in chat] " + self.format_message(ev, win_no))
+            self.note(name, win_no, "test (found in chat)" + ("" if ok else " - NOT posted"))
+            return (f"'{name}' FOUND in window {win_no}'s chat: '{line[:60]}' - "
+                    + ("posted a test to Discord." if ok else f"couldn't post: {self.last_post_error}"))
+        ok = self.post("[TEST] " + self.format_message(ev, 1))
+        self.note(name, 1, "test message" + ("" if ok else " - NOT posted"))
+        why = ("its words aren't in any chat right now" if kw and self.has_chat_area()
+               else "no chat area set" if kw else "it has no chat words")
+        return (f"'{name}': {why}, so a test message was sent instead - "
+                + ("check Discord for it and its pings." if ok else f"couldn't post: {self.last_post_error}"))
+
     # ---------- loop ----------
     def start(self):
         if self.running:
@@ -573,7 +654,10 @@ class EventWatcher:
                 # Treating it as "0 events" would make every old line look new on the next check.
                 if len(wins) > 1:
                     self.log(f"Window {win_no}: chat not readable this check")
+                self._check_unreadable(key, win_no, post)
                 continue
+            self._readable_at[key] = time.time()
+            self._warned.discard(key)
             counts = self.count_events(lines)
             for ev in self.cfg["events"]:
                 n, prev = counts.get(ev["name"], 0), self._counts.get((key, ev["name"]))
@@ -589,16 +673,21 @@ class EventWatcher:
         for ev, w, win_no in found:
             # The cooldown counts per window: each window can post the same event on its own
             key = (ev["name"], w.getHandle())
-            if time.time() - self._last_post.get(key, 0) < float(self.cfg.get("cooldown", 120)):
+            if time.time() - self._last_post.get(key, 0) < self.cooldown_for(ev):
                 continue
             self._last_post[key] = time.time()
             new.append((ev, w))
             msg = self.format_message(ev, win_no)
-            if post and self.post(msg):
+            if post and self.is_quiet():
+                self.log(f"Detected {ev['name']} (quiet hours - not posted)")
+                self.note(ev["name"], win_no, "quiet hours")
+            elif post and self.post(msg):
                 self.log(f"Posted: {msg}")
+                self.note(ev["name"], win_no, "posted")
             elif post:
                 self.log(f"Detected {ev['name']} (not posted)")
-        if post and new and self.cfg.get("sound_on_alert", False):
+                self.note(ev["name"], win_no, "NOT posted: " + (getattr(self, "last_post_error", "") or "?"))
+        if post and new and self.cfg.get("sound_on_alert", False) and not self.is_quiet():
             from utils import play_sound
             play_sound("event")                          # once per check, however many events were new
         if post and new and self.cfg.get("clear_chat"):

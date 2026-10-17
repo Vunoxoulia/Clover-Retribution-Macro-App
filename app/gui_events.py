@@ -86,6 +86,13 @@ class EventsPage:
 
         ctk.CTkLabel(top, text="", height=2).pack()
 
+        # ---- what happened lately ----
+        rc = self._section(p, "Last events")
+        self.recent_box = ctk.CTkLabel(rc, text="", font=("Consolas", 11), text_color="#ced4da",
+                                       justify="left", anchor="w")
+        self.recent_box.pack(fill="x", padx=10, pady=(0, 8))
+        self._recent_tick()
+
         # ---- Discord ----
         dc = self._section(p, "Discord")
         row = ctk.CTkFrame(dc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(2, 2))
@@ -137,6 +144,22 @@ class EventsPage:
         sound_picker(sound_row, "event").pack(anchor="w")
         if snd.get():
             sound_row.pack(anchor="w", padx=38, pady=(0, 2), after=snd)
+        row = ctk.CTkFrame(ck, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(4, 2))
+        qt = ctk.CTkCheckBox(row, text="Quiet hours (no posts / pings) from", font=("Arial", 12),
+                             command=lambda: (self.cfg.__setitem__("quiet", bool(qt.get())), self._save()))
+        if cfg.get("quiet"):
+            qt.select()
+        qt.pack(side="left")
+        self._entry(row, cfg, "quiet_from", 52, "01:00").pack(side="left", padx=4)
+        ctk.CTkLabel(row, text="to", font=("Arial", 12)).pack(side="left")
+        self._entry(row, cfg, "quiet_to", 52, "08:00").pack(side="left", padx=4)
+        row = ctk.CTkFrame(ck, fg_color="transparent"); row.pack(fill="x", padx=8, pady=2)
+        ctk.CTkLabel(row, text="Warn when a window's chat can't be read for", font=("Arial", 12)).pack(side="left")
+        uw_opts = {"never": 0, "3 min": 3, "5 min": 5, "10 min": 10, "15 min": 15}
+        uw = ctk.CTkOptionMenu(row, values=list(uw_opts), width=80, height=26,
+                               command=lambda v: (self.cfg.__setitem__("unreadable_warn", uw_opts[v]), self._save()))
+        uw.set(next((k for k, v in uw_opts.items() if v == int(cfg.get("unreadable_warn", 5) or 0)), "5 min"))
+        uw.pack(side="left", padx=4)
         row = ctk.CTkFrame(ck, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(6, 2))
         ctk.CTkButton(row, text="Test read", width=80, command=self.test_read, **BTN).pack(side="left")
         self.win_lbl = ctk.CTkLabel(row, text="", font=("Arial", 12), text_color="#ced4da")
@@ -188,8 +211,13 @@ class EventsPage:
         lh = ctk.CTkFrame(p, fg_color="transparent"); lh.pack(fill="x", padx=4, pady=(6, 2))
         ctk.CTkLabel(lh, text="Events", font=("Arial", 14, "bold")).pack(side="left", padx=4)
         ctk.CTkButton(lh, text="+ Add event", width=100, command=self.add_event, **{**BTN, **BLUE}).pack(side="right")
-        ctk.CTkLabel(p, text="on  ·  name  ·  words from its chat message  ·  who to ping  ·  role ID",
+        ctk.CTkLabel(p, text="name · chat words · ping · role ID · again after (min) · Test",
                      font=("Arial", 12), text_color="#adb5bd").pack(anchor="w", padx=8)
+        bulk = ctk.CTkFrame(p, fg_color="transparent"); bulk.pack(fill="x", padx=4, pady=(2, 0))
+        ctk.CTkButton(bulk, text="Tick shown", width=84, command=lambda: self._tick_shown(True), **BTN).pack(side="left", padx=2)
+        ctk.CTkButton(bulk, text="Untick shown", width=94, command=lambda: self._tick_shown(False), **BTN).pack(side="left", padx=2)
+        ctk.CTkButton(bulk, text="Import list", width=84, command=self.import_events, **BTN).pack(side="right", padx=2)
+        ctk.CTkButton(bulk, text="Export list", width=84, command=self.export_events, **BTN).pack(side="right", padx=2)
         # search + pages, so a long list doesn't mean scrolling forever
         sr = ctk.CTkFrame(p, fg_color="transparent"); sr.pack(fill="x", padx=4, pady=(4, 2))
         self._search = ctk.CTkEntry(sr, placeholder_text="Search events (name or words)...", height=28,
@@ -268,17 +296,20 @@ class EventsPage:
         if ev.get("enabled", True):
             cb.select()
         cb.pack(side="left", padx=(8, 2), pady=5)
-        self._entry(r, ev, "name", 112, "Event name").pack(side="left", padx=2)
-        self._entry(r, ev, "keyword", 112, "keyword").pack(side="left", padx=2)
+        self._entry(r, ev, "name", 88, "Event name").pack(side="left", padx=2)
+        self._entry(r, ev, "keyword", 88, "keyword").pack(side="left", padx=2)
 
         def remove():
             lst = self.cfg["events"]
             del lst[next(i for i, x in enumerate(lst) if x is ev)]
             self._save()
             self.render_events()
-        ctk.CTkButton(r, text="X", width=28, height=26, command=remove, **RED).pack(side="right", padx=6)
+        ctk.CTkButton(r, text="X", width=26, height=26, command=remove, **RED).pack(side="right", padx=(2, 6))
+        ctk.CTkButton(r, text="Test", width=40, command=lambda: self.test_event(ev),
+                      **BTN).pack(side="right", padx=2)
+        self._entry(r, ev, "cooldown_min", 32, "min").pack(side="right", padx=2)
         self._people_button(r, ev, "mention", ev.get("name") or "this event").pack(side="left", padx=2)
-        self._entry(r, ev, "role", 70, "role ID",
+        self._entry(r, ev, "role", 64, "role ID",
                     on_save=lambda v, n=ev: self._check_role(v, n.get("name") or "this event")
                     ).pack(side="left", padx=2, fill="x", expand=True)
 
@@ -308,6 +339,99 @@ class EventsPage:
         self._save()
         self._style_toggle()
 
+    def test_event(self, ev):
+        """Test one event: uses the real chat line if its words are in a chat now, else posts a test message."""
+        self._log(f"Testing '{ev.get('name') or 'event'}'... (reading the chat first)")
+
+        def run():
+            try:
+                msg = WATCHER.test_event(ev)
+            except Exception as e:
+                msg = f"Test failed: {e}"
+            self._log(msg)
+            self._refresh_recent()
+        threading.Thread(target=run, daemon=True).start()
+
+    def _tick_shown(self, on):
+        """Tick / untick every event the search shows (all of them when there's no search) - e.g. search
+        'wisp' then Tick shown = all Wisps on."""
+        evs = self._matching_events()
+        for ev in evs:
+            ev["enabled"] = on
+        self._save()
+        self.render_events()
+        self._log(f"{'Ticked' if on else 'Unticked'} {len(evs)} event(s).")
+
+    def export_events(self):
+        import json
+        from tkinter import filedialog
+        path = filedialog.asksaveasfilename(parent=self.root, title="Export event list", defaultextension=".json",
+                                            initialfile="Event list.json", filetypes=[("Event list", "*.json")])
+        if not path:
+            return
+        keep = ("enabled", "name", "keyword", "role", "mention", "cooldown_min")
+        data = {"type": "event_list", "events": [{k: ev[k] for k in keep if ev.get(k) not in (None, "")}
+                                                 for ev in self.cfg["events"]]}
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=1)
+        self._log(f"Exported {len(data['events'])} events - share the file, others use Import list.")
+
+    def import_events(self):
+        """Add the file's events; ones with the same name are updated (your webhook / windows aren't touched)."""
+        import json
+        from tkinter import filedialog, messagebox
+        path = filedialog.askopenfilename(parent=self.root, title="Import event list", filetypes=[("Event list", "*.json")])
+        if not path:
+            return
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            items = data.get("events") if isinstance(data, dict) else data
+            assert isinstance(items, list)
+        except Exception:
+            messagebox.showerror("Import", "That file isn't an event list.", parent=self.root)
+            return
+        by_name = {(ev.get("name") or "").strip().lower(): ev for ev in self.cfg["events"]}
+        added = updated = 0
+        for it in items:
+            if not isinstance(it, dict) or not (it.get("name") or "").strip():
+                continue
+            clean = {k: it[k] for k in ("enabled", "name", "keyword", "role", "mention", "cooldown_min") if k in it}
+            cur = by_name.get(clean["name"].strip().lower())
+            if cur is not None:
+                cur.update(clean); updated += 1
+            else:
+                clean.setdefault("enabled", True); clean.setdefault("keyword", ""); clean.setdefault("mention", "")
+                self.cfg["events"].append(clean); added += 1
+        self._save()
+        self.render_events()
+        self._log(f"Imported: {added} new, {updated} updated.")
+
+    def _refresh_recent(self):
+        """The 'Last events' list (newest first)."""
+        def show():
+            try:
+                if not self.recent_box.winfo_exists():
+                    return
+            except Exception:
+                return
+            items = list(reversed(WATCHER.recent))[:10]
+            text = "\n".join(f"{time.strftime('%H:%M', time.localtime(t))}  {name}  (window {n})  -  {what}"
+                              for t, name, n, what in items) or "Nothing yet - events show up here when they're posted."
+            self.recent_box.configure(text=text)
+        try:
+            self.root.after(0, show)
+        except Exception:
+            pass
+
+    def _recent_tick(self):
+        self._refresh_recent()
+        try:
+            if self.recent_box.winfo_exists():
+                self.root.after(5000, self._recent_tick)
+        except Exception:
+            pass
+
     def add_event(self):
         ev = {"enabled": True, "name": "", "keyword": "", "mention": ""}
         self.cfg["events"].append(ev)
@@ -332,7 +456,7 @@ class EventsPage:
         return f"{len(shown)} ping" if len(shown) == 1 else f"{len(shown)} pings"
 
     def _people_button(self, parent, d, key, where, wide=False):
-        btn = ctk.CTkButton(parent, text=self._people_label(d.get(key), wide), width=200 if wide else 64, height=28,
+        btn = ctk.CTkButton(parent, text=self._people_label(d.get(key), wide), width=200 if wide else 52, height=28,
                             anchor="w" if wide else "center", font=("Arial", 12), fg_color="#343638",
                             hover_color="#495057", border_width=1, border_color="#565b5e")
         btn.configure(command=lambda: PeoplePicker(self, d, key, where,
@@ -420,7 +544,7 @@ class EventsPage:
         self._seen_windows = tuple(w.getHandle() for w in wins)
         if not wins:
             ctk.CTkLabel(self.win_box, text="No Roblox window found yet — it shows up here a few seconds after Roblox opens.",
-                         font=("Arial", 12), text_color="#ea868f").pack(anchor="w", padx=4)
+                         font=("Arial", 12), text_color="#ea868f", wraplength=400, justify="left").pack(anchor="w", padx=4)
             return
         ps = self.cfg.setdefault("window_ps", {})
         for i, w in enumerate(wins, start=1):
