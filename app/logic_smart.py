@@ -591,6 +591,8 @@ class SmartMacroLogic:
         self.running = True
         self._last_shake = 0
         threading.Thread(target=self._warn_if_roblox_admin, daemon=True).start()
+        from utils import foreground_roblox, roblox_windows
+        self._roblox_hwnd = foreground_roblox() or next((h for h, _ in roblox_windows()), 0)
         cfg = self.cfg
         self._threads = []
         parts = []
@@ -650,9 +652,18 @@ class SmartMacroLogic:
             return True
         try:
             w = pywinctl.getActiveWindow()
-            return bool(w and "Roblox" in w.title)
+            if w and "Roblox" in w.title:
+                return True
         except Exception:
             return True
+        # Keep Roblox in focus (on by default): bring the Roblox window back instead of pausing
+        if self.app.settings.get("force_roblox_focus", True) and time.time() - getattr(self, "_focus_try", 0) > 2.0:
+            self._focus_try = time.time()
+            from utils import focus_roblox
+            if focus_roblox(getattr(self, "_roblox_hwnd", 0)):
+                self.app.log("Brought Roblox back to the front.")
+                return True
+        return False
 
     def _wait(self, seconds):
         end = time.time() + seconds
@@ -731,6 +742,7 @@ class SmartMacroLogic:
         """',' → wait → ',' → wait. Each key waits so the game finishes the camera change."""
         d = self.anti_shake()
         key = (d.get("key") or ",").strip() or ","
+        self.app.log(f"Anti screen-shake: pressing '{key}' (camera reset)")
         with RobloxInputDriver._lock:
             self._press(key)
         self._wait(max(0.0, float(d.get("between", 1.0) or 0)))

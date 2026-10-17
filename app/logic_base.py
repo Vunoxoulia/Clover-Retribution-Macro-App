@@ -59,6 +59,10 @@ class BaseLogic:
     def start(self):
         if not self.running:
             threading.Thread(target=self.warn_if_roblox_admin, daemon=True).start()
+            try:
+                self.remember_roblox()
+            except Exception:
+                self._roblox_hwnd = 0
             self.running = True
             self.paused = False
             self.ok_scanner_running = True
@@ -128,15 +132,36 @@ class BaseLogic:
                     break
                 time.sleep(0.25)
 
+    def remember_roblox(self):
+        """The Roblox window this macro plays in: the one in front now (else the first one open)."""
+        from utils import foreground_roblox, roblox_windows
+        self._roblox_hwnd = foreground_roblox() or next((h for h, _ in roblox_windows()), 0)
+
+    def force_focus_on(self):
+        return bool(self.app.settings.get("force_roblox_focus", True))
+
     def wait_for_roblox_focus(self):
         if self.check_focus():
             return True
-            
+        if self.force_focus_on():
+            # Keep Roblox in focus: bring the macro's Roblox window back to the front instead of waiting
+            from utils import focus_roblox
+            if not getattr(self, "_roblox_hwnd", 0):
+                self.remember_roblox()
+            if focus_roblox(getattr(self, "_roblox_hwnd", 0)) and self.check_focus():
+                self.app.log("Brought Roblox back to the front.")
+                return True
         self.app.log("Waiting for Roblox... (Focus the game!)")
+        last_try = time.time()
         while self.running:
             if self.check_focus():
                 self.app.log("Roblox focus detected!")
                 return True
+            if self.force_focus_on() and time.time() - last_try > 2.0:
+                from utils import focus_roblox
+                last_try = time.time()
+                if focus_roblox(getattr(self, "_roblox_hwnd", 0)) and self.check_focus():
+                    return True
             time.sleep(0.5)
         return False
 
@@ -335,7 +360,8 @@ class BaseLogic:
                 self.app.log(f"Found 'Ok' [match {score:.2f}]. Clicking at ({cx}, {cy})...")
                 self.ok_busy.set()                     # a route walk pauses until this is done
                 try:
-                    self._click_ok(cx, cy)
+                    if self._click_ok(cx, cy) is False:
+                        return False
                 finally:
                     self.ok_busy.clear()
                 if self.on_ok_clicked:
@@ -349,17 +375,29 @@ class BaseLogic:
         # Hold the shared input lock for the whole thing (a running rotation waits), and remember
         # which window had focus: clicking OK in ANOTHER Roblox window makes Windows switch to it,
         # so afterwards we switch back or the macro keeps pressing keys in the wrong window.
+        from utils import roblox_window_at
+        from logic_events import EventWatcher
+        target = roblox_window_at(cx, cy)
+        if target == 0:
+            # something else covers that spot (e.g. this macro's own window): clicking would hit IT -
+            # that's how an OK click could press a button of the macro. Skip; it's tried again later.
+            self.app.log("OK popup is covered by another window - not clicking (move the macro window away).")
+            return False
         with RobloxInputDriver._lock:
             prev = ctypes.windll.user32.GetForegroundWindow()
             old_x, old_y = self.get_cursor_pos()
-            self.human_click(cx, cy, duration=0.15)
-            time.sleep(1.0)
+            if target > 0 and prev != target:
+                EventWatcher.focus_window(target, timeout=1.0)   # bring it to the front first: then ONE click is enough
+                time.sleep(0.15)
             self.human_click(cx, cy, duration=0.15)
             RobloxInputDriver.move_to(old_x, old_y)
-            if prev and ctypes.windll.user32.GetForegroundWindow() != prev:
-                from logic_events import EventWatcher
+            # back to the Roblox window that was in front (multi-window) - never to a non-Roblox window
+            # like the macro itself, or the game would lose focus and the macro would wait
+            from utils import roblox_windows
+            if prev and prev != ctypes.windll.user32.GetForegroundWindow() and prev in [h for h, _ in roblox_windows()]:
                 time.sleep(0.2)
                 EventWatcher.focus_window(prev, timeout=1.0)
+        return True
 
     def main_loop(self):
         """To be overridden by subclasses"""

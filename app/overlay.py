@@ -230,3 +230,80 @@ class ColorPicker(_FrozenScreen):
         color = self.pixel(event.x, event.y)
         self.root.destroy()
         self.callback(color)
+
+
+class ActionBadge(RecordingBadge):
+    """A small dark bar on top of the game that shows what the macro is doing right now
+    ('Casting slot 3', 'Clicking OK', 'Anti screen-shake: pressing ,'...), so you can always see where
+    it is and where something goes wrong. Like the REC badge it never takes focus and clicks go through."""
+
+    def __init__(self, x, y, text=""):
+        self._cx, self._y = x, y
+        self.root = tk.Toplevel()
+        self.root.withdraw()
+        self.root.overrideredirect(True)
+        self.root.attributes("-topmost", True)
+        self.root.config(bg="#1f2328")
+        self.lbl = tk.Label(self.root, text=text, bg="#1f2328", fg="#e9ecef", font=("Arial", 11, "bold"),
+                            padx=12, pady=4)
+        self.lbl.pack()
+        self._place()
+        self._show_without_focus()
+
+    def _place(self):
+        self.root.update_idletasks()
+        w = self.root.winfo_reqwidth()
+        self.root.geometry(f"+{int(self._cx - w / 2)}+{int(self._y)}")
+
+    def set(self, text, x=None, y=None):
+        try:
+            if x is not None:
+                self._cx, self._y = x, y
+            self.lbl.configure(text=text)
+            self._place()
+        except Exception:
+            pass
+
+
+def show_action(app, text, running):
+    """Update (or hide) the app's action bar. Call on the window's thread.
+    Shown only while a macro runs and 'Show what the macro is doing' is on."""
+    badge = getattr(app, "_action_badge", None)
+    try:
+        on = bool(app.settings.get("show_action_badge", True))
+    except Exception:
+        on = True
+    if not running or not on:
+        if badge is not None:
+            badge.destroy()
+            app._action_badge = None
+        return
+    text = " ".join(str(text).split())
+    if len(text) > 80:
+        text = text[:77] + "..."
+    import time as _t
+    pos = getattr(app, "_badge_pos", None)
+    if pos is not None and _t.time() - getattr(app, "_badge_pos_t", 0) < 1.5:
+        a = None                                          # recent enough: don't ask Windows again
+    else:
+        pos = None
+    try:
+        if pos is not None:
+            raise StopIteration
+        import pywinctl
+        from utils import is_roblox_title
+        w = next((w for w in pywinctl.getAllWindows() if is_roblox_title(w.title)), None)
+        a = pywinctl.getActiveWindow()
+        if a is not None and is_roblox_title(a.title):
+            w = a                                         # the Roblox window in front (multi-window)
+        if w is not None:
+            pos = (w.left + w.width / 2, w.top + 70)
+            app._badge_pos, app._badge_pos_t = pos, _t.time()
+    except Exception:
+        pass
+    if pos is None:
+        return
+    if badge is None:
+        app._action_badge = ActionBadge(pos[0], pos[1], "▶ " + text)
+    else:
+        badge.set("▶ " + text, *pos)

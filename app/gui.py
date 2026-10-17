@@ -313,6 +313,11 @@ class SpatialGUI:
                                text_color="#ced4da", cursor="hand2")
         ok_hint.pack(pady=(0, 8))
         ok_hint.bind("<Button-1>", lambda e: self.tabview.set("OK Popup"))
+        for key, text in (("force_roblox_focus", "Keep Roblox in focus (brings the game back to the front if it loses focus)"),
+                          ("show_action_badge", "Show what the macro is doing on top of the game")):
+            var = ctk.BooleanVar(value=bool(self.settings.get(key, True)))
+            ctk.CTkCheckBox(tab, text=text, variable=var, font=("Arial", 12),
+                            command=lambda k=key, v=var: self.settings.set(k, bool(v.get()))).pack(anchor="w", padx=42, pady=2)
         if "Library" in self.root.title():
             sound_row = ctk.CTkFrame(tab, fg_color="transparent")
 
@@ -1542,6 +1547,9 @@ class SpatialGUI:
         except Exception:
             return
         running = bool(self.logic.running)
+        if not running and getattr(self, "_action_badge", None) is not None:
+            from overlay import show_action
+            show_action(self, "", False)                 # macro stopped: hide the action bar
         if running != self._shown_running:
             key = self.settings.get("hotkeys", {}).get("start", "f6").upper()
             if running:
@@ -1613,6 +1621,11 @@ class SpatialGUI:
         if threading.current_thread() is threading.main_thread():
             try:
                 self.status_label.configure(text=f"Status: {msg}")
+            except Exception:
+                pass
+            try:
+                from overlay import show_action
+                show_action(self, msg, bool(getattr(self.logic, "running", False)))
             except Exception:
                 pass
         else:

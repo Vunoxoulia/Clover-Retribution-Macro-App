@@ -616,3 +616,72 @@ def roblox_admin_problem():
         return ""
     except Exception:
         return ""
+
+
+# ---------- Roblox windows: which one is under a point / bringing one to the front ----------
+def is_roblox_title(title):
+    """The game window itself is called just 'Roblox' (not 'Roblox Account Manager' and the like)."""
+    return (title or "").strip() == "Roblox"
+
+
+def _top_window_at(x, y):
+    """The top-level window under screen point (x, y) as (hwnd, title)."""
+    import ctypes
+    from ctypes import wintypes
+    u = ctypes.windll.user32
+    h = u.WindowFromPoint(wintypes.POINT(int(x), int(y)))
+    if not h:
+        return 0, ""
+    h = u.GetAncestor(h, 2) or h                         # GA_ROOT
+    buf = ctypes.create_unicode_buffer(256)
+    u.GetWindowTextW(h, buf, 256)
+    return h, buf.value
+
+
+def roblox_window_at(x, y):
+    """hwnd of the Roblox window under (x, y), or 0 when something else (e.g. the macro's own window) is there."""
+    try:
+        h, title = _top_window_at(x, y)
+        return h if is_roblox_title(title) else 0
+    except Exception:
+        return -1                                         # can't tell: don't block
+
+
+def roblox_windows():
+    """[(hwnd, title)] of the open Roblox windows."""
+    try:
+        import pywinctl
+        out = []
+        for w in pywinctl.getAllWindows():
+            if is_roblox_title(w.title) and getattr(w, "isVisible", True):
+                h = w.getHandle() if hasattr(w, "getHandle") else None
+                if h:
+                    out.append((int(h), w.title))
+        return out
+    except Exception:
+        return []
+
+
+def focus_roblox(prefer=0):
+    """Bring a Roblox window to the front (the preferred one if it's still open). True when one is in front."""
+    import ctypes
+    u = ctypes.windll.user32
+    wins = [h for h, _ in roblox_windows()]
+    if not wins:
+        return False
+    fg = u.GetForegroundWindow()
+    if fg in wins and (not prefer or fg == prefer):
+        return True
+    target = prefer if prefer in wins else wins[0]
+    try:
+        from logic_events import EventWatcher
+        return bool(EventWatcher.focus_window(target, timeout=1.0))
+    except Exception:
+        return False
+
+
+def foreground_roblox():
+    """hwnd of the Roblox window in front, or 0."""
+    import ctypes
+    fg = ctypes.windll.user32.GetForegroundWindow()
+    return fg if fg in [h for h, _ in roblox_windows()] else 0

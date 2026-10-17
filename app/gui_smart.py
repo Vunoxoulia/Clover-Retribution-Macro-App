@@ -104,8 +104,9 @@ class SmartMacroGUI:
         def ok():
             from gui import OkPopupPage
             self.ok_page = OkPopupPage(self.root, self.nav.tab("OK Popup"), self.settings, self.log)
+        ok()                                          # built now: the rotation's OK clicker uses its setup
         for name, fn in (("Skill Combo", self.build_combos), ("Items", self.build_items),
-                         ("Settings", self.build_settings), ("Events", events), ("OK Popup", ok)):
+                         ("Settings", self.build_settings), ("Events", events)):
             self.nav.lazy(name, fn)
 
     def _page(self, name):
@@ -1234,6 +1235,11 @@ class SmartMacroGUI:
         ctk.CTkLabel(r, text="Start / Stop hotkey", font=("Arial", 12, "bold")).pack(side="left", padx=4)
         self._entry(r, self.cfg, "hotkey", 80, lambda v: v.lower(),
                     on_save=lambda: (self.register_hotkeys(), self.on_state_change(self.logic.running))).pack(side="left")
+        for key, text in (("force_roblox_focus", "Keep Roblox in focus (brings the game back to the front if it loses focus)"),
+                          ("show_action_badge", "Show what the macro is doing on top of the game")):
+            var = ctk.BooleanVar(value=bool(self.settings.get(key, True)))
+            ctk.CTkCheckBox(c, text=text, variable=var, font=("Arial", 12),
+                            command=lambda k=key, v=var: self.settings.set(k, bool(v.get()))).pack(anchor="w", padx=14, pady=2)
         sw = ctk.CTkSwitch(c, text="Only act while Roblox is the focused window", font=("Arial", 12),
                            command=lambda: self._set(self.cfg, "only_when_focused", bool(sw.get())))
         if self.cfg.get("only_when_focused", True):
@@ -1369,6 +1375,12 @@ class SmartMacroGUI:
             self.logic._hook_combos()
 
     def on_state_change(self, running):
+        if not running:
+            try:
+                from overlay import show_action
+                self.root.after(0, lambda: show_action(self, "", False))
+            except Exception:
+                pass
         hk = self.cfg["hotkey"].upper()
         def apply():
             if not self.toggle_btn.winfo_exists():
@@ -1394,6 +1406,11 @@ class SmartMacroGUI:
 
     def log(self, msg):
         self._safe_set(self.status_label, text=f"Status: {msg}")
+        try:
+            from overlay import show_action
+            self.root.after(0, lambda m=msg: show_action(self, m, bool(self.logic.running)))
+        except Exception:
+            pass
         try:
             print(msg)
         except UnicodeEncodeError:                       # console without UTF-8 (arrows, emoji)
