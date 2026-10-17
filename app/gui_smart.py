@@ -308,12 +308,12 @@ class SmartMacroGUI:
         ctk.CTkLabel(top, text="Casts the highest READY move (top of the list first). READY = its icon matches the snapshot.",
                      font=("Arial", 12), text_color="#ced4da").pack(anchor="w", padx=10)
         row = ctk.CTkFrame(top, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(6, 8))
-        ctk.CTkButton(row, text="① 🔲 Hotbar region", width=140, height=28, **BLUE,
+        ctk.CTkButton(row, text="🔲 Hotbar region", width=140, height=28, **BLUE,
                       command=lambda: self.pick_region(rot, "region")).pack(side="left", padx=3)
-        ctk.CTkLabel(row, text="② Slots", font=("Arial", 12, "bold")).pack(side="left", padx=(8, 2))
+        ctk.CTkLabel(row, text="Slots", font=("Arial", 12, "bold")).pack(side="left", padx=(8, 2))
         self._pick(row, rot, "slot_count", [str(i) for i in range(1, 11)], 56, int, editable=False,
                    on_save=self.build_cards).pack(side="left")
-        ctk.CTkButton(row, text="③ 📸 Snapshot all", width=140, height=28, **BLUE,
+        ctk.CTkButton(row, text="📸 Snapshot all", width=140, height=28, **BLUE,
                       command=self.snapshot_all).pack(side="left", padx=(10, 3))
         ctk.CTkButton(row, text="Show", width=56, **BTN, command=self.flash_slots).pack(side="right", padx=3)
         ctk.CTkButton(row, text="🖼 Snapshots", width=96, **BTN, command=self.view_snapshots).pack(side="right", padx=3)
@@ -998,10 +998,10 @@ class SmartMacroGUI:
                 self.log("Find hotbar cancelled: Roblox wasn't the focused window.")
                 return
             if not self.logic.auto_find_hotbar():
-                self.log("Couldn't find the hotbar in this Roblox window - set it with ① 🔲 Hotbar region.")
+                self.log("Couldn't find the hotbar in this Roblox window - set it with 🔲 Hotbar region.")
                 return
             self.root.after(0, lambda: (self.build_cards(), self.flash_slots()))   # show where it put the slots
-            self.log("Hotbar region moved onto your slots. If your skills changed, press ③ 📸 Snapshot all "
+            self.log("Hotbar region moved onto your slots. If your skills changed, press 📸 Snapshot all "
                      "while they're all ready.")
         threading.Thread(target=run, daemon=True).start()
 
@@ -1309,7 +1309,7 @@ class SmartMacroGUI:
             return
         self.logic.new_loadout(name)
         self._loadout_switched()
-        self.log(f"Loadout '{name}' created (empty) — press 🪄 Find hotbar, then ③ 📸 Snapshot all.")
+        self.log(f"Loadout '{name}' created (empty) — press 🪄 Find hotbar, then 📸 Snapshot all.")
 
     def export_loadout(self):
         from tkinter import filedialog, messagebox
@@ -1340,7 +1340,7 @@ class SmartMacroGUI:
         self._loadout_switched()
         messagebox.showinfo("Import", f"Loadout '{name}' added and selected (your other loadouts are untouched)."
                                       "\n\nIts hotbar region and snapshots come from the other person's screen - "
-                                      "if yours differs, press 🪄 Find hotbar, then ③ 📸 Snapshot all.",
+                                      "if yours differs, press 🪄 Find hotbar, then 📸 Snapshot all.",
                             parent=self.root)
 
     def rename_loadout(self):
