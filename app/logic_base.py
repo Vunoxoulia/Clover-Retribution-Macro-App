@@ -41,8 +41,24 @@ class BaseLogic:
             time.sleep(min(granularity, end - time.time()))
         return True
 
+    def warn_if_roblox_admin(self):
+        """Tell the user (log + pop-up) when Roblox runs as administrator: no key would reach it."""
+        from utils import roblox_admin_problem
+        msg = roblox_admin_problem()
+        if not msg:
+            return False
+        self.app.log("⚠ " + msg.split("\n")[0])
+        try:
+            from tkinter import messagebox
+            self.app.root.after(0, lambda: messagebox.showwarning("Roblox runs as administrator", msg,
+                                                                  parent=self.app.root))
+        except Exception:
+            pass
+        return True
+
     def start(self):
         if not self.running:
+            threading.Thread(target=self.warn_if_roblox_admin, daemon=True).start()
             self.running = True
             self.paused = False
             self.ok_scanner_running = True

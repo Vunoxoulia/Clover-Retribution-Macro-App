@@ -79,8 +79,8 @@ class SmartMacroGUI:
         ctk.CTkButton(lb, text="Rename", width=64, command=self.rename_loadout, **btn).pack(side="left", padx=2)
         ctk.CTkButton(lb, text="Delete", width=56, command=self.delete_loadout,
                       **{**btn, "hover_color": "#bb2d3b"}).pack(side="left", padx=2)
-        ctk.CTkLabel(lb, text="= a saved build",
-                     font=("Arial", 12), text_color="#ced4da").pack(side="left", padx=10)
+        ctk.CTkButton(lb, text="📤 Export", width=76, command=self.export_loadout, **btn).pack(side="left", padx=(10, 2))
+        ctk.CTkButton(lb, text="📥 Import", width=76, command=self.import_loadout, **btn).pack(side="left", padx=2)
         self._refresh_loadout_menu()
         self.on_state_change(False)
 
@@ -1274,6 +1274,38 @@ class SmartMacroGUI:
         self.logic.new_loadout(name)
         self._loadout_switched()
         self.log(f"Loadout '{name}' created (empty) — press 🪄 Find hotbar, then ③ 📸 Snapshot all.")
+
+    def export_loadout(self):
+        from tkinter import filedialog, messagebox
+        import setup_share
+        name = self.logic.active_loadout()
+        path = filedialog.asksaveasfilename(parent=self.root, title="Export loadout", defaultextension=".zip",
+                                            initialfile=f"{name} - Skill loadout.zip",
+                                            filetypes=[("Setup file", "*.zip")])
+        if not path:
+            return
+        try:
+            setup_share.export_skill_loadout(self.logic, path)
+        except Exception as e:
+            messagebox.showerror("Export", f"Couldn't export: {e}", parent=self.root); return
+        self.log(f"Loadout '{name}' exported (settings + snapshots) - send the .zip to share it.")
+
+    def import_loadout(self):
+        from tkinter import filedialog, messagebox
+        import setup_share
+        path = filedialog.askopenfilename(parent=self.root, title="Import loadout",
+                                          filetypes=[("Setup file", "*.zip")])
+        if not path:
+            return
+        try:
+            name = setup_share.import_skill_loadout(self.logic, path)
+        except Exception as e:
+            messagebox.showerror("Import", f"Couldn't import: {e}", parent=self.root); return
+        self._loadout_switched()
+        messagebox.showinfo("Import", f"Loadout '{name}' added and selected (your other loadouts are untouched)."
+                                      "\n\nIts hotbar region and snapshots come from the other person's screen - "
+                                      "if yours differs, press 🪄 Find hotbar, then ③ 📸 Snapshot all.",
+                            parent=self.root)
 
     def rename_loadout(self):
         old = self.logic.active_loadout()

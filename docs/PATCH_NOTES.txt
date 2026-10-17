@@ -1,5 +1,9 @@
 WHAT'S NEW IN V6.3.2
 ====================
+- new: Export / Import setups to share them as one .zip - Skill Macro loadouts (settings + snapshots, added as a new loadout) and the Library setup (moves, dialogue mode, spots, pictures + your own route); no webhook or stats are included
+- warns you when Roblox runs as administrator (Windows then blocks every key and click the macro sends) and how to fix it
+- fixed the window freezing / long loading when starting or stopping a macro: the text reader now loads once in the background when the app opens, and the macro no longer touches the window from its own thread
+- Library (Manual mode): the tests now work with your spots - 🔎 Hover spots (F4) hovers your move spots, 🧪 Full test (F5) walks, presses E, clicks your Clover Training spot and hovers the moves - no pictures needed
 - Library and Mining: the record key is now F9 (was Ctrl+P) and can be changed any time in the Hotkeys tab - every hint, the REC badge and the log show whichever key you set
 - Library: if the selected route was never recorded (e.g. made with New), it now uses the built-in route instead of asking you to record one
 - Skill Macro: snapshots now only take the inside of each hotbar box (not the gaps / ground beside it); each slot shows its picture (click it to see it big), the new 🖼 Snapshots button shows them all with 📸 Retake, and ✂ Draw box lets you drag your own box for a slot

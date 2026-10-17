@@ -405,7 +405,51 @@ class SpatialGUI:
         self.dialog_card = ctk.CTkFrame(tab, fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
         self.dialog_card.pack(fill="x", padx=15, pady=4)
         self.build_dialog_card()
+        share = ctk.CTkFrame(tab, fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
+        share.pack(fill="x", padx=15, pady=4)
+        ctk.CTkLabel(share, text="📦 Share setup", font=("Arial", 13, "bold")).pack(side="left", padx=8, pady=6)
+        ctk.CTkButton(share, text="📥 Import", width=80, height=26, fg_color="#495057", hover_color="#343a40",
+                      command=self.import_library_setup).pack(side="right", padx=(2, 8))
+        ctk.CTkButton(share, text="📤 Export", width=80, height=26, fg_color="#495057", hover_color="#343a40",
+                      command=self.export_library_setup).pack(side="right", padx=2)
+        ctk.CTkLabel(share, text="moves, dialogue, pictures + your route in one file", font=("Arial", 11),
+                     text_color="#adb5bd").pack(side="left", padx=4)
         self.refresh_routes()
+
+    def export_library_setup(self):
+        from tkinter import filedialog, messagebox
+        import setup_share
+        path = filedialog.asksaveasfilename(parent=self.root, title="Export Library setup",
+                                            defaultextension=".zip", initialfile="Library setup.zip",
+                                            filetypes=[("Setup file", "*.zip")])
+        if not path:
+            return
+        try:
+            route = setup_share.export_library(self.logic, path)
+        except Exception as e:
+            messagebox.showerror("Export", f"Couldn't export: {e}", parent=self.root); return
+        self.log(f"Library setup exported to {os.path.basename(path)}"
+                 + (f" (with route '{route}')" if route else " (built-in route - not included, everyone has it)"))
+
+    def import_library_setup(self):
+        from tkinter import filedialog, messagebox
+        import setup_share
+        path = filedialog.askopenfilename(parent=self.root, title="Import Library setup",
+                                          filetypes=[("Setup file", "*.zip")])
+        if not path:
+            return
+        if not messagebox.askyesno("Import Library setup",
+                                   "This REPLACES your Library setup (moves, dialogue mode, spots, pictures).\n"
+                                   "Export yours first if you want to keep it.\n\nImport now?", parent=self.root):
+            return
+        try:
+            route = setup_share.import_library(self.logic, path)
+        except Exception as e:
+            messagebox.showerror("Import", f"Couldn't import: {e}", parent=self.root); return
+        self.reload_library_settings()
+        messagebox.showinfo("Import", "Library setup imported" + (f", with route '{route}'" if route else "")
+                            + ".\n\nSpots and pictures come from the other person's screen - if yours differs "
+                              "(size / scaling), run 🔎 Find moves or re-pick the spots.", parent=self.root)
 
     # ---------- Wisp dialogue: Auto / Image / Manual ----------
     DIALOG_HINTS = {
@@ -612,14 +656,14 @@ class SpatialGUI:
         if mode != "manual":                             # manual never scrolls the move list
             ctk.CTkButton(head, text="↕ Test scroll", width=100, height=24, font=("Arial", 11, "bold"), fg_color="#495057",
                           hover_color="#343a40", command=lambda: self._run_test(self.logic.test_scroll)).pack(side="right", padx=6)
-            ctk.CTkButton(head, text=f"🔎 Find moves ({(self.settings.get('hotkeys', {}).get('test_find') or 'f4').upper()})",
-                          width=130, height=24, font=("Arial", 11, "bold"),
-                          fg_color="#0d6efd", hover_color="#0b5ed7",
-                          command=self.test_find_moves).pack(side="right")
-            ctk.CTkButton(head, text=f"🧪 Full test ({(self.settings.get('hotkeys', {}).get('test_full') or 'f5').upper()})",
-                          width=110, height=24, font=("Arial", 11, "bold"),
-                          fg_color="#198754", hover_color="#157347",
-                          command=lambda: self.test_find_moves(walk=True)).pack(side="right", padx=6)
+        ctk.CTkButton(head, text=f"🔎 {'Hover spots' if mode == 'manual' else 'Find moves'} ({(self.settings.get('hotkeys', {}).get('test_find') or 'f4').upper()})",
+                      width=130, height=24, font=("Arial", 11, "bold"),
+                      fg_color="#0d6efd", hover_color="#0b5ed7",
+                      command=self.test_find_moves).pack(side="right")
+        ctk.CTkButton(head, text=f"🧪 Full test ({(self.settings.get('hotkeys', {}).get('test_full') or 'f5').upper()})",
+                      width=110, height=24, font=("Arial", 11, "bold"),
+                      fg_color="#198754", hover_color="#157347",
+                      command=lambda: self.test_find_moves(walk=True)).pack(side="right", padx=6)
         seg = ctk.CTkSegmentedButton(card, values=["Auto", "Image", "Manual"], font=("Arial", 12, "bold"),
                                      command=lambda v: (self.settings.set("dialog_mode", v.lower()), self.build_dialog_card()))
         seg.set(mode.capitalize())
@@ -1470,7 +1514,11 @@ class SpatialGUI:
         self.root.after(400, self._sync_start_btn)
 
     def refresh_macro(self):
-        self.logic.stop(); self.register_hotkeys(); self.log("Macro stopped")   # no settings.load(): every page shares the live settings, a reload would detach them
+        # stopping waits for the macro's threads to finish: do it off the window's thread so it never freezes
+        def stop():
+            self.logic.stop()
+            self.root.after(0, lambda: (self.register_hotkeys(), self.log("Macro stopped")))
+        threading.Thread(target=stop, daemon=True).start()   # no settings.load(): every page shares the live settings, a reload would detach them
 
     def _run_test(self, fn):
         import threading
@@ -1519,8 +1567,21 @@ class SpatialGUI:
         self.log(f"{color_type.capitalize()} Tolerance: {int(val)}")
 
     def log(self, msg):
-        if hasattr(self, 'status_label'): self.status_label.configure(text=f"Status: {msg}")
         print(msg)
+        if not hasattr(self, 'status_label'):
+            return
+        # the macro logs from its own thread; the window may only be touched from the window's thread
+        # (touching it from another thread is what made the window freeze)
+        if threading.current_thread() is threading.main_thread():
+            try:
+                self.status_label.configure(text=f"Status: {msg}")
+            except Exception:
+                pass
+        else:
+            try:
+                self.root.after(0, lambda m=msg: self.log(m))
+            except Exception:
+                pass
 
     def _hide_for_pick(self):
         """Hide the macro window and give Windows time to repaint, so the

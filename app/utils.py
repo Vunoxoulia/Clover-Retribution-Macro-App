@@ -237,16 +237,33 @@ class SpatialUtils:
             self._thread_local.sct = mss.mss()
         return self._thread_local.sct
 
+    # ONE text reader for the whole app: loading the model takes seconds, and every page / macro used to
+    # load its own copy (the window froze each time). It's loaded once, in the background at startup.
+    _shared_ocr = None
+    _ocr_lock = threading.Lock()
+
+    @classmethod
+    def load_ocr(cls):
+        with cls._ocr_lock:
+            if cls._shared_ocr is None:
+                try:
+                    from rapidocr_onnxruntime import RapidOCR
+                    cls._shared_ocr = RapidOCR(providers=['CPUExecutionProvider'])
+                    print("RapidOCR initialized")
+                except Exception as e:
+                    print(f"OCR (RapidOCR) Initialization error: {e}")
+                    SpatialUtils.ocr_error = OCR_HELP
+                    cls._shared_ocr = False
+        return cls._shared_ocr
+
+    @classmethod
+    def preload_ocr(cls):
+        """Start loading the text reader in the background (called when the app opens)."""
+        threading.Thread(target=cls.load_ocr, daemon=True).start()
+
     def _init_ocr(self):
         if self.ocr_reader is None:
-            try:
-                from rapidocr_onnxruntime import RapidOCR
-                self.ocr_reader = RapidOCR(providers=['CPUExecutionProvider'])
-                print("RapidOCR initialized")
-            except Exception as e:
-                print(f"OCR (RapidOCR) Initialization error: {e}")
-                SpatialUtils.ocr_error = OCR_HELP
-                self.ocr_reader = False
+            self.ocr_reader = SpatialUtils.load_ocr()
 
     def get_text_from_region(self, region, upscale=2):
         self._init_ocr()
@@ -554,3 +571,48 @@ class SpatialUtils:
             if len(target_color) == 6:
                 return tuple(int(target_color[i:i+2], 16) for i in (0, 2, 4))
         return target_color
+
+# ---------- Roblox started "as administrator" ----------
+# Windows blocks a normal program from sending keys / clicks to a program running as administrator,
+# so the macro would look like it runs but nothing happens in the game.
+def _process_elevated(pid):
+    """True / False for another process, None if it can't be told. Access denied = it's elevated."""
+    import ctypes
+    from ctypes import wintypes
+    k32, adv = ctypes.windll.kernel32, ctypes.windll.advapi32
+    h = k32.OpenProcess(0x1000, False, int(pid))          # PROCESS_QUERY_LIMITED_INFORMATION
+    if not h:
+        return None
+    try:
+        tok = wintypes.HANDLE()
+        if not adv.OpenProcessToken(h, 0x0008, ctypes.byref(tok)):   # TOKEN_QUERY
+            return True                                   # we may not look inside it: it runs as admin
+        try:
+            val, size = wintypes.DWORD(), wintypes.DWORD()
+            if adv.GetTokenInformation(tok, 20, ctypes.byref(val), ctypes.sizeof(val), ctypes.byref(size)):
+                return bool(val.value)                    # TokenElevation
+            return None
+        finally:
+            k32.CloseHandle(tok)
+    finally:
+        k32.CloseHandle(h)
+
+
+def roblox_admin_problem():
+    """A message when Roblox runs as administrator but the macro doesn't (keys won't reach it), else ''."""
+    try:
+        import ctypes
+        if ctypes.windll.shell32.IsUserAnAdmin():
+            return ""                                     # the macro is admin too: keys get through
+        import pywinctl
+        for w in pywinctl.getAllWindows():
+            if "Roblox" in (w.title or ""):
+                pid = w.getPID() if hasattr(w, "getPID") else None
+                if pid and _process_elevated(pid):
+                    return ("Roblox is running as ADMINISTRATOR, so Windows blocks the macro's key presses "
+                            "and clicks.\n\nClose Roblox and open it normally (not 'Run as administrator', "
+                            "and untick 'Run this program as an administrator' in its Properties > "
+                            "Compatibility), then start the macro again.")
+        return ""
+    except Exception:
+        return ""

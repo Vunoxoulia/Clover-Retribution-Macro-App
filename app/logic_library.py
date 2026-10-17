@@ -1181,6 +1181,47 @@ class LibraryLogic(RouteNav):
                 cv2.imwrite(self.dialog_template_path(f"move_{i + 1}"), pic)
         self.app.settings.save()
 
+    def _test_manual_spots(self, walk, result, say):
+        """Manual mode test: no pictures, no reading - just your spots. Full test (walk=True) walks, presses E
+        and clicks your Clover Training spot; then (both tests) the mouse HOVERS each ticked move spot."""
+        if self.running:
+            say("Stop the macro first."); return result
+        ct = self.manual_point("clover_training")
+        spots = [(i, self.manual_point(f"move_{i + 1}")) for i, m in enumerate(self.manual_moves()) if m.get("train")]
+        if walk and not ct:
+            say("✖ Clover Training: no spot set - 🎯 Pick spot in Wisp dialogue."); return result
+        if not spots:
+            say("Tick at least one Move spot in Wisp dialogue first."); return result
+        if not self.wait_focus_for_test():
+            return result
+        self.running = True
+        try:
+            if walk:
+                self.app.log("--- Full test (Manual): walking to the wisp ---")
+                self.go_to_wisp()
+                if not self.running or not self.open_dialogue():
+                    say("✖ Couldn't open the wisp's dialogue."); return result
+                time.sleep(float(self.app.settings.get("dialog_wait", 1.5)))
+                self.app.log("Clicking your Clover Training spot")
+                self.human_click(*ct, duration=0.15)
+                self._park_mouse()
+                time.sleep(self.after_training_wait())
+                say(f"✔ Clover Training: clicked your spot {ct}")
+            for i, pt in spots:
+                if not self.running:
+                    break
+                if not pt:
+                    say(f"✖ Move spot {i + 1}: no spot set - 🎯 Pick spot in Wisp dialogue")
+                    continue
+                self.utils.mouse_move(*pt)
+                time.sleep(0.9)
+                say(f"✔ Move spot {i + 1}: hovered {pt} - check the mouse was on the right move")
+        finally:
+            self.running = False
+        result["ok"] = all(pt for _, pt in spots)
+        say("Nothing was clicked except Clover Training." if walk else "Nothing was clicked.")
+        return result
+
     def test_find_moves(self, walk=False):
         """Dry run of the move search: go down the move list ONCE and only HOVER each ticked move it finds
         (never clicks a move). walk=False (F4): the move list must already be open - no walking, no clicks.
@@ -1190,8 +1231,7 @@ class LibraryLogic(RouteNav):
         result = {"lines": [], "ok": False}
         say = lambda m: (result["lines"].append(m), self.app.log(m))
         if mode == "manual":
-            say("Manual mode doesn't search for moves - it just clicks your spots. Use Dialogue (F1) to check them.")
-            return result
+            return self._test_manual_spots(walk, result, say)
         if self.running:
             say("Stop the macro first."); return result
         if not self.wait_focus_for_test():

@@ -571,11 +571,26 @@ class SmartMacroLogic:
     def toggle(self):
         self.stop() if self.running else self.start()
 
+    def _warn_if_roblox_admin(self):
+        """Roblox 'Run as administrator' = Windows blocks every key the macro sends: say so."""
+        from utils import roblox_admin_problem
+        msg = roblox_admin_problem()
+        if not msg:
+            return
+        self.app.log("⚠ Roblox is running as administrator - the macro's keys can't reach it.")
+        try:
+            from tkinter import messagebox
+            self.app.root.after(0, lambda: messagebox.showwarning("Roblox runs as administrator", msg,
+                                                                  parent=self.app.root))
+        except Exception:
+            pass
+
     def start(self):
         if self.running:
             return
         self.running = True
         self._last_shake = 0
+        threading.Thread(target=self._warn_if_roblox_admin, daemon=True).start()
         cfg = self.cfg
         self._threads = []
         parts = []

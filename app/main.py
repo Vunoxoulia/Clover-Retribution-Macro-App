@@ -39,6 +39,8 @@ class SpatialApp:
 def main():
     import links
     links.refresh_async()             # newest links.txt from GitHub (videos, Discord, donate)
+    from utils import SpatialUtils
+    SpatialUtils.preload_ocr()        # load the text reader now, in the background, so Start doesn't freeze
     try:
         ctypes.windll.shcore.SetProcessDpiAwareness(1)
     except Exception:
