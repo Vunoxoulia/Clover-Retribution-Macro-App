@@ -1208,6 +1208,13 @@ class LibraryLogic(RouteNav):
         self._auto_keys = keys
         return rows
 
+    def reset_move_gold(self, i):
+        """A slot got a DIFFERENT move: its 'gold used' starts again from 0 (the total keeps counting)."""
+        stats = self._nine("move_stats", 0)
+        if 0 <= i < len(stats) and stats[i]:
+            stats[i] = 0
+            self.app.settings.set("move_stats", stats)
+
     def apply_auto_setup(self, rows, pictures):
         """rows: [{'slot', 'name', 'train'}] in the order to train. Fills 'Moves to train' (names, slots,
         ticks) and, in Image mode, saves each chosen move's button picture."""
@@ -1221,7 +1228,10 @@ class LibraryLogic(RouteNav):
         for n, r in enumerate(rows[:MAX_MOVES]):
             i = int(r.get("move", n))                  # the ticked Move row this hotbar slot belongs to
             word = r.get("keyword") or keys.get(r["name"])
-            names[i] = word.capitalize() if word else r["name"]   # one unique word - easy for the reader
+            new = word.capitalize() if word else r["name"]   # one unique word - easy for the reader
+            if self._norm_name(new) != self._norm_name(names[i]):
+                self.reset_move_gold(i)                  # a different move in this slot: its gold starts at 0
+            names[i] = new
             slots[i], flags[i] = int(r["slot"]), bool(r["train"])
             pic = pictures.get(r["name"])
             if self.dialog_mode() == "image" and pic is not None and pic.size:

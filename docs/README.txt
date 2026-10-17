@@ -15,6 +15,7 @@ WHAT'S NEW IN V6.3.3
 - Event Notifier: Test button on each event - if its words are in a chat right now it uses that real line (so reading is tested too), otherwise it posts a test message with the same text and pings; 'Last events' list of what was posted; Tick / Untick shown (e.g. search 'wisp', then Tick shown); Export / Import the event list to share it (names and chat words only - no roles or pings); a warning (in the app and on Discord) when a window's chat can't be read for a few minutes
 - Library: Gold Clover detection has a Match strictness (default 95% - a pixel must be 95% the same colour as the gold) and Pick colour to use the exact gold from your own screen (Built-in goes back); Manual boxes now need a real patch of gold, not one stray pixel
 - Mining: the Line-up checks explanation shows Off and On on their own lines
+- Library: changing a move's name (or Auto setup putting a different move in that slot) resets that slot's 'gold used' in Statistics to 0; the Total keeps counting, and fixing capitals / spaces doesn't reset it
 
 WHAT'S NEW IN V6.3.2
 ====================

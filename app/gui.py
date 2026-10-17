@@ -1633,8 +1633,14 @@ class SpatialGUI:
         new_name = self.move_entries[idx].get()
                                                               
         if new_name != names[idx]:
+            old = names[idx]
             names[idx] = new_name
             self.settings.set("move_names", names)
+            # a different move in this slot: its 'gold used' starts again from 0 (Total keeps counting).
+            # Only the letters count, so fixing capitals / spaces doesn't reset it.
+            norm = lambda t: "".join(c for c in (t or "").lower() if c.isalnum())
+            if norm(old) != norm(new_name) and hasattr(self.logic, "reset_move_gold"):
+                self.logic.reset_move_gold(idx)
         self.update_gold_display()
 
     def update_tolerance(self, val):
