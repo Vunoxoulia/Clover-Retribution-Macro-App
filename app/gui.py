@@ -355,7 +355,7 @@ class SpatialGUI:
                                            command=lambda: self.settings.set("mining_checks", bool(self.checks_switch.get())))
         if self.settings.get("mining_checks", False): self.checks_switch.select()
         self.checks_switch.pack(side="left")
-        ctk.CTkLabel(row, text="Off (default) = just follow the recorded path and press E. "
+        ctk.CTkLabel(row, text="Off (default) = just follow the recorded path and press E.\n"
                                "On = also line up on the start spot, checkpoints and ores.", font=("Arial", 12), text_color="#ced4da", wraplength=330,
                      justify="left").pack(side="left", padx=8)
 
@@ -1198,6 +1198,7 @@ class SpatialGUI:
                                    text_color="#75b798" if ok else "#ea868f")
                 lbl.pack(side="left", padx=8)
                 self.gold_status[i] = lbl
+            self._gold_color_rows(gc)
             ctk.CTkLabel(gc, text="", height=4).pack()
             return
 
@@ -1226,7 +1227,52 @@ class SpatialGUI:
                      font=("Arial", 12), text_color="#ced4da").pack(anchor="w", padx=8)
         self.gold_test_lbl = ctk.CTkLabel(gc, text="", font=("Arial", 12), justify="left", wraplength=420, anchor="w")
         self.gold_test_lbl.pack(fill="x", padx=8)
+        self._gold_color_rows(gc)
         ctk.CTkLabel(gc, text="", height=4).pack()
+
+    def _gold_color_rows(self, gc):
+        """The gold colour (built-in or your own pick) and how strict the match is."""
+        own = self.settings.get("gold_color")
+        row = ctk.CTkFrame(gc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(6, 2))
+        ctk.CTkLabel(row, text="Gold colour", font=("Arial", 12, "bold")).pack(side="left")
+        shown = own or list(self.logic.GOLD_CLOVER_COLOR)
+        ctk.CTkFrame(row, width=22, height=22, corner_radius=4, border_width=1, border_color="#adb5bd",
+                     fg_color="#%02x%02x%02x" % tuple(int(v) for v in shown[:3])).pack(side="left", padx=6)
+        ctk.CTkLabel(row, text=(f"your pick {tuple(own[:3])}" if own else "built-in"), font=("Arial", 12),
+                     text_color="#ced4da").pack(side="left", padx=(0, 8))
+        ctk.CTkButton(row, text="Pick colour", width=90, height=26, fg_color="#0d6efd", hover_color="#0b5ed7",
+                      command=self.pick_gold_color).pack(side="left", padx=2)
+        if own:
+            ctk.CTkButton(row, text="Built-in", width=70, height=26, fg_color="#495057", hover_color="#343a40",
+                          command=lambda: (self.settings.set("gold_color", None), self.build_gold_card())).pack(side="left", padx=2)
+        row = ctk.CTkFrame(gc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=2)
+        ctk.CTkLabel(row, text="Match strictness", font=("Arial", 12, "bold")).pack(side="left")
+
+        def set_strict(v=None):
+            try:
+                val = float(str(v if v is not None else cb.get()).strip().rstrip("%"))
+                self.settings.set("gold_strict", min(100.0, max(50.0, val)))
+            except (TypeError, ValueError):
+                pass
+        cb = ctk.CTkComboBox(row, values=["90", "95", "97", "99"], width=70, height=26, command=set_strict)
+        cb.set(f"{self.logic.gold_strictness():g}")
+        cb._entry.bind("<FocusOut>", lambda e: set_strict())
+        cb._entry.bind("<Return>", lambda e: set_strict())
+        save_while_typing(cb._entry, set_strict)
+        cb.pack(side="left", padx=6)
+        ctk.CTkLabel(row, text="% alike to count as gold (higher = stricter)", font=("Arial", 11),
+                     text_color="#adb5bd").pack(side="left")
+
+    def pick_gold_color(self):
+        """Click a gold clover on screen to use its exact colour."""
+        self._hide_for_pick()
+
+        def done(color):
+            self.root.deiconify()
+            self.settings.set("gold_color", [int(c) for c in color[:3]])
+            self.log(f"Gold colour set to {tuple(color[:3])} - press Test to check a maxed move reads gold.")
+            self.build_gold_card()
+        ColorPicker(done)
 
     def auto_gold_hotbar(self):
         """Find the hotbar in the Roblox window you click into, then show the 3rd-clover boxes."""

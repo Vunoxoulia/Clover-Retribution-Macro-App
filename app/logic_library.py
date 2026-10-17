@@ -201,17 +201,55 @@ class LibraryLogic(RouteNav):
         img = self.utils.capture_screen_bgr(rect)
         if img is None or not img.size:
             return None
-        # Saturation >= 160: the clover's gold is strong (~210); the move NAME text is a pale gold (~120)
-        # that used to count too when it reached into the box.
-        gold = cv2.inRange(cv2.cvtColor(img, cv2.COLOR_BGR2HSV), self.GOLD_HSV_LO, self.GOLD_HSV_HI)
-        return float((gold > 0).mean())
+        return float((self.gold_mask(img) > 0).mean())
+
+    def gold_strictness(self):
+        """How alike a pixel must be to the gold colour, in % (default 95)."""
+        try:
+            return min(100.0, max(50.0, float(self.app.settings.get("gold_strict", 95))))
+        except (TypeError, ValueError):
+            return 95.0
+
+    def gold_mask(self, img_bgr):
+        """Gold pixels of a BGR picture.
+        - your own picked gold colour: every channel within (100 - strictness)% of it (95% = about +-13 of 255)
+        - built-in: the clover's strong gold only (saturation >= 160 - the move NAME text is a pale gold ~120),
+          and the strictness narrows that range further."""
+        own = self.app.settings.get("gold_color")
+        strict = self.gold_strictness()
+        if own:
+            tol = int(round((100.0 - strict) * 2.55))
+            r, g, b = (int(v) for v in own[:3])
+            lo = np.array([max(0, b - tol), max(0, g - tol), max(0, r - tol)], np.uint8)
+            hi = np.array([min(255, b + tol), min(255, g + tol), min(255, r + tol)], np.uint8)
+            return cv2.inRange(img_bgr, lo, hi)
+        k = (100.0 - strict) / 5.0                        # 95% = the tested built-in range; stricter = narrower
+        lo = (int(self.GOLD_HSV_LO[0] + (1 - min(k, 1)) * 3), int(self.GOLD_HSV_LO[1] + (1 - min(k, 1)) * 20),
+              int(self.GOLD_HSV_LO[2] + (1 - min(k, 1)) * 20))
+        hi = (int(self.GOLD_HSV_HI[0] - (1 - min(k, 1)) * 3), 255, 255)
+        return cv2.inRange(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV), lo, hi)
 
     def move_is_gold(self, i):
         if self.gold_mode() == "auto":
             share = self.third_clover_share(self.move_slot(i))
             return share is not None and share >= self.GOLD_SHARE
         area = self.app.settings.get("regions", {}).get(f"gold_clover_{i + 1}", [0, 0, 0, 0])
-        return any(v != 0 for v in area) and self.utils.check_pixel_area(area, self.GOLD_CLOVER_COLOR, tolerance=25)
+        if not any(v != 0 for v in area):
+            return False
+        img = self.utils.capture_screen_bgr(area)
+        if img is None or not img.size:
+            return False
+        if not self.app.settings.get("gold_color"):
+            # manual boxes always compared with a colour: the built-in clover gold unless you picked your own
+            own = self.GOLD_CLOVER_COLOR
+            tol = int(round((100.0 - self.gold_strictness()) * 2.55))
+            r, g, b = own
+            mask = cv2.inRange(img, np.array([max(0, b - tol), max(0, g - tol), max(0, r - tol)], np.uint8),
+                               np.array([min(255, b + tol), min(255, g + tol), min(255, r + tol)], np.uint8))
+        else:
+            mask = self.gold_mask(img)
+        # a real patch of gold, not one stray pixel
+        return float((mask > 0).mean()) >= self.GOLD_SHARE
 
     def usable_moves(self):
         """How many moves this dialogue mode can reach: Manual = 3 (fixed spots, no scrolling), else all 9."""

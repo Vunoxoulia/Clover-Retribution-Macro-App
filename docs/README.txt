@@ -13,6 +13,8 @@ WHAT'S NEW IN V6.3.3
 - cleaner look: removed all emoji / icons from buttons, menus, pages, pop-ups and messages
 - Event Notifier: the events list has a search box and pages (8 per page) instead of one long scrolling list; the 'who to ping' button now reads '+ ping' / '2 pings'
 - Event Notifier: Test button on each event - if its words are in a chat right now it uses that real line (so reading is tested too), otherwise it posts a test message with the same text and pings; 'Last events' list of what was posted; Tick / Untick shown (e.g. search 'wisp', then Tick shown); Export / Import the event list to share it (names and chat words only - no roles or pings); a warning (in the app and on Discord) when a window's chat can't be read for a few minutes
+- Library: Gold Clover detection has a Match strictness (default 95% - a pixel must be 95% the same colour as the gold) and Pick colour to use the exact gold from your own screen (Built-in goes back); Manual boxes now need a real patch of gold, not one stray pixel
+- Mining: the Line-up checks explanation shows Off and On on their own lines
 
 WHAT'S NEW IN V6.3.2
 ====================
