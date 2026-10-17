@@ -8,7 +8,6 @@ WHAT'S NEW IN V6.3.2
 - Library: new 'Wait after Clover Training' (default 1.5 s, editable in Wisp dialogue) - it waits that long before reading the move list, so it no longer scrolls past a move that's right at the top
 - Library (Manual mode): the tests now work with your spots - 🔎 Hover spots (F4) hovers your move spots, 🧪 Full test (F5) walks, presses E, clicks your Clover Training spot and hovers the moves - no pictures needed
 - Skill Macro: snapshots now only take the inside of each hotbar box (not the gaps / ground beside it); each slot shows its picture (click it to see it big), the new 🖼 Snapshots button shows them all with 📸 Retake, and ✂ Draw box lets you drag your own box for a slot
-- main menu: 'Devil Union' is now 'Umbral Abyss Stone' - auto farm lesser devil Juggernaut (coming soon)
 
 WHAT'S NEW IN V6.3.1
 ====================
