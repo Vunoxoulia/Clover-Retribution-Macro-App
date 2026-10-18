@@ -42,7 +42,8 @@ MEDITATION_DEFAULT = {
 # Anti screen-shake: every N seconds press ',' → wait → ',' (resets the camera lock) between casts
 ANTI_SHAKE_DEFAULT = {"enabled": False, "every": 30, "key": ",", "between": 1.0, "after": 0.5,
                       "check_region": [0, 0, 0, 0]}   # optional screenshot check: a spot that looks different in ','
-ANTI_SHAKE_REF = os.path.join(TEMPLATE_DIR, "anti_shake_normal.png")
+# a picture of the spot WHILE IN the skill tree (','): matching it = still in the skill tree
+ANTI_SHAKE_REF = os.path.join(TEMPLATE_DIR, "anti_shake_skilltree.png")
 
 DEFAULT_SMART = {
     "hotkey": "f6",
@@ -796,7 +797,7 @@ class SmartMacroLogic:
         with RobloxInputDriver._lock:
             self._press(key)
         self._wait(max(0.0, float(d.get("after", 0.5) or 0)))
-        # screenshot check: does the picked spot look like normal play again? If not we're still in ','
+        # screenshot check: does the picked spot still look like the skill tree? Then press ',' again
         for _ in range(2):
             if self.anti_shake_back_to_normal() is not False:
                 break
@@ -817,8 +818,25 @@ class SmartMacroLogic:
         os.makedirs(TEMPLATE_DIR, exist_ok=True)
         return bool(cv2.imwrite(ANTI_SHAKE_REF, img))
 
-    def anti_shake_back_to_normal(self):
-        """True = the spot matches the normal picture, False = it doesn't (still in ','),
+    def leave_skill_tree(self):
+        """Before casting: if the picked spot still looks like the skill tree (a lag spike can leave the
+        view stuck there), press ',' to get out first. Returns True when it pressed. Checked at most
+        every 0.5 s; does nothing without a picked spot."""
+        if time.time() - getattr(self, "_tree_check", 0) < 0.5:
+            return False
+        self._tree_check = time.time()
+        if self.in_skill_tree() is not True:
+            return False
+        d = self.anti_shake()
+        key = (d.get("key") or ",").strip() or ","
+        self.app.log(f"Still in skill tree - pressing '{key}' before casting.")
+        with RobloxInputDriver._lock:
+            self._press(key)
+        self._wait(max(0.5, float(d.get("after", 0.5) or 0)))
+        return True
+
+    def in_skill_tree(self):
+        """True = the spot looks like the skill-tree picture (still in ','), False = it doesn't,
         None = no check set up."""
         r = self.anti_shake().get("check_region") or [0, 0, 0, 0]
         if r[2] <= r[0] or r[3] <= r[1] or not os.path.exists(ANTI_SHAKE_REF):
@@ -829,11 +847,17 @@ class SmartMacroLogic:
             return None
         try:
             now = cv2.resize(now, (ref.shape[1], ref.shape[0]))
-            a = cv2.cvtColor(ref, cv2.COLOR_BGR2GRAY).astype(np.float32)
-            b = cv2.cvtColor(now, cv2.COLOR_BGR2GRAY).astype(np.float32)
-            return float(np.mean(np.abs(a - b))) < 25        # small changes (glow, light) are fine
+            # colour, not just brightness: the skill tree's dark red background and dark ground look
+            # alike in grey; small changes (glow, a moving particle) still count as the same
+            diff = float(np.mean(np.abs(ref.astype(np.float32) - now.astype(np.float32))))
+            return diff < 20
         except Exception:
             return None
+
+    def anti_shake_back_to_normal(self):
+        """True = out of the skill tree, False = still in it, None = no check set up."""
+        t = self.in_skill_tree()
+        return None if t is None else not t
 
     def med(self):
         d = self.cfg["rotation"].setdefault("meditation", {})
@@ -958,6 +982,8 @@ class SmartMacroLogic:
                     elif time.time() - self._last_shake >= max(1.0, float(sh.get("every", 30) or 30)):
                         self.do_anti_shake()
                         continue
+                if self.leave_skill_tree():
+                    continue                             # was stuck in the skill tree: pressed ',' - look again
                 pick = self.pick_move(self.read_slots())
                 if not pick:
                     self._wait(float(rot["tick"])); continue

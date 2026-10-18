@@ -1,3 +1,12 @@
+WHAT'S NEW IN V6.3.4
+====================
+- Skill Macro: Anti screen-shake's screenshot is now taken IN the skill tree - open it with ',' and Pick spot on something that only looks like that in the skill tree; after the presses, if the spot still looks like the skill tree it presses ',' again (pick the spot again once after updating)
+- Skill Macro: fixed Anti screen-shake 'Pick spot' only working the first time - the macro window could end up in the 'normal play' picture; it's now taken while the window is hidden, so picking a new spot always replaces the old one (no need to reopen the macro)
+- Skill Macro: Anti screen-shake has a Test button - it checks the spot right away and says 'In skill tree' or 'Not in skill tree' (no 3 s wait, no clicking into Roblox)
+- Skill Macro: before casting, if the screenshot check still sees the skill tree (e.g. a lag spike left the view stuck there) it presses ',' first, then casts
+- Skill Macro: the Snapshots button sits right above the slot list; the Box / Snap buttons on each slot are gone (Retake and Draw box are in Snapshots); the options button reads More / Less
+- Keep Roblox in focus only acts while a macro is running (Find hotbar and other setup buttons no longer pull Roblox to the front)
+
 WHAT'S NEW IN V6.3.3
 ====================
 - fixed the Skill Macro sometimes stopping right after an OK click: the OK clicker no longer clicks when another window (like the macro's own) covers the popup, and it never switches focus back to the macro window after clicking

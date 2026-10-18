@@ -245,13 +245,22 @@ class SmartMacroGUI:
         self.root.update()
         time.sleep(0.2)
 
-    def pick_region(self, d, key, after=None):
+    def pick_region(self, d, key, after=None, while_hidden=None):
+        """Drag a box. while_hidden() runs BEFORE this window comes back (e.g. to screenshot the spot -
+        otherwise the macro window itself could end up in the picture)."""
         self._hide()
 
         def done(x1, y1, x2, y2):
-            self.root.deiconify()
             d[key] = [x1, y1, x2, y2]
             self.save()
+            if while_hidden:
+                self.root.update()                       # let the picker disappear first
+                time.sleep(0.15)
+                try:
+                    while_hidden()
+                except Exception as e:
+                    self.log(f"Couldn't take the picture: {e}")
+            self.root.deiconify()
             if after:
                 after()
         Overlay(done)
@@ -388,17 +397,22 @@ class SmartMacroGUI:
         row2 = ctk.CTkFrame(card, fg_color="transparent"); row2.pack(fill="x", padx=10, pady=(0, 8))
         r = d.get("check_region") or [0, 0, 0, 0]
         has = r[2] > r[0] and r[3] > r[1]
-        status = ctk.CTkLabel(row2, text=("Check: on - after the presses it screenshots that spot and presses ',' "
-                                          "again if it still looks like ','" if has else
-                                          "Check: off - pick a spot that looks different while in ',' "
-                                          "(e.g. an icon / UI that changes) to make sure it got out"),
+        status = ctk.CTkLabel(row2, text=("Check: on - after the presses, if that spot still looks like the skill "
+                                          "tree it presses ',' again" if has else
+                                          "Check: off - open the skill tree (,) and pick a spot that only looks like "
+                                          "that IN the skill tree"),
                               font=("Arial", 11), text_color="#75b798" if has else "#adb5bd",
                               wraplength=430, justify="left")
 
+        shot = {}
+
+        def take():
+            # taken while the macro window is still hidden: be IN the skill tree (,) when you pick
+            shot["ok"] = self.logic.save_anti_shake_ref()
+
         def picked():
-            # the picture is taken right away: be OUT of ',' (normal play) when you pick
-            ok = self.logic.save_anti_shake_ref()
-            status.configure(text=("Check: on - saved how that spot looks in normal play" if ok
+            ok = shot.get("ok", False)
+            status.configure(text=("Check: on - saved how that spot looks in the skill tree" if ok
                                    else "Couldn't take the picture - try again"),
                              text_color="#75b798" if ok else "#ea868f")
 
@@ -406,23 +420,22 @@ class SmartMacroGUI:
             d["check_region"] = [0, 0, 0, 0]; self.save()
             status.configure(text="Check: off", text_color="#adb5bd")
         ctk.CTkButton(row2, text="Pick spot", width=90, height=24,
-                      command=lambda: self.pick_region(d, "check_region", after=picked)).pack(side="left")
+                      command=lambda: self.pick_region(d, "check_region", after=picked, while_hidden=take)).pack(side="left")
         ctk.CTkButton(row2, text="X", width=26, height=24, fg_color="#495057",
                       command=clear).pack(side="left", padx=4)
 
         def test():
-            """Click into Roblox: 3 s later the spot is compared with the normal picture."""
-            self.log("Anti screen-shake test: click into Roblox - checking the spot in 3 s.")
-
-            def run():
-                time.sleep(3)
+            """Check the spot right now: this window hides for a moment so it isn't in the picture."""
+            self._hide()
+            try:
                 res = self.logic.anti_shake_back_to_normal()
-                text, col = {True: ("Not in skill tree", "#75b798"),
-                             False: ("In skill tree", "#ffc107"),
-                             None: ("Pick a spot first", "#ea868f")}[res]
-                self._safe_set(status, text=text, text_color=col)
-                self.log(text)
-            threading.Thread(target=run, daemon=True).start()
+            finally:
+                self.root.deiconify()
+            text, col = {True: ("Not in skill tree", "#75b798"),
+                         False: ("In skill tree", "#ffc107"),
+                         None: ("Pick a spot first", "#ea868f")}[res]
+            status.configure(text=text, text_color=col)
+            self.log(text)
         ctk.CTkButton(row2, text="Test", width=50, height=24, fg_color="#495057",
                       command=test).pack(side="left", padx=(0, 4))
         status.pack(side="left", padx=6)
