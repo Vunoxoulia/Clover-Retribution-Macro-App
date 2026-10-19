@@ -495,6 +495,16 @@ class SpatialGUI:
                  "Slot = where it sits on your hotbar (for the gold clover check).",
     }
 
+    def _out_of_the_way(self, fn):
+        """Run fn with the macro window hidden, so it can't cover the wisp's dialogue in the screenshots
+        (called from a background thread). The window always comes back."""
+        self.root.after(0, self.root.withdraw)
+        time.sleep(0.35)
+        try:
+            return fn()
+        finally:
+            self.root.after(0, self.root.deiconify)
+
     def auto_setup_moves(self):
         """Auto setup: read the hotbar, then the wisp's move list, match them, and let the user confirm."""
         from tkinter import messagebox
@@ -538,10 +548,19 @@ class SpatialGUI:
             if not self.logic.wait_focus_for_test():
                 return
             self.log("Auto setup: reading the move list (scrolling down)...")
-            listed = self.logic.scan_move_list(alive=lambda: not self.logic.running)
+            seen = {}
+
+            def scan():
+                out = self.logic.scan_move_list(alive=lambda: not self.logic.running)
+                if not out:
+                    seen["path"] = self.logic.save_debug_shot("auto_setup")   # what the macro saw, while hidden
+                return out
+            listed = self._out_of_the_way(scan)
             if not listed:
+                where = seen.get("path")
                 self.root.after(0, lambda: messagebox.showwarning(
-                    "Auto setup", "Couldn't read the wisp's move list. Open it (Clover Training) and try again.",
+                    "Auto setup", "Couldn't read the wisp's move list. Open it (Clover Training) and try again."
+                    + (f"\n\nWhat the macro saw is saved here (send it if it keeps failing):\n{where}" if where else ""),
                     parent=self.root))
                 return
             rows = self.logic.match_hotbar_to_list(hotbar, [n for n, _ in listed])
@@ -606,6 +625,9 @@ class SpatialGUI:
             chosen = [{"slot": r["slot"], "name": om.get(), "train": bool(v.get()),
                        **({"move": rows_of[r["slot"]]} if r["slot"] in rows_of else {})}
                       for r, v, om in widgets if om.get() != "(skip)"]
+            for r, v, om in widgets:
+                if om.get() == "(skip)":
+                    self.log(f"Auto setup: slot {r['slot']} left on (skip) - nothing changed for it")
             self.logic.apply_auto_setup(chosen, pictures)
             win.destroy()
             self.log(f"Auto setup: {len(chosen)} move(s) filled in. Press Find moves to double-check.")
@@ -636,7 +658,7 @@ class SpatialGUI:
         name = "Full test" if walk else "Find moves"
 
         def run():
-            res = self.logic.test_find_moves(walk=walk)
+            res = self._out_of_the_way(lambda: self.logic.test_find_moves(walk=walk))
             if res["lines"]:
                 from tkinter import messagebox
                 title = f"{name} - all found" if res["ok"] else f"{name} - results"

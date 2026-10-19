@@ -6,7 +6,7 @@ import keyboard
 import numpy as np
 import cv2
 from route_nav import RouteNav
-from utils import RobloxInputDriver
+from utils import RobloxInputDriver, is_roblox_title
 from settings import get_base_path
 
 DIALOG_TEMPLATE_DIR = os.path.join(get_base_path(), "library_templates")
@@ -118,7 +118,7 @@ class LibraryLogic(RouteNav):
             win = pywinctl.getActiveWindow()
         except Exception:
             win = None
-        if not win or "Roblox" not in win.title:
+        if not win or not is_roblox_title(win.title):
             self.app.log("Auto-find: click into the Roblox window first.")
             return None
         reg = [win.left, win.top, win.left + win.width, win.top + win.height]
@@ -745,11 +745,14 @@ class LibraryLogic(RouteNav):
         and the same buttons for ~0.8 s. Returns those buttons [(x, y, text)], or [] if it never settled."""
         alive = alive or (lambda: self.running)
         end = time.time() + timeout
-        last, since = None, 0.0
+        last, since, seen_list = None, 0.0, []
         refs = self._move_refs()
         while alive() and time.time() < end:
             buttons = [b for b in self.dialog_buttons() if not self._is_skip(b[2])]
-            sig = tuple(self._norm_name(b[2]) for b in buttons)
+            # 'settled' = the same buttons in the same PLACES. Not the exact letters: on a busy background
+            # (wisp sparkles) the reader can flip a letter each time ('Nevermind.' / 'Nevermind'), which
+            # used to keep it from ever settling -> "Couldn't read the wisp's move list".
+            sig = tuple((int(b[0]) // 8, int(b[1]) // 8) for b in buttons)
             # fast trigger: a button that looks ~50% like one of YOUR moves (hotbar / saved names) = the move list
             if any(self._looks_like_move(b[2], refs) for b in buttons):
                 return buttons
@@ -760,8 +763,44 @@ class LibraryLogic(RouteNav):
                     return buttons
             else:
                 last = None
+            if len(buttons) >= 2:
+                seen_list = buttons                  # remember: a list WAS there
             time.sleep(0.25)
-        return []
+        # never perfectly still, but a real list was seen: use it rather than giving up
+        return seen_list
+
+    def save_debug_shot(self, name):
+        """Save exactly what the macro sees (the Roblox window it reads) to data/debug/<name>.png, with the
+        dialogue panel / buttons it found drawn in. Returns the file path (or None)."""
+        try:
+            from settings import get_base_path
+            img = self._screen()
+            if img is None or not img.size:
+                return None
+            panel, boxes = self.find_dialog(img)
+            if panel:
+                x, y, w, h = (int(v) for v in panel)
+                cv2.rectangle(img, (x, y), (x + max(w, 2), y + h), (255, 160, 0), 2)
+            for x, y, w, h in boxes:
+                cv2.rectangle(img, (int(x), int(y)), (int(x + w), int(y + h)), (0, 0, 255), 2)
+            cv2.putText(img, f"{len(boxes)} button(s) found", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+            folder = os.path.join(get_base_path(), "debug")
+            os.makedirs(folder, exist_ok=True)
+            path = os.path.join(folder, f"{name}.png")
+            cv2.imwrite(path, img)
+            return path
+        except Exception:
+            return None
+
+    def _list_anchor(self):
+        """Where to scroll the move list when no buttons could be detected (Image mode works by picture):
+        the dialogue's button column sits on the right, lower part of the Roblox window."""
+        l, t, r, b = self.get_roblox_window_region()
+        return [(int(l + (r - l) * 0.86), int(t + (b - t) * 0.72), "")]
+
+    def _any_move_picture(self, idxs):
+        return any(self.has_dialog_template(f"move_{i + 1}") and self.find_dialog_button(f"move_{i + 1}")
+                   for i in idxs)
 
     def _best_name_hit(self, name, buttons):
         """The button that shows `name` BEST: an exact match beats one that only contains it
@@ -789,10 +828,16 @@ class LibraryLogic(RouteNav):
                     self.app.log(f"[2/2] Found {label} (picture) - clicking")
                     self.human_click(*pt, duration=0.15)
                     return True
-            buttons = self.wait_move_list()
+            buttons = self.wait_move_list(timeout=4 if has_pic else 12)
             if not buttons:
-                self.app.log(f"-> The move list didn't show up (only 'Skip' / no buttons).")
-                return False
+                if not has_pic:
+                    self.app.log(f"-> The move list didn't show up (only 'Skip' / no buttons).")
+                    return False
+                # Image mode: the button shapes weren't detected, but the picture is what counts -
+                # scroll over the dialogue and look for the picture again
+                self.app.log(f"   {label} not visible yet - scrolling down (by picture)")
+                self._scroll_list(self._list_anchor())
+                continue
             at_end = any("never" in (b[2] or "").lower() for b in buttons)
             # Image mode: the PICTURE leads - the name is only a last try once the whole list was checked
             if name and (not has_pic or at_end):
@@ -1052,7 +1097,7 @@ class LibraryLogic(RouteNav):
             win = pywinctl.getActiveWindow()
         except Exception:
             win = None
-        if not win or "Roblox" not in win.title:
+        if not win or not is_roblox_title(win.title):
             return None
         reg = [win.left, win.top, win.left + win.width, win.top + win.height]
         img = self.utils.capture_screen_bgr(reg)
@@ -1234,9 +1279,15 @@ class LibraryLogic(RouteNav):
             names[i] = new
             slots[i], flags[i] = int(r["slot"]), bool(r["train"])
             pic = pictures.get(r["name"])
-            if self.dialog_mode() == "image" and pic is not None and pic.size:
-                os.makedirs(DIALOG_TEMPLATE_DIR, exist_ok=True)
-                cv2.imwrite(self.dialog_template_path(f"move_{i + 1}"), pic)
+            note = ""
+            if self.dialog_mode() == "image":
+                if pic is not None and pic.size:
+                    os.makedirs(DIALOG_TEMPLATE_DIR, exist_ok=True)
+                    note = (" - picture saved" if cv2.imwrite(self.dialog_template_path(f"move_{i + 1}"), pic)
+                            else " - picture COULDN'T be saved")
+                else:
+                    note = " - no picture of it (old picture kept)"
+            self.app.log(f"Auto setup: Move {i + 1} (slot {slots[i]}) = '{r['name']}' -> looks for '{names[i]}'{note}")
         self.app.settings.save()
 
     def _test_manual_spots(self, walk, result, say):
@@ -1304,13 +1355,12 @@ class LibraryLogic(RouteNav):
         try:
             if not walk:
                 self.app.log("--- Find moves (test): reading the open move list (no walking, no clicks) ---")
-                if not self.wait_move_list(timeout=4):
-                    if self.find_training_button():
-                        say("That's the first menu - click 'Clover Training' to open the move list, then test again.")
-                    else:
-                        say("No move list on screen. Open the wisp's move list (Clover Training) first - "
+                if not self.wait_move_list(timeout=4) and not (mode == "image" and self._any_move_picture(wanted)):
+                    if mode != "image":
+                        say("No move list on screen. Open the wisp's move list first - "
                             "or use the Full test, which walks there and opens it.")
-                    return result
+                        return result
+                    self.app.log("   No buttons detected - searching by picture only.")
             else:
                 self.app.log("--- Full test: walking to the wisp ---")
                 self.go_to_wisp()
@@ -1336,8 +1386,8 @@ class LibraryLogic(RouteNav):
             for step in range(MAX_MOVES + 3):
                 if not self.running:
                     break
-                buttons = self.wait_move_list()
-                if not buttons:
+                buttons = self.wait_move_list(timeout=4 if mode == "image" else 12)
+                if not buttons and mode != "image":
                     say("The move list didn't show up (only 'Skip' while the text was typing?) - try again.")
                     break
                 seen.extend(b[2] for b in buttons if b[2] and b[2] not in seen and not self._is_skip(b[2]))
@@ -1365,7 +1415,7 @@ class LibraryLogic(RouteNav):
                     break
                 if any("never" in (b[2] or "").lower() for b in buttons):
                     break                            # Nevermind is always last: end of the list
-                self._scroll_list(buttons)
+                self._scroll_list(buttons or self._list_anchor())
         finally:
             self.running = False
         import difflib

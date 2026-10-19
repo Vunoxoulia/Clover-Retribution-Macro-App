@@ -1,6 +1,13 @@
 HOW TO RUN SPATIAL MACRO
 ========================
 
+WHAT'S NEW IN V6.3.5
+====================
+- Skill Macro: fixed ',' being pressed while Anti screen-shake is switched OFF (it happened when a spot was picked) - with it off, the macro never presses ','
+- Event Notifier: also reads [Leak] chat lines (not just [Event]), so the new leak-type events can be posted
+- Library (Image mode): Find moves (F4) and the real run no longer stop when the dialogue's buttons can't be detected - they keep searching by picture and scroll the list themselves; F4 also no longer looks for 'Clover Training' (it only needs the move list open)
+- Library: fixed Auto setup saying "Couldn't read the wisp's move list" while the list was open - it waited for the button text to read exactly the same twice, which a busy background (wisp sparkles) could prevent forever; it now waits for the buttons to stay in place. It also only looks at the game window itself, hides the macro window while reading, and if it still fails it saves what it saw to data\debug\auto_setup.png
+
 WHAT'S NEW IN V6.3.4
 ====================
 - Skill Macro: Anti screen-shake's screenshot is now taken IN the skill tree - open it with ',' and Pick spot on something that only looks like that in the skill tree; after the presses, if the spot still looks like the skill tree it presses ',' again (pick the spot again once after updating)

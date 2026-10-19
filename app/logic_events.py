@@ -32,7 +32,7 @@ DEFAULT_CFG = {
     "window_chat": {},         # "1", "2", ... -> that window's own chat box (pixels from its top-left)
     "interval": 60,            # seconds between scans (OCR is heavy: 1 min keeps the game smooth)
     "cooldown": 120,           # seconds before the same event can be posted again
-    "event_lines_only": True,  # ignore player chat: only lines that start with [Event]
+    "event_lines_only": True,  # ignore player chat: only lines that start with [Event] or [Leak]
     "clear_chat": False,       # type /clear after an alert
     "clear_cmd": "/clear",     # or "/cls"
     "sound_on_alert": False,   # play a Windows sound when an event is posted (optional, off by default)
@@ -315,8 +315,11 @@ class EventWatcher:
             else:
                 lines.append(t)
         if self.cfg.get("event_lines_only", True):
-            lines = [t for t in lines if "event" in compact(t)[:10]]
+            # game announcements start with a tag: [Event] ... or [Leak] ... (player chat doesn't)
+            lines = [t for t in lines if any(tag in compact(t)[:10] for tag in self.EVENT_TAGS)]
         return lines
+
+    EVENT_TAGS = ("event", "leak")
 
     def count_events(self, lines):
         """{event name: how many lines mention its keyword}"""

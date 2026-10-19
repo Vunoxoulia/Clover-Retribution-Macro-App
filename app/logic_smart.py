@@ -11,7 +11,7 @@ import numpy as np
 import keyboard
 import pywinctl
 from pynput.mouse import Button, Controller as MouseController
-from utils import SpatialUtils, RobloxInputDriver
+from utils import SpatialUtils, RobloxInputDriver, is_roblox_title
 from settings import get_base_path
 
 TEMPLATE_DIR = os.path.join(get_base_path(), "smart_templates")
@@ -477,7 +477,7 @@ class SmartMacroLogic:
             win = pywinctl.getActiveWindow()
         except Exception:
             win = None
-        if not win or "Roblox" not in win.title:
+        if not win or not is_roblox_title(win.title):
             self.app.log("Auto-find: click into the Roblox window first.")
             return None
         reg = [win.left, win.top, win.left + win.width, win.top + win.height]
@@ -699,7 +699,7 @@ class SmartMacroLogic:
             return True
         try:
             w = pywinctl.getActiveWindow()
-            if w and "Roblox" in w.title:
+            if w and is_roblox_title(w.title):
                 return True
         except Exception:
             return True
@@ -822,6 +822,8 @@ class SmartMacroLogic:
         """Before casting: if the picked spot still looks like the skill tree (a lag spike can leave the
         view stuck there), press ',' to get out first. Returns True when it pressed. Checked at most
         every 0.5 s; does nothing without a picked spot."""
+        if not self.anti_shake().get("enabled"):
+            return False                                 # Anti screen-shake off: never press ','
         if time.time() - getattr(self, "_tree_check", 0) < 0.5:
             return False
         self._tree_check = time.time()

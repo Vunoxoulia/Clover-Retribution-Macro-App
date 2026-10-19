@@ -78,7 +78,7 @@ class EventsPage:
         ctk.CTkButton(head, text="▶ Video", width=64, height=24, font=("Arial", 11, "bold"), fg_color="#343a40",
                       hover_color="#495057", text_color="#ff6b6b",
                       command=lambda: links.open_link("video_events")).pack(side="right")
-        ctk.CTkLabel(top, text="Posts the [Event]s from every Roblox window's chat to Discord. Keeps running in every macro.",
+        ctk.CTkLabel(top, text="Posts the [Event] / [Leak] lines from every Roblox window's chat to Discord. Keeps running in every macro.",
                      font=("Arial", 12), text_color="#ced4da", wraplength=420, justify="left").pack(anchor="w", padx=10)
         self.toggle = big_toggle(top, self.flip)
         self.toggle.pack(fill="x", padx=10, pady=(8, 4))
@@ -121,7 +121,7 @@ class EventsPage:
                                command=lambda v: (self.cfg.__setitem__("cooldown", int(v.split()[0]) * 60), self._save()))
         cd.set(f"{int(cfg.get('cooldown', 120)) // 60} min")
         cd.pack(side="left", padx=(4, 0))
-        only = ctk.CTkCheckBox(ck, text="Only [Event] lines (ignore player chat)", font=("Arial", 12),
+        only = ctk.CTkCheckBox(ck, text="Only [Event] / [Leak] lines (ignore player chat)", font=("Arial", 12),
                                command=lambda: (self.cfg.__setitem__("event_lines_only", bool(only.get())), self._save()))
         if cfg.get("event_lines_only", True):
             only.select()
@@ -655,7 +655,7 @@ class EventsPage:
                 elif not wins:
                     why = "no Roblox window found"
                 else:
-                    why = (f"read {total_lines} [Event] line(s) in {len(wins)} window(s), "
+                    why = (f"read {total_lines} [Event] / [Leak] line(s) in {len(wins)} window(s), "
                            f"none match your event list right now")
                 self._log(f"Nothing sent — {why}.")      # only shown here, not posted to Discord
                 return

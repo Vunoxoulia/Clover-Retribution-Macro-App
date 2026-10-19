@@ -306,11 +306,11 @@ class SpatialUtils:
         else:
             try:
                 
-                windows = pywinctl.getWindowsWithTitle("Roblox")
+                windows = [w for w in pywinctl.getAllWindows() if is_roblox_title(w.title)]
                 if windows:
                     
                     active = pywinctl.getActiveWindow()
-                    target = active if active and "Roblox" in active.title else windows[0]
+                    target = active if active and is_roblox_title(active.title) else windows[0]
                     
                     monitor = {
                         "top": target.top,
@@ -338,10 +338,10 @@ class SpatialUtils:
             }
         else:
             try:
-                windows = pywinctl.getWindowsWithTitle("Roblox")
+                windows = [w for w in pywinctl.getAllWindows() if is_roblox_title(w.title)]
                 if windows:
                     active = pywinctl.getActiveWindow()
-                    target = active if active and "Roblox" in active.title else windows[0]
+                    target = active if active and is_roblox_title(active.title) else windows[0]
                     monitor = {
                         "top": target.top,
                         "left": target.left,
@@ -606,7 +606,7 @@ def roblox_admin_problem():
             return ""                                     # the macro is admin too: keys get through
         import pywinctl
         for w in pywinctl.getAllWindows():
-            if "Roblox" in (w.title or ""):
+            if is_roblox_title(w.title):
                 pid = w.getPID() if hasattr(w, "getPID") else None
                 if pid and _process_elevated(pid):
                     return ("Roblox is running as ADMINISTRATOR, so Windows blocks the macro's key presses "

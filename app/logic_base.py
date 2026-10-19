@@ -169,8 +169,8 @@ class BaseLogic:
         try:
             active_window = pywinctl.getActiveWindow()
             if active_window:
-                title = active_window.title
-                return "Roblox" in title
+                from utils import is_roblox_title
+                return is_roblox_title(active_window.title)
         except Exception:
             pass
         return False
@@ -250,10 +250,12 @@ class BaseLogic:
     def get_roblox_window_region(self):
         try:
             import pywinctl
-            windows = pywinctl.getWindowsWithTitle("Roblox")
+            from utils import is_roblox_title
+            # the GAME window only (title exactly 'Roblox') - not Roblox Account Manager / a browser tab
+            windows = [w for w in pywinctl.getAllWindows() if is_roblox_title(w.title)]
             if windows:
                 active = pywinctl.getActiveWindow()
-                w = active if active and "Roblox" in active.title else windows[0]
+                w = active if active and is_roblox_title(active.title) else windows[0]
                 return [w.left, w.top, w.left + w.width, w.top + w.height]
         except Exception:
             pass
