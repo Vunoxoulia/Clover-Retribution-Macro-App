@@ -8,7 +8,7 @@ from logic_mining import MiningLogic
 from logic_fishing import FishingLogic
 from logic_umbral_abyss import UmbralAbyssLogic
 import keyboard
-from ui_style import big_toggle, style_toggle, save_while_typing, sound_picker
+from ui_style import big_toggle, style_toggle, save_while_typing, sound_picker, fast_scroll_frame, seconds_combo, help_box
 import os
 import sys
 import webbrowser
@@ -22,74 +22,67 @@ class MacroSelector:
         self.on_select = on_select
         self.current_version = current_version
         self.root.title("VunVun's Macro Hub")
-        self.root.geometry("1300x550")
+        self.root.geometry("820x520")
         
         self.updater = SpatialUpdater(current_version, "Vunoxoulia", "Clover-Retribution-Macro-App")
         self.setup_ui()
 
     def setup_ui(self):
         ctk.set_appearance_mode("dark")
-        
-        title = ctk.CTkLabel(self.root, text="Select a Macro", font=("Arial", 32, "bold"), text_color="#0d6efd")
-        title.pack(pady=(35, 5))
-        
-        version_lbl = ctk.CTkLabel(self.root, text=f"v{self.current_version}", font=("Arial", 12, "bold"), text_color="#e9ecef")
-        version_lbl.pack()
+        head = ctk.CTkFrame(self.root, fg_color="transparent")
+        head.pack(fill="x", padx=32, pady=(26, 4))
+        ctk.CTkLabel(head, text="Select a macro", font=("Arial", 26, "bold"), text_color="#0d6efd").pack(side="left")
+        ctk.CTkLabel(head, text=f"v{self.current_version}", font=("Arial", 12),
+                     text_color="#adb5bd").pack(side="left", padx=10, pady=(8, 0))
 
         self.cards_frame = ctk.CTkFrame(self.root, fg_color="transparent")
-        self.cards_frame.pack(expand=True, fill="both", padx=20, pady=20)
-
-        self.create_card("Library Macro", "Auto spell clover mastery.", "Launch", 
-                         lambda: self.on_select("Library Macro", LibraryLogic, 
-                                                tabs=["Main", "Settings", "Areas", "Clover Clicker", "Hotkeys", "Statistics"],
-                                                tutorial_url="video_library"), 0)
-
-        self.create_card("Mining Macro", "Mining away.", "Launch",
-                         lambda: self.on_select("Mining Macro", MiningLogic,
-                                                tabs=["Main", "Settings", "Hotkeys"],
-                                                tutorial_url="video_mining"), 1)
-
-        self.create_card("Fishing Macro", "Auto Fishy.", "Launch",
-                         lambda: self.on_select("Fishing Macro", FishingLogic,
-                                                tabs=["Main", "Fishing Settings", "Hotkeys"],
-                                                tutorial_url="video_fishing"), 2)
-
-        self.create_card("Skill Macro", "AFK skill rotation, skill\ncombos and auto item use.", "Launch",
-                         self.launch_smart, 3)
-
-        self.create_card("Event Notifier", "Posts server events from\nchat to Discord.", "Launch",
-                         self.launch_events, 4)
-
-        self.create_card("Umbral Abyss Stone", "Auto farm lesser devil\nJuggernaut.", "Coming Soon", None, 5)
+        self.cards_frame.pack(expand=True, fill="both", padx=20, pady=(6, 4))
+        from logic_events import WATCHER
+        cards = [
+            ("Library", "📚", "Auto spell clover mastery",
+             lambda: self.on_select("Library Macro", LibraryLogic,
+                                    tabs=["Main", "Settings", "Areas", "Clover Clicker", "Hotkeys", "Statistics"],
+                                    tutorial_url="video_library")),
+            ("Skill", "⚔", "AFK rotation, combos and item use", self.launch_smart),
+            ("Event Notifier", "🔔", "Posts chat events to Discord", self.launch_events),
+            ("Mining", "⛏", "Mining away",
+             lambda: self.on_select("Mining Macro", MiningLogic, tabs=["Main", "Settings", "Hotkeys"],
+                                    tutorial_url="video_mining")),
+            ("Fishing", "🎣", "Auto fishy",
+             lambda: self.on_select("Fishing Macro", FishingLogic, tabs=["Main", "Fishing Settings", "Hotkeys"],
+                                    tutorial_url="video_fishing")),
+            ("Umbral Abyss Stone", "🔥", "Auto farm lesser devil Juggernaut", None),
+        ]
+        for k, (title, icon, desc, cmd) in enumerate(cards):
+            badge = "on" if title == "Event Notifier" and WATCHER.running else None
+            self.create_card(title, icon, desc, cmd, k // 3, k % 3, badge)
 
         footer = ctk.CTkFrame(self.root, fg_color="transparent")
-        footer.pack(fill="x", side="bottom", pady=10, padx=20)
-        
-        update_btn = ctk.CTkButton(footer, text="Check for Updates", width=150, fg_color="#0d6efd", hover_color="#0b5ed7", command=self.check_updates)
-        update_btn.pack(side="left", padx=(0, 10))
-
-        patch_notes_btn = ctk.CTkButton(footer, text="Patch Notes", width=120, command=self.show_patch_notes, fg_color="#495057", hover_color="#343a40")
-        patch_notes_btn.pack(side="left")
+        footer.pack(fill="x", side="bottom", pady=(4, 14), padx=24)
+        small = dict(height=28, font=("Arial", 12), corner_radius=6)
+        ctk.CTkButton(footer, text="↻  Check for updates", width=150, fg_color="#343a40", hover_color="#495057",
+                      command=self.check_updates, **small).pack(side="left", padx=(0, 6))
+        ctk.CTkButton(footer, text="Patch notes", width=100, fg_color="#343a40", hover_color="#495057",
+                      command=self.show_patch_notes, **small).pack(side="left")
 
         links_frame = ctk.CTkFrame(footer, fg_color="transparent")
         links_frame.pack(side="right")
-
-        link_btn = dict(height=32, width=118, corner_radius=16, font=("Arial", 13, "bold"))
-        ctk.CTkButton(links_frame, text="▶  YouTube", fg_color="#c4302b", hover_color="#9e2622", **link_btn,
-                      command=lambda: links.open_link("youtube")).pack(side="left", padx=4)
-        ctk.CTkButton(links_frame, text="Discord", fg_color="#5865F2", hover_color="#4752c4", **link_btn,
-                      command=lambda: links.open_link("discord")).pack(side="left", padx=4)
+        link_btn = dict(small, width=96, fg_color="#343a40")
+        ctk.CTkButton(links_frame, text="▶  YouTube", hover_color="#9e2622", text_color="#ff6b6b", **link_btn,
+                      command=lambda: links.open_link("youtube")).pack(side="left", padx=3)
+        ctk.CTkButton(links_frame, text="Discord", hover_color="#4752c4", text_color="#8e96ff", **link_btn,
+                      command=lambda: links.open_link("discord")).pack(side="left", padx=3)
 
         # Donate: pick Robux (Roblox group store) or real money (Ko-fi)
         donate_menu = tk.Menu(self.root, tearoff=0, bg="#212529", fg="#e9ecef", activebackground="#0d6efd",
                               activeforeground="#ffffff", font=("Arial", 12))
         donate_menu.add_command(label="  Robux  (Roblox store)", command=lambda: links.open_link("donate_robux"))
         donate_menu.add_command(label="  Real money  (Ko-fi)", command=lambda: links.open_link("donate_money"))
-        donate_btn = ctk.CTkButton(links_frame, text=" Donate  ▾", fg_color="#ffc107", hover_color="#e0a800",
-                                   text_color="#212529", **link_btn)
+        donate_btn = ctk.CTkButton(links_frame, text="♥  Donate ▾", hover_color="#e0a800", text_color="#ffc107",
+                                   **link_btn)
         donate_btn.configure(command=lambda: donate_menu.tk_popup(donate_btn.winfo_rootx(),
                                                                   donate_btn.winfo_rooty() + donate_btn.winfo_height()))
-        donate_btn.pack(side="left", padx=4)
+        donate_btn.pack(side="left", padx=3)
 
         self.setup_layout_picker()
 
@@ -97,9 +90,9 @@ class MacroSelector:
         """Keyboard layout: the macros press keys by their QWERTY position (that's how Roblox reads them)."""
         from utils import LAYOUTS, set_layout, detect_layout
         settings = SpatialSettings()
-        row = ctk.CTkFrame(self.root, fg_color="#2b2f33", corner_radius=10)
-        row.pack(side="bottom", pady=(0, 18))
-        ctk.CTkLabel(row, text=" Keyboard layout", font=("Arial", 14, "bold")).pack(side="left", padx=(16, 10), pady=10)
+        row = ctk.CTkFrame(self.root, fg_color="transparent")
+        row.pack(side="bottom", fill="x", padx=32, pady=(0, 4))
+        ctk.CTkLabel(row, text="Keyboard", font=("Arial", 12), text_color="#adb5bd").pack(side="left", padx=(0, 8))
         hint = ctk.CTkLabel(row, text="", font=("Arial", 12), text_color="#adb5bd")
 
         def show_hint(choice):
@@ -116,9 +109,9 @@ class MacroSelector:
             show_hint(choice)
 
         current = settings.get("keyboard_layout", "Auto")
-        seg = ctk.CTkSegmentedButton(row, values=LAYOUTS, command=pick, font=("Arial", 13, "bold"), height=32)
+        seg = ctk.CTkSegmentedButton(row, values=LAYOUTS, command=pick, font=("Arial", 12), height=28)
         seg.set(current if current in LAYOUTS else "Auto")
-        seg.pack(side="left", padx=4, pady=10)
+        seg.pack(side="left", pady=4)
         hint.pack(side="left", padx=(10, 16))
         set_layout(seg.get())
         show_hint(seg.get())
@@ -155,17 +148,27 @@ class MacroSelector:
         url, version = self.updater.check_for_updates()
         if url: self.updater.install_update(url)
 
-    def create_card(self, title, description, button_text, command, column):
-        card = ctk.CTkFrame(self.cards_frame, width=195, height=290, corner_radius=12, fg_color="#212529", border_color="#343a40", border_width=1)
-        card.grid(row=0, column=column, padx=12, pady=10, sticky="nsew")
-        card.grid_propagate(False)
-        ctk.CTkLabel(card, text=title, font=("Arial", 18, "bold"), text_color="#ffffff").pack(pady=(20, 8))
-        ctk.CTkLabel(card, text=description, font=("Arial", 13), text_color="#e9ecef", justify="center").pack(pady=8, padx=10)
-        btn = ctk.CTkButton(card, text=button_text, command=command, font=("Arial", 13, "bold"), fg_color="#0d6efd", hover_color="#0b5ed7")
+    def create_card(self, title, icon, description, command, row, column, badge=None):
+        card = ctk.CTkFrame(self.cards_frame, corner_radius=10, fg_color="#212529", border_color="#343a40",
+                            border_width=1)
+        card.grid(row=row, column=column, padx=8, pady=8, sticky="nsew")
+        top = ctk.CTkFrame(card, fg_color="transparent")
+        top.pack(fill="x", padx=14, pady=(14, 6))
+        ctk.CTkLabel(top, text=icon, width=38, height=38, corner_radius=8, fg_color="#0b2a4a",
+                     text_color="#6ea8fe", font=("Segoe UI Emoji", 18)).pack(side="left")
+        ctk.CTkLabel(top, text=title, font=("Arial", 15, "bold"), text_color="#ffffff").pack(side="left", padx=10)
+        if badge:
+            ctk.CTkLabel(top, text=badge, font=("Arial", 11, "bold"), fg_color="#0f5132", text_color="#75b798",
+                         corner_radius=6, width=34, height=20).pack(side="right")
+        ctk.CTkLabel(card, text=description, font=("Arial", 12), text_color="#adb5bd", justify="left",
+                     anchor="w", wraplength=200).pack(fill="x", padx=14)
+        btn = ctk.CTkButton(card, text="Launch" if command else "Coming soon", command=command, height=30,
+                            font=("Arial", 13, "bold"), fg_color="#0d6efd", hover_color="#0b5ed7")
         if command is None:
-            btn.configure(state="disabled", fg_color="#343a40", text_color="#ced4da")
-        btn.pack(side="bottom", pady=20)
-        self.cards_frame.grid_columnconfigure(column, weight=1)
+            btn.configure(state="disabled", fg_color="#343a40", text_color_disabled="#868e96")
+        btn.pack(side="bottom", fill="x", padx=14, pady=14)
+        self.cards_frame.grid_columnconfigure(column, weight=1, uniform="card")
+        self.cards_frame.grid_rowconfigure(row, weight=1, uniform="card")
 
 NAV_ICONS = {
     "Main": "", "Settings": "", "Areas": "", "Clover Clicker": "",
@@ -255,7 +258,7 @@ class SpatialGUI:
         if "Events" not in self.tabs_to_show:
             self.tabs_to_show.insert(self.tabs_to_show.index("OK Popup") + 1, "Events")
         self.DEFAULT_CLOVER_COLORS = {"gold": (255, 180, 51), "silver": (164, 178, 178), "bronze": (198, 62, 37)}
-        self.DEFAULT_CLOVER_TOLERANCES = {"gold": 20, "silver": 20, "bronze": 20}
+        self.DEFAULT_CLOVER_TOLERANCES = {"gold": 5, "silver": 5, "bronze": 5}
         self.root.protocol("WM_DELETE_WINDOW", self.exit_app)
         self.setup_ui()
         self.register_hotkeys()
@@ -280,6 +283,48 @@ class SpatialGUI:
         for name in self.tabs_to_show:
             if name in builders:
                 self.tabview.lazy(name, builders[name])
+        if self._is_library:
+            self.root.after(1500, self._ocr_check_on_open)
+
+    @property
+    def _is_library(self):
+        """This window runs the Library macro (not Mining / Fishing, which share this GUI)."""
+        from logic_library import LibraryLogic
+        return isinstance(self.logic, LibraryLogic)
+
+    def _num_combo(self, parent, key, values, current, minimum=0.0):
+        """A seconds box: pick from the list or type any number; saved as you type (not below `minimum`)."""
+        def save(v):
+            try:
+                self.settings.set(key, max(minimum, float(str(v).strip())))
+            except (TypeError, ValueError):
+                pass
+        return seconds_combo(parent, values, current, save)
+
+    def _ocr_check_on_open(self):
+        """Library opened: read the WHOLE screen (whatever is on it - this window, Roblox's buttons and
+        hotbar, anything) and show a few of the words it read, as proof text reading works on THIS PC,
+        screen capture included. Nothing readable on screen -> the built-in test word, then the popup."""
+        try:
+            region = [0, 0, self.root.winfo_screenwidth(), self.root.winfo_screenheight()]
+        except Exception:
+            return
+
+        def run():
+            from utils import SpatialUtils
+            if SpatialUtils.load_ocr():
+                ok, worded, lines = SpatialUtils.ocr_read_screen(self.logic.utils.capture_screen_bgr(region))
+                if ok:
+                    self.log(f"Text reading: OK - read {len(worded)} line(s) on screen, e.g. "
+                             + ", ".join(f"'{ln}'" for ln in worded[:3]))
+                    return
+                self.log(f"Text reading: not enough words on screen (read: "
+                         f"{', '.join(repr(ln) for ln in lines[:3]) or 'nothing'}) - trying the test word...")
+            if self._ocr_ok():                           # (almost) nothing on screen: the built-in test word
+                self.log("Text reading: OK (read the built-in test words 'Clover Training').")
+            else:
+                self.log("Text reading doesn't work - see the popup (Auto mode and Auto setup need it).")
+        threading.Thread(target=run, daemon=True).start()
 
     def setup_main_tab(self):
         tab = self.tabview.tab("Main")
@@ -313,7 +358,7 @@ class SpatialGUI:
                                text_color="#ced4da", cursor="hand2")
         ok_hint.pack(pady=(0, 8))
         ok_hint.bind("<Button-1>", lambda e: self.tabview.set("OK Popup"))
-        for key, text in (("force_roblox_focus", "Keep Roblox in focus (brings the game back to the front if it loses focus)"),
+        for key, text in (("force_roblox_focus", "Keep Roblox in focus (brings it back to the front)"),
                           ("show_action_badge", "Show what the macro is doing on top of the game")):
             var = ctk.BooleanVar(value=bool(self.settings.get(key, True)))
             ctk.CTkCheckBox(tab, text=text, variable=var, font=("Arial", 12),
@@ -355,17 +400,16 @@ class SpatialGUI:
                                            command=lambda: self.settings.set("mining_checks", bool(self.checks_switch.get())))
         if self.settings.get("mining_checks", False): self.checks_switch.select()
         self.checks_switch.pack(side="left")
-        ctk.CTkLabel(row, text="Off (default) = just follow the recorded path and press E.\n"
-                               "On = also line up on the start spot, checkpoints and ores.", font=("Arial", 12), text_color="#ced4da", wraplength=330,
-                     justify="left").pack(side="left", padx=8)
+        help_box(mc, "Off (default) = just follow the recorded path and press E.\n"
+                     "On = also line up on the start spot, checkpoints and ores.", self.checks_switch)
 
 
         # Recorded path per ore
         head = ctk.CTkFrame(tab, fg_color="transparent"); head.pack(fill="x", padx=15, pady=(6, 0))
-        ctk.CTkLabel(head, text="Recorded Path", font=("Arial", 14, "bold")).pack(side="left")
-        ctk.CTkLabel(tab, text="Each ore shows the keys you held to walk there (edit the hold time if you need to) "
-                               "and how long to mine.", font=("Arial", 12), text_color="#ced4da",
-                     justify="left", wraplength=460).pack(fill="x", padx=15, pady=(0, 4))
+        t = ctk.CTkLabel(head, text="Recorded Path", font=("Arial", 14, "bold"))
+        t.pack(side="left")
+        help_box(tab, "Each ore shows the keys you held to walk there (edit the hold time if you need to) "
+                      "and how long to mine.", t)
         self.route_panel = ctk.CTkScrollableFrame(tab, fg_color="#1a1d20", corner_radius=8)
         self.route_panel.pack(fill="both", expand=True, padx=15, pady=(0, 8))
         self.route_expanded = {}
@@ -376,8 +420,10 @@ class SpatialGUI:
         rc = ctk.CTkFrame(tab, fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
         rc.pack(fill="x", padx=15, pady=(8, 4))
         row = ctk.CTkFrame(rc, fg_color="transparent"); row.pack(fill="x", padx=6, pady=(6, 2))
-        ctk.CTkLabel(row, text="Route:", font=("Arial", 13, "bold")).pack(side="left", padx=(0, 6))
-        self.route_menu = ctk.CTkOptionMenu(row, values=["(none)"], width=170, command=self._select_route)
+        route_lbl = ctk.CTkLabel(row, text="Route", font=("Arial", 13, "bold"))
+        route_lbl.pack(side="left", padx=(0, 6))
+        help_box(rc, tip, route_lbl)
+        self.route_menu = ctk.CTkOptionMenu(row, values=["(none)"], width=150, command=self._select_route)
         self.route_menu.pack(side="left")
         ctk.CTkButton(row, text="New", width=50, command=self._new_route, **btn).pack(side="left", padx=(6, 2))
         ctk.CTkButton(row, text="Rename", width=64, command=self._rename_route, **btn).pack(side="left", padx=2)
@@ -389,23 +435,32 @@ class SpatialGUI:
         ctk.CTkButton(row, text=test2_text, width=110, command=lambda: self._run_test(test2_fn), **btn).pack(side="right")
         if test1_text:
             ctk.CTkButton(row, text=test1_text, width=136, command=lambda: self._run_test(test1_fn), **btn).pack(side="right", padx=4)
-        ctk.CTkLabel(rc, text=tip, font=("Arial", 12), text_color="#ced4da", justify="left",
-                     wraplength=410).pack(fill="x", padx=8, pady=(0, 6))
+        ctk.CTkFrame(rc, fg_color="transparent", height=2).pack()
 
     # ================= Library =================
     def setup_library_settings(self, tab):
+        fa = self._full_card = ctk.CTkFrame(tab, fg_color="#212529", border_color="#0d6efd", border_width=1,
+                                            corner_radius=8)
+        fa.pack(fill="x", padx=15, pady=(8, 4))
+        t = ctk.CTkLabel(fa, text="Full Auto Setup", font=("Arial", 14, "bold"), text_color="#0d6efd")
+        t.pack(anchor="w", padx=8, pady=(6, 0))
+        help_box(fa, "Record or pick your Route below first, and choose Auto or Image in Wisp dialogue. Then stand "
+                              "at the desk and press the button: it finds your hotbar, walks to the wisp, reads every "
+                              "move (Image: also takes each button's picture), sets the dialogue, catches "
+                              "the minigame and plays the first one. You only choose which moves to train at the end.", t)
+        ctk.CTkButton(fa, text="Start Full Auto Setup", height=32, font=("Arial", 13, "bold"), fg_color="#198754",
+                      hover_color="#157347", command=self.full_auto_setup).pack(fill="x", padx=8, pady=(6, 8))
         self._route_card(tab, "Dialogue (F1)", self.logic.test_detection,
                          "Test Path (F3)", self.logic.test_path,
                          f"At the desk: {self.logic.rec_key()} → walk to the wisp (jumps and E are recorded too) → {self.logic.rec_key()}.")
         mc = self._moves_card = ctk.CTkFrame(tab, fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
         mc.pack(fill="x", padx=15, pady=4)
-        ctk.CTkLabel(mc, text="Moves to train", font=("Arial", 13, "bold")).pack(anchor="w", padx=8, pady=(6, 0))
+        t = ctk.CTkLabel(mc, text="Moves to train", font=("Arial", 13, "bold"))
+        t.pack(anchor="w", padx=8, pady=(6, 4))
         ctk.CTkButton(mc, text="Auto setup", width=110, height=24, font=("Arial", 11, "bold"),
                       fg_color="#0d6efd", hover_color="#0b5ed7",
                       command=self.auto_setup_moves).place(relx=1.0, x=-10, y=6, anchor="ne")
-        self._moves_desc = ctk.CTkLabel(mc, text="", font=("Arial", 12), text_color="#ced4da",
-                                        justify="left", wraplength=410)
-        self._moves_desc.pack(fill="x", padx=8, pady=(0, 4))
+        self._moves_desc = help_box(mc, "", t)
         from logic_library import MAX_MOVES
         flags = self.logic.train_flags()
         names = self.logic.move_names()
@@ -505,6 +560,111 @@ class SpatialGUI:
         finally:
             self.root.after(0, self.root.deiconify)
 
+    def full_auto_setup(self):
+        """One button: everything but the route. Runs in the background, F6 / Stop cancels it."""
+        from tkinter import messagebox
+        from logic_full_setup import FullSetup
+        if self.logic.running:
+            self.log("Stop the macro first (F6)."); return
+        if not messagebox.askokcancel(
+                "Full Auto Setup",
+                "Stand at the desk (where your route starts), with your moves on the hotbar.\n\n"
+                "Press OK, then click into Roblox. Don't touch the mouse / keyboard until it's done - "
+                "F6 stops it. It walks to the wisp and plays one minigame.", parent=self.root):
+            return
+        runner = FullSetup(self.logic)
+
+        def run():
+            self.logic.running = True
+            try:
+                res = self._out_of_the_way(runner.run)
+            except Exception as e:
+                res = {"ok": False, "step": "?", "why": str(e), "notes": runner.notes}
+            finally:
+                self.logic.running = False
+            self.root.after(0, lambda: self._full_setup_done(runner, res))
+        threading.Thread(target=run, daemon=True).start()
+
+    def _full_setup_done(self, runner, res):
+        from tkinter import messagebox
+        notes = "\n".join(res.get("notes") or [])
+        if not res.get("ok"):
+            runner.restore()
+            messagebox.showwarning(
+                "Full Auto Setup", f"Stopped at '{res.get('step')}': {res.get('why')}\n\n{notes}"
+                + (f"\n\nWhat the macro saw: {res['debug']}" if res.get("debug") else "")
+                + "\n\nYour old settings were put back.", parent=self.root)
+            self.reload_library_settings()
+            return
+        win = ctk.CTkToplevel(self.root)
+        win.title("Full Auto Setup - choose what to train")
+        win.geometry("560x" + str(260 + 36 * len(res["chosen"])))
+        win.transient(self.root); win.after(150, win.lift)
+        ctk.CTkLabel(win, text=notes, font=("Arial", 12), justify="left", anchor="w").pack(fill="x", padx=12, pady=(10, 6))
+        ctk.CTkLabel(win, text="Tick the moves to train (already maxed ones are unticked):",
+                     font=("Arial", 12, "bold")).pack(anchor="w", padx=12)
+        names = self.logic.move_names()
+        ticks = []
+        for c in res["chosen"]:
+            i = c["move"]
+            maxed = bool(res["gold"].get(i))
+            row = ctk.CTkFrame(win, fg_color="#212529", corner_radius=6); row.pack(fill="x", padx=12, pady=2)
+            var = ctk.BooleanVar(value=not maxed)
+            ctk.CTkCheckBox(row, text=f"Move {i + 1} · slot {c['slot']}", variable=var, width=130,
+                            font=("Arial", 12, "bold")).pack(side="left", padx=6, pady=5)
+            ctk.CTkLabel(row, text=f"{c['name']}  (looks for '{names[i]}')" + ("   - already maxed" if maxed else ""),
+                         font=("Arial", 12), text_color="#ffc107" if maxed else "#ced4da").pack(side="left", padx=6)
+            ticks.append((i, var))
+
+        def apply(start=False):
+            flags = self.logic._nine("train_moves", False)
+            for i, v in ticks:
+                flags[i] = bool(v.get())
+            self.settings.settings["capture_minigame_next"] = True   # the first minigame saves its snapshot
+            self.logic.start_at_wisp = bool(start)             # still at the wisp: don't walk the route first
+            self.settings.save()
+            win.destroy()
+            self.reload_library_settings()
+            self.log("Full Auto Setup applied." + (" Setting up the minigame detector here at the wisp..."
+                                                   if start else ""))
+            if start:
+                self.toggle_macro()
+
+        def cancel():
+            runner.restore()
+            win.destroy()
+            self.reload_library_settings()
+            self.log("Full Auto Setup cancelled - old settings put back.")
+        win.protocol("WM_DELETE_WINDOW", cancel)
+        btns = ctk.CTkFrame(win, fg_color="transparent"); btns.pack(pady=10)
+        ctk.CTkButton(btns, text="Apply", width=110, fg_color="#0d6efd", hover_color="#0b5ed7",
+                      command=apply).pack(side="left", padx=4)
+        ctk.CTkButton(btns, text="Apply + Set up minigame", width=170, fg_color="#198754", hover_color="#157347",
+                      command=lambda: apply(True)).pack(side="left", padx=4)
+        ctk.CTkButton(btns, text="Cancel", width=90, fg_color="#495057", hover_color="#343a40",
+                      command=cancel).pack(side="left", padx=4)
+
+    def _ocr_ok(self):
+        """True when the text reader works. If not (usually the Visual C++ Redistributable is missing), say
+        so plainly with the download link instead of reading everything as '(not readable)'."""
+        from utils import SpatialUtils
+        if SpatialUtils.ocr_works():
+            return True
+        why = SpatialUtils.ocr_error or ""
+
+        def show():
+            from tkinter import messagebox
+            if messagebox.askyesno(
+                    "Text reading isn't working",
+                    "The macro can't read any text on screen, so it can't read the wisp's moves.\n\n"
+                    + (why + "\n\n" if why else "") +
+                    "Fix: install the Microsoft Visual C++ Redistributable (x64), then restart the macro.\n\n"
+                    "Open the download page now?", parent=self.root):
+                import webbrowser
+                webbrowser.open("https://aka.ms/vs/17/release/vc_redist.x64.exe")
+        self.root.after(0, show)
+        return False
+
     def auto_setup_moves(self):
         """Auto setup: read the hotbar, then the wisp's move list, match them, and let the user confirm."""
         from tkinter import messagebox
@@ -525,8 +685,8 @@ class SpatialGUI:
             if not self.logic.wait_focus_for_test():
                 return
             hotbar = self.logic.read_hotbar_names(only_slots=set(ticked))
-            if hotbar:
-                self.logic._hotbar_seen = [t for _, t in hotbar if t]   # also used to recognise the move list
+            if hotbar is not None and not any(t for _, t in hotbar) and not self._ocr_ok():
+                return                                   # the text reader can't run: already explained
             if not hotbar:
                 self.root.after(0, lambda: messagebox.showwarning(
                     "Auto setup", "Couldn't find your hotbar. Click into Roblox with your skills on the hotbar, "
@@ -671,6 +831,13 @@ class SpatialGUI:
         if mc is None:
             return
         mode = self.logic.dialog_mode()
+        fa = getattr(self, "_full_card", None)
+        if fa is not None:                               # Full Auto Setup: Auto / Image only
+            if mode == "manual":
+                fa.pack_forget()
+            elif not fa.winfo_ismapped():
+                first = fa.master.pack_slaves()
+                fa.pack(fill="x", padx=15, pady=(8, 4), **({"before": first[0]} if first else {}))
         if mode == "manual":
             mc.pack_forget()
             return
@@ -701,24 +868,32 @@ class SpatialGUI:
             w.destroy()
         mode = self.logic.dialog_mode()
         head = ctk.CTkFrame(card, fg_color="transparent"); head.pack(fill="x", padx=8, pady=(6, 2))
-        ctk.CTkLabel(head, text="Wisp dialogue", font=("Arial", 13, "bold")).pack(side="left")
+        title = ctk.CTkLabel(head, text="Wisp dialogue", font=("Arial", 13, "bold"))
+        title.pack(side="left")
+        tips = [self.DIALOG_HINTS[mode]]
+        if mode == "manual":
+            tips.append("Ticked spots are trained in order: spot 1 until its gold clover shows (checked on its "
+                        "hotbar slot), then spot 2, then 3. Just clicks - no reading, no scrolling.")
+        if mode != "auto":
+            tips.append("Talk to the wisp first so the buttons are on screen, then capture / pick. "
+                        "Press Test Dialogue (F1) to check.")
+        help_box(card, "\n\n".join(tips), title)
+        tools = ctk.CTkFrame(card, fg_color="transparent"); tools.pack(fill="x", padx=8, pady=(0, 4))
         if mode != "manual":                             # manual never scrolls the move list
-            ctk.CTkButton(head, text="↕ Test scroll", width=100, height=24, font=("Arial", 11, "bold"), fg_color="#495057",
+            ctk.CTkButton(tools, text="↕ Test scroll", width=100, height=24, font=("Arial", 11, "bold"), fg_color="#495057",
                           hover_color="#343a40", command=lambda: self._run_test(self.logic.test_scroll)).pack(side="right", padx=6)
-        ctk.CTkButton(head, text=f"{'Hover spots' if mode == 'manual' else 'Find moves'} ({(self.settings.get('hotkeys', {}).get('test_find') or 'f4').upper()})",
+        ctk.CTkButton(tools, text=f"{'Hover spots' if mode == 'manual' else 'Find moves'} ({(self.settings.get('hotkeys', {}).get('test_find') or 'f4').upper()})",
                       width=130, height=24, font=("Arial", 11, "bold"),
                       fg_color="#0d6efd", hover_color="#0b5ed7",
                       command=self.test_find_moves).pack(side="right")
-        ctk.CTkButton(head, text=f"Full test ({(self.settings.get('hotkeys', {}).get('test_full') or 'f5').upper()})",
-                      width=110, height=24, font=("Arial", 11, "bold"),
+        ctk.CTkButton(tools, text=f"Full test ({(self.settings.get('hotkeys', {}).get('test_full') or 'f5').upper()})",
+                      width=125, height=24, font=("Arial", 11, "bold"),
                       fg_color="#198754", hover_color="#157347",
                       command=lambda: self.test_find_moves(walk=True)).pack(side="right", padx=6)
         seg = ctk.CTkSegmentedButton(card, values=["Auto", "Image", "Manual"], font=("Arial", 12, "bold"),
                                      command=lambda v: (self.settings.set("dialog_mode", v.lower()), self.build_dialog_card()))
         seg.set(mode.capitalize())
         seg.pack(fill="x", padx=8, pady=2)
-        ctk.CTkLabel(card, text=self.DIALOG_HINTS[mode], font=("Arial", 12), text_color="#ced4da",
-                     justify="left", wraplength=410).pack(fill="x", padx=8, pady=(2, 4))
         if mode == "auto":
             ctk.CTkLabel(card, text="", height=2).pack()
             return
@@ -766,51 +941,24 @@ class SpatialGUI:
                 sel.set(str(mm[i].get("slot") or i + 1))
                 sel.pack(side="right")
                 ctk.CTkLabel(row, text="slot", font=("Arial", 12)).pack(side="right", padx=(6, 3))
-            ctk.CTkLabel(card, text="Ticked spots are trained in order: spot 1 until its gold clover shows (checked on "
-                                    "its hotbar slot), then spot 2, then 3. Just clicks - no reading, no scrolling.",
-                         font=("Arial", 12), text_color="#adb5bd", justify="left", wraplength=410).pack(fill="x", padx=8, pady=(2, 2))
             row = ctk.CTkFrame(card, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(4, 2))
             ctk.CTkLabel(row, text="Wait before each click (s)", font=("Arial", 12)).pack(side="left")
-            om = ctk.CTkOptionMenu(row, values=["1", "1.5", "2", "3"], width=70, height=26,
-                                   command=lambda v: self.settings.set("dialog_wait", float(v)))
-            om.set(f"{self.settings.get('dialog_wait', 1.5):g}")
-            om.pack(side="left", padx=6)
+            self._num_combo(row, "dialog_wait", ["0.5", "1", "1.5", "2", "3", "5"],
+                            self.settings.get("dialog_wait", 1.5)).pack(side="left", padx=6)
         if mode != "manual":
             row = ctk.CTkFrame(card, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(4, 2))
             ctk.CTkLabel(row, text="Wait after Clover Training (s)", font=("Arial", 12)).pack(side="left")
-
-            def set_after(v=None):
-                try:
-                    self.settings.set("after_training_wait", max(0.0, float((v if v is not None else cb.get()).strip())))
-                except (TypeError, ValueError):
-                    pass
-            cb = ctk.CTkComboBox(row, values=["0.5", "1", "1.5", "2", "3"], width=70, height=26, command=set_after)
-            cb.set(f"{self.logic.after_training_wait():g}")
-            cb._entry.bind("<FocusOut>", lambda e: set_after())
-            cb._entry.bind("<Return>", lambda e: set_after())
-            save_while_typing(cb._entry, set_after)
-            cb.pack(side="left", padx=6)
+            self._num_combo(row, "after_training_wait", ["0.5", "1", "1.5", "2", "3", "5"],
+                            self.logic.after_training_wait()).pack(side="left", padx=6)
             ctk.CTkLabel(row, text="before reading the move list", font=("Arial", 11),
                          text_color="#adb5bd").pack(side="left")
         row = ctk.CTkFrame(card, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(2, 2))
         ctk.CTkLabel(row, text="Wait for the minigame up to (s)", font=("Arial", 12)).pack(side="left")
-
-        def set_mg(v=None):
-            try:
-                self.settings.set("minigame_start_wait", max(5.0, float((v if v is not None else mg.get()).strip())))
-            except (TypeError, ValueError):
-                pass
-        mg = ctk.CTkComboBox(row, values=["15", "20", "30", "45", "60"], width=70, height=26, command=set_mg)
-        mg.set(f"{self.logic.minigame_start_wait():g}")
-        mg._entry.bind("<FocusOut>", lambda e: set_mg())
-        mg._entry.bind("<Return>", lambda e: set_mg())
-        save_while_typing(mg._entry, set_mg)
-        mg.pack(side="left", padx=6)
+        self._num_combo(row, "minigame_start_wait", ["15", "20", "30", "45", "60"],
+                        self.logic.minigame_start_wait(), minimum=5.0).pack(side="left", padx=6)
         ctk.CTkLabel(row, text="it must SEE it start before it can end", font=("Arial", 11),
                      text_color="#adb5bd").pack(side="left")
-        ctk.CTkLabel(card, text="Talk to the wisp first so the buttons are on screen, then capture / pick. "
-                                "Press Test Dialogue (F1) to check.", font=("Arial", 12), text_color="#ced4da",
-                     justify="left", wraplength=410).pack(fill="x", padx=8, pady=(2, 6))
+        ctk.CTkFrame(card, fg_color="transparent", height=4).pack()
 
     def capture_dialog_button(self, key):
         self._hide_for_pick()
@@ -1014,22 +1162,21 @@ class SpatialGUI:
         card.pack(fill="x", padx=16, pady=5)
         head = ctk.CTkFrame(card, fg_color="transparent")
         head.pack(fill="x", padx=10, pady=(8, 0))
-        ctk.CTkLabel(head, text=f"{step}. {title}", font=("Arial", 13, "bold"), text_color="#f8f9fa").pack(side="left")
+        t = ctk.CTkLabel(head, text=f"{step}. {title}", font=("Arial", 13, "bold"), text_color="#f8f9fa")
+        t.pack(side="left")
         status = ctk.CTkLabel(head, text="", font=("Arial", 11, "bold"))
         status.pack(side="right")
-        ctk.CTkLabel(card, text=desc, font=("Arial", 12), text_color="#ced4da", justify="left",
-                     anchor="w", wraplength=420).pack(fill="x", padx=10)
+        help_box(card, desc, t)
         row = ctk.CTkFrame(card, fg_color="transparent")
         row.pack(fill="x", padx=10, pady=(4, 8))
         return status, row
 
     def setup_ok_tab(self):
         tab = self.tabview.tab("OK Popup")
-        ctk.CTkLabel(tab, text="OK Popup Detection", font=("Arial", 18, "bold"), text_color="#0d6efd").pack(pady=(12, 0))
-        ctk.CTkLabel(tab, text="Shared by every macro, so you only set it up once.\n"
-                          "OK popups are always clicked while a macro runs. Always Click OK also clicks them "
-                          "when no macro is running.", font=("Arial", 12), wraplength=460,
-                     text_color="#ced4da").pack(pady=(0, 6))
+        t = ctk.CTkLabel(tab, text="OK Popup Detection", font=("Arial", 18, "bold"), text_color="#0d6efd")
+        t.pack(pady=(12, 8))
+        help_box(tab, "Shared by every macro, so you only set it up once. OK popups are always clicked while a "
+                      "macro runs. Always Click OK also clicks them when no macro is running.", t)
         if not hasattr(self, "_always_ok_on"):
             self._always_ok_on = False
         self._ok_toggles = getattr(self, "_ok_toggles", [])
@@ -1145,15 +1292,10 @@ class SpatialGUI:
             self.setup_mining_settings(tab)
             return
 
-        sf = ctk.CTkScrollableFrame(tab, fg_color="transparent")
-        sf.pack(fill="both", expand=True)
-        sb_canvas = getattr(getattr(sf, "_scrollbar", None), "_canvas", None)
-        if sb_canvas is not None:
-            sb_canvas.update_idletasks = lambda: None     # same speed-up as the Skill Macro pages
-        self.setup_library_settings(sf)
+        self.setup_library_settings(fast_scroll_frame(tab))
 
     def setup_areas_tab(self):
-        tab = self.tabview.tab("Areas")
+        tab = fast_scroll_frame(self.tabview.tab("Areas"))   # scroll, don't squish
 
         self.gold_card = ctk.CTkFrame(tab, fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
         self.gold_card.pack(fill="x", padx=15, pady=(10, 4))
@@ -1171,10 +1313,9 @@ class SpatialGUI:
         if self.settings.get("hide_chat_in_minigame"):
             sw.select()
         sw.pack(side="left")
-        ctk.CTkLabel(hc, text="The chat's white Here / Global / Friends tabs look like silver clovers. Pick the chat "
-                              "button at the top of Roblox: it's clicked to close chat when a minigame starts and "
-                              "again to open it after.", font=("Arial", 12), text_color="#ced4da", justify="left",
-                     wraplength=420).pack(fill="x", padx=8)
+        help_box(hc, "The chat's white Here / Global / Friends tabs look like silver clovers. Pick the chat "
+                     "button at the top of Roblox: it's clicked to close chat when a minigame starts and "
+                     "again to open it after.", sw)
         row = ctk.CTkFrame(hc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(4, 8))
         ctk.CTkButton(row, text="Pick chat button", width=150, height=28, fg_color="#0d6efd", hover_color="#0b5ed7",
                       command=lambda: self.pick_point("chat_button")).pack(side="left")
@@ -1188,8 +1329,9 @@ class SpatialGUI:
         row = ctk.CTkFrame(cr, fg_color="transparent"); row.pack(fill="x", padx=8, pady=6)
         ctk.CTkButton(row, text="Clover Region", width=150, height=28, fg_color="#0d6efd", hover_color="#0b5ed7",
                       command=lambda: self.pick_region("score")).pack(side="left")
-        ctk.CTkLabel(row, text="optional — where clovers can appear",
-                     font=("Arial", 12), text_color="#ced4da").pack(side="left", padx=8)
+        self.clover_region_lbl = ctk.CTkLabel(cr, text="", font=("Arial", 12), justify="left", wraplength=420)
+        self.clover_region_lbl.pack(anchor="w", padx=8, pady=(0, 6))
+        self._show_clover_region()
         self.overlay_switch = ctk.CTkSwitch(tab, text="Show Scan Areas", command=self.toggle_overlays, font=("Arial", 12))
         self.overlay_switch.pack(pady=10)
 
@@ -1200,15 +1342,17 @@ class SpatialGUI:
             w.destroy()
         mode = self.logic.gold_mode()
         head = ctk.CTkFrame(gc, fg_color="transparent"); head.pack(fill="x", padx=8, pady=(6, 0))
-        ctk.CTkLabel(head, text="Gold Clover detection", font=("Arial", 14, "bold"), text_color="#0d6efd").pack(side="left")
+        t = ctk.CTkLabel(head, text="Gold Clover detection", font=("Arial", 14, "bold"), text_color="#0d6efd")
+        t.pack(side="left")
+        help_box(gc, "Drag a SMALL box over the spot where each move's 3rd clover appears." if mode == "manual" else
+                     "Auto finds your hotbar by itself (click into Roblox within 3 s). Or drag ONE box over it with "
+                     "Set hotbar: from the TOP of the clovers to the bottom of the icons, first icon to last.", t)
         seg = ctk.CTkSegmentedButton(gc, values=["Automatic", "Manual"], font=("Arial", 12, "bold"),
                                      command=lambda v: (self.settings.set("gold_mode", v.lower()), self.build_gold_card()))
         seg.set("Automatic" if mode == "auto" else "Manual")
         seg.pack(fill="x", padx=8, pady=4)
         self.gold_status = {}
         if mode == "manual":
-            ctk.CTkLabel(gc, text="Drag a SMALL box over the spot where each move's 3rd clover appears.",
-                         font=("Arial", 12), text_color="#ced4da", justify="left", wraplength=420).pack(fill="x", padx=8)
             regions = self.settings.get("regions", {})
             flags = self.logic.train_flags()
             for i in [k + 1 for k, on in enumerate(flags) if on]:
@@ -1224,9 +1368,6 @@ class SpatialGUI:
             ctk.CTkLabel(gc, text="", height=4).pack()
             return
 
-        ctk.CTkLabel(gc, text="Auto finds your hotbar by itself (click into Roblox within 3 s). Or drag ONE box over "
-                              "it with Set hotbar: from the TOP of the clovers to the bottom of the icons, first icon to last.",
-                     font=("Arial", 12), text_color="#ced4da", justify="left", wraplength=420).pack(fill="x", padx=8)
         hb = self.settings.settings.setdefault("gold_hotbar", {"region": [0, 0, 0, 0], "slots": 6})
         row = ctk.CTkFrame(gc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(6, 2))
         ctk.CTkButton(row, text="Auto", width=62, height=28, fg_color="#0d6efd", hover_color="#0b5ed7",
@@ -1267,23 +1408,6 @@ class SpatialGUI:
         if own:
             ctk.CTkButton(row, text="Built-in", width=70, height=26, fg_color="#495057", hover_color="#343a40",
                           command=lambda: (self.settings.set("gold_color", None), self.build_gold_card())).pack(side="left", padx=2)
-        row = ctk.CTkFrame(gc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=2)
-        ctk.CTkLabel(row, text="Match strictness", font=("Arial", 12, "bold")).pack(side="left")
-
-        def set_strict(v=None):
-            try:
-                val = float(str(v if v is not None else cb.get()).strip().rstrip("%"))
-                self.settings.set("gold_strict", min(100.0, max(50.0, val)))
-            except (TypeError, ValueError):
-                pass
-        cb = ctk.CTkComboBox(row, values=["90", "95", "97", "99"], width=70, height=26, command=set_strict)
-        cb.set(f"{self.logic.gold_strictness():g}")
-        cb._entry.bind("<FocusOut>", lambda e: set_strict())
-        cb._entry.bind("<Return>", lambda e: set_strict())
-        save_while_typing(cb._entry, set_strict)
-        cb.pack(side="left", padx=6)
-        ctk.CTkLabel(row, text="% alike to count as gold (higher = stricter)", font=("Arial", 11),
-                     text_color="#adb5bd").pack(side="left")
 
     def pick_gold_color(self):
         """Click a gold clover on screen to use its exact colour."""
@@ -1324,7 +1448,8 @@ class SpatialGUI:
         r, n = self.logic.gold_hotbar()
         if not r:
             self.log("Set the hotbar first."); return
-        boxes = [PersistentOverlay(*self.logic.third_clover_rect(k), color="yellow") for k in range(1, n + 1)]
+        # solid bright yellow (not see-through): easy to spot on the clovers
+        boxes = [PersistentOverlay(*self.logic.third_clover_rect(k), color="#ffff00", alpha=1.0) for k in range(1, n + 1)]
         self.root.after(3000, lambda: [b.destroy() for b in boxes])
 
     def test_gold(self):
@@ -1347,10 +1472,11 @@ class SpatialGUI:
         for w in card.winfo_children():
             w.destroy()
         head = ctk.CTkFrame(card, fg_color="transparent"); head.pack(fill="x", padx=8, pady=(6, 2))
-        ctk.CTkLabel(head, text="Minigame detector", font=("Arial", 14, "bold"), text_color="#0d6efd").pack(side="left")
-        ctk.CTkLabel(card, text="During a minigame, press Capture: the screen freezes — drag a box around something that "
-                                "ONLY shows in the minigame (its timer, score or title). Walking starts once it's gone.",
-                     font=("Arial", 12), text_color="#ced4da", justify="left", wraplength=420).pack(fill="x", padx=8, pady=(2, 4))
+        t = ctk.CTkLabel(head, text="Minigame detector", font=("Arial", 14, "bold"), text_color="#0d6efd")
+        t.pack(side="left")
+        help_box(card, "During a minigame, press Capture: the screen freezes - drag a box around something that ONLY "
+                       "shows in the minigame and never changes while it runs (a title or frame, not a timer or "
+                       "score). It needs a 99% match. Walking starts once it's gone.", t)
         row = ctk.CTkFrame(card, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(0, 4))
         ok = self.logic.has_minigame_snapshot()
         ctk.CTkButton(row, text="Re-capture" if ok else "Capture", width=120, height=28, fg_color="#0d6efd",
@@ -1361,14 +1487,7 @@ class SpatialGUI:
                       command=self.test_minigame).pack(side="right")
         self.minigame_test_lbl = ctk.CTkLabel(row, text="", font=("Arial", 12, "bold"))
         self.minigame_test_lbl.pack(side="right", padx=8)
-        row2 = ctk.CTkFrame(card, fg_color="transparent"); row2.pack(fill="x", padx=8, pady=(0, 8))
-        ctk.CTkLabel(row2, text="Match needed", font=("Arial", 12)).pack(side="left")
-        om = ctk.CTkOptionMenu(row2, values=["0.6", "0.7", "0.8", "0.9"], width=70, height=26,
-                               command=lambda v: self.settings.set("minigame_threshold", float(v)))
-        om.set(f"{self.settings.get('minigame_threshold', 0.8):g}")
-        om.pack(side="left", padx=6)
-        ctk.CTkLabel(row2, text="lower = finds it easier",
-                     font=("Arial", 12), text_color="#ced4da").pack(side="left")
+        ctk.CTkFrame(card, fg_color="transparent", height=4).pack()
 
     def capture_minigame(self):
         """Grab the screen NOW (while the minigame is up), then let the user box the marker on that frozen image."""
@@ -1389,13 +1508,17 @@ class SpatialGUI:
         if s is None:
             self.minigame_test_lbl.configure(text="capture first", text_color="#ea868f")
             return
-        on = s >= float(self.settings.get("minigame_threshold", 0.8))
+        on = s >= self.logic.MINIGAME_MATCH
         self.minigame_test_lbl.configure(text=f"{'IN minigame' if on else 'not in minigame'} ({s:.2f})",
                                          text_color="#75b798" if on else "#adb5bd")
 
     def setup_clover_tab(self):
         tab = self.tabview.tab("Clover Clicker")
-        ctk.CTkLabel(tab, text="Clover Target Colors & Tolerances", font=("Arial", 16, "bold"), text_color="#0d6efd").pack(pady=10)
+        t = ctk.CTkLabel(tab, text="Clover Target Colors & Tolerances", font=("Arial", 16, "bold"), text_color="#0d6efd")
+        t.pack(pady=10)
+        help_box(tab, "Tol (tolerance) is how far a colour may drift from the picked one.\n"
+                      "Lower (1-10): very strict, best for stable lighting. Higher (20-40): allows in-game lighting shifts.\n"
+                      "Clicking wrong spots? Lower it. Not clicking the clovers? Raise it.", t)
 
         self.color_previews, self.color_labels = {}, {}
         self.clover_tol_sliders, self.clover_tol_labels = {}, {}
@@ -1429,7 +1552,7 @@ class SpatialGUI:
 
             ctk.CTkLabel(f_tol, text="Tol:", width=30, font=("Arial", 12), text_color="#e9ecef").pack(side="left", padx=(60, 5))
 
-            tol_val = clover_tols.get(c, global_tol)
+            tol_val = clover_tols.get(c, self.DEFAULT_CLOVER_TOLERANCES[c])   # same default the clicker uses
             slider = ctk.CTkSlider(f_tol, from_=1, to=100, number_of_steps=99, height=16,
                                   command=lambda val, cl=c: self.update_clover_tolerance(cl, val))
             slider.set(tol_val)
@@ -1441,19 +1564,6 @@ class SpatialGUI:
             self.clover_tol_labels[c] = val_lbl
 
         ctk.CTkButton(tab, text="Reset to Defaults", fg_color="#dc3545", hover_color="#bb2d3b", font=("Arial", 12, "bold"), command=self.reset_clover_colors).pack(pady=10)
-
-        explanation_frame = ctk.CTkFrame(tab, fg_color="#032830", border_color="#087990", border_width=1, corner_radius=8)
-        explanation_frame.pack(pady=8, fill="x", padx=15)
-
-        explanation_text = (
-            "WHAT IS 'TOL'? (TOLERANCE)\n\n"
-            "This controls how much the color can vary from your 'Picked' color.\n"
-            "• Lower (1-10): Very strict. Best for stable lighting.\n"
-            "• Higher (20-40): More lenient for in-game lighting shifts.\n\n"
-            "Clicking everywhere (wrong spots)? LOWER the number.\n"
-            "Not clicking the clovers? RAISE the number."
-        )
-        ctk.CTkLabel(explanation_frame, text=explanation_text, font=("Arial", 12), text_color="#6edff6", justify="left", wraplength=360).pack(padx=12, pady=10, fill="x")
 
     def setup_fishing_settings_tab(self):
         tab = self.tabview.tab("Fishing Settings")
@@ -1605,6 +1715,8 @@ class SpatialGUI:
         """F6 / the Start-Stop button: start when stopped, stop (and reload settings) when running."""
         if self.logic.running:
             self.refresh_macro()
+        elif self._is_library and self.logic.dialog_mode() == "auto" and not self._ocr_ok():
+            self.log("Not started: text reading doesn't work (Auto mode needs it) - see the popup.")
         else:
             self.logic.start()
         self.root.after(0, self._sync_start_btn)
@@ -1721,8 +1833,19 @@ class SpatialGUI:
         self._hide_for_pick()
         Overlay(lambda x1, y1, x2, y2: self.save_region(key, x1, y1, x2, y2))
 
+    def _show_clover_region(self):
+        r = self.settings.get("regions", {}).get("score", [0, 0, 0, 0])
+        mine = r[2] > r[0] and r[3] > r[1]
+        if hasattr(self, "clover_region_lbl"):
+            self.clover_region_lbl.configure(
+                text=f"YOUR box is used {tuple(r)} - Full Auto Setup switches back to automatic" if mine else
+                "automatic: the whole play area between the black bars (Show Scan Areas draws it)",
+                text_color="#ffc107" if mine else "#75b798")
+
     def save_region(self, key, x1, y1, x2, y2):
         self.root.deiconify(); self.settings.settings["regions"][key] = [x1, y1, x2, y2]; self.settings.save(); self.check_calibration()
+        if key == "score":
+            self._show_clover_region()
         if key.startswith("gold_clover_") and getattr(self, "gold_status", {}).get(int(key[-1])):
             self.gold_status[int(key[-1])].configure(text="set", text_color="#75b798")
         if key == "ok_scan_area":
@@ -1783,7 +1906,7 @@ class SpatialGUI:
 
     def reset_clover_colors(self):
         default_colors = {k: list(v) for k, v in self.DEFAULT_CLOVER_COLORS.items()}
-        default_tols = {"gold": 20, "silver": 20, "bronze": 20}
+        default_tols = dict(self.DEFAULT_CLOVER_TOLERANCES)
         self.settings.set("clover_colors", default_colors)
         self.settings.set("clover_tolerances", default_tols)
         self.settings.set("color_tolerance", 25)
@@ -1820,40 +1943,59 @@ class SpatialGUI:
 
         card = ctk.CTkFrame(tab, fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
         card.pack(fill="x", padx=20, pady=10)
-
-        self.gold_label = ctk.CTkLabel(card, text=f"Total Gold Used: {self.settings.get('total_gold', 0)}", font=("Arial", 15, "bold"), text_color="#ffc107")
-        self.gold_label.pack(pady=12, padx=10)
+        self.gold_label = self._stat_row(card, "Total Gold Used", ("Arial", 15, "bold"), "#ffc107",
+                                         lambda: self.reset_stat(None))
 
         stats_card = ctk.CTkFrame(tab, fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
         stats_card.pack(fill="x", padx=20, pady=5)
+        self.move_stats_labels = [self._stat_row(stats_card, "", ("Arial", 13), "#ffffff",
+                                                 lambda i=i: self.reset_stat(i))
+                                  for i in range(len(self._move_stats()[0]))]
+        self.update_gold_display()
 
-        self.move_stats_labels = []
+        ctk.CTkButton(tab, text="Reset All", fg_color="#dc3545", hover_color="#bb2d3b", font=("Arial", 12, "bold"),
+                      command=self.reset_gold).pack(pady=20)
+
+    def _stat_row(self, parent, name, font, color, on_reset):
+        """One statistic: name and value on the left, its own Reset on the right. Returns the value label."""
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(fill="x", padx=12, pady=3)
+        ctk.CTkButton(row, text="Reset", width=60, height=24, font=("Arial", 11), fg_color="#495057",
+                      hover_color="#bb2d3b", command=on_reset).pack(side="right")
+        lbl = ctk.CTkLabel(row, text=name, font=font, text_color=color, anchor="w")
+        lbl.pack(side="left", fill="x", expand=True)
+        return lbl
+
+    def _move_stats(self):
         nine = getattr(self.logic, "_nine", None)
-        move_names = nine("move_names", "") if nine else self.settings.get("move_names", ["", "", ""])
-        move_stats = nine("move_stats", 0) if nine else self.settings.get("move_stats", [0, 0, 0])
-        for i in range(len(move_names)):
-            lbl_name = move_names[i] if move_names[i] else f"Move {i+1}"
-            lbl = ctk.CTkLabel(stats_card, text=f"{lbl_name}: {move_stats[i]}", font=("Arial", 13), text_color="#ffffff")
-            lbl.pack(pady=6, padx=10)
-            self.move_stats_labels.append(lbl)
-
-        ctk.CTkButton(tab, text="Reset Statistics", fg_color="#dc3545", hover_color="#bb2d3b", font=("Arial", 12, "bold"), command=self.reset_gold).pack(pady=25)
+        if nine:
+            return nine("move_names", ""), nine("move_stats", 0)
+        return self.settings.get("move_names", ["", "", ""]), self.settings.get("move_stats", [0, 0, 0])
 
     def update_gold_display(self):
         if not hasattr(self, 'gold_label'):
             return
-        total_gold = self.settings.get("total_gold", 0)
-        self.gold_label.configure(text=f"Total Gold Used: {total_gold}")
-        
-        move_names = self.settings.get("move_names", ["", "", ""])
-        move_stats = self.settings.get("move_stats", [0, 0, 0])
-        if hasattr(self, 'move_stats_labels'):
-            for i in range(min(len(move_names), len(self.move_stats_labels))):
-                lbl_name = move_names[i] if move_names[i] else f"Move {i+1}"
-                self.move_stats_labels[i].configure(text=f"{lbl_name}: {move_stats[i]}")
+        self.gold_label.configure(text=f"Total Gold Used: {self.settings.get('total_gold', 0)}")
+        names, stats = self._move_stats()
+        for i, lbl in enumerate(getattr(self, "move_stats_labels", [])[:len(names)]):
+            lbl.configure(text=f"{names[i] or f'Move {i + 1}'}: {stats[i]}")
+
+    def reset_stat(self, i):
+        """Reset one number: the total gold (i = None) or one move's."""
+        if i is None:
+            self.settings.set("total_gold", 0)
+            self.log("Total gold reset")
+        else:
+            names, stats = self._move_stats()
+            stats[i] = 0
+            self.settings.set("move_stats", stats)
+            self.log(f"{names[i] or f'Move {i + 1}'} statistic reset")
+        self.update_gold_display()
 
     def reset_gold(self):
-        self.settings.set("total_gold", 0); self.settings.set("move_stats", [0] * len(self.settings.get("move_stats") or [0, 0, 0])); self.log("Statistics Reset")
+        self.settings.set("total_gold", 0)
+        self.settings.set("move_stats", [0] * len(self.settings.get("move_stats") or [0, 0, 0]))
+        self.log("Statistics Reset")
         self.update_gold_display()
 
     def toggle_overlays(self):
@@ -1869,11 +2011,14 @@ class SpatialGUI:
         elif "Mining" in self.root.title():
             relevant_keys = []
         else:                  
-            relevant_keys = ["score", "gold_clover_1", "gold_clover_2", "gold_clover_3"]
+            relevant_keys = ["score", "gold_clover_1", "gold_clover_2", "gold_clover_3", "minigame_marker"]
 
         colors = ["red", "green", "blue", "yellow", "cyan", "magenta"]
         for i, key in enumerate(relevant_keys):
             rect = regions.get(key)
+            if key == "score" and not (rect and any(v != 0 for v in rect)) and hasattr(self.logic, "auto_clover_region"):
+                # automatic Clover Region: the last one found in a minigame, or between the bars on screen now
+                rect = self.logic.play_area()
             if rect and any(v != 0 for v in rect):
                 self.overlays[key] = PersistentOverlay(rect[0], rect[1], rect[2], rect[3], color=colors[i % len(colors)])
 

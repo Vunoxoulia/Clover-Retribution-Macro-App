@@ -10,7 +10,7 @@ from settings import SpatialSettings
 from overlay import Overlay, PointSelector, PersistentOverlay
 from logic_smart import SmartMacroLogic
 from gui import SidebarNav, NAV_ICONS
-from ui_style import save_while_typing
+from ui_style import save_while_typing, fast_scroll_frame, help_box
 
 NAV_ICONS.update({"Rotation": "", "Skill Combo": "", "Items": "", "Settings": ""})
 
@@ -112,14 +112,7 @@ class SmartMacroGUI:
     def _page(self, name):
         """The page's scroll area, created once (rebuilding it is slow and loses the scroll position)."""
         if name not in self._sfs:
-            sf = ctk.CTkScrollableFrame(self.nav.tab(name), fg_color="transparent")
-            sf.pack(fill="both", expand=True, padx=4, pady=4)
-            # customtkinter's scrollbar forces update_idletasks() on every redraw, which makes Tk re-run
-            # the whole page layout several times per click. The scrollbar doesn't need it.
-            sb_canvas = getattr(getattr(sf, "_scrollbar", None), "_canvas", None)
-            if sb_canvas is not None:
-                sb_canvas.update_idletasks = lambda: None
-            self._sfs[name] = sf
+            self._sfs[name] = fast_scroll_frame(self.nav.tab(name), padx=4, pady=4)
         sf = self._sfs[name]
         for w in sf.winfo_children():
             w.destroy()
@@ -311,11 +304,11 @@ class SmartMacroGUI:
         p = self._page("Rotation")
         top = ctk.CTkFrame(p, **CARD); top.pack(fill="x", pady=4)
         head = ctk.CTkFrame(top, fg_color="transparent"); head.pack(fill="x", padx=10, pady=(8, 0))
-        ctk.CTkLabel(head, text="AFK Skill Rotation", font=("Arial", 16, "bold"), text_color="#0d6efd").pack(side="left")
+        t = ctk.CTkLabel(head, text="AFK Skill Rotation", font=("Arial", 16, "bold"), text_color="#0d6efd")
+        t.pack(side="left")
         self._switch(head, "Enabled", "rotation").pack(side="left", padx=16)
         self._help_btn(top, "Rotation")
-        ctk.CTkLabel(top, text="Casts the highest READY move (top of the list first). READY = its icon matches the snapshot.",
-                     font=("Arial", 12), text_color="#ced4da").pack(anchor="w", padx=10)
+        help_box(top, "Casts the highest READY move (top of the list first). READY = its icon matches the snapshot.", t)
         row = ctk.CTkFrame(top, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(6, 8))
         ctk.CTkButton(row, text="Hotbar region", width=140, height=28, **BLUE,
                       command=lambda: self.pick_region(rot, "region")).pack(side="left", padx=3)
@@ -326,7 +319,7 @@ class SmartMacroGUI:
                       command=self.snapshot_all).pack(side="left", padx=(10, 3))
         ctk.CTkButton(row, text="Show", width=56, **BTN, command=self.flash_slots).pack(side="right", padx=3)
         ctk.CTkButton(row, text="Test", width=56, **BTN, command=self.test_rotation).pack(side="right", padx=3)
-        ctk.CTkButton(row, text="Find hotbar", width=130, height=28, **BLUE,
+        ctk.CTkButton(row, text="Auto find hotbar", width=150, height=28, **BLUE,
                       command=self.auto_tune).pack(side="right", padx=3)
 
         self.build_aim_panel(p)
@@ -508,7 +501,14 @@ class SmartMacroGUI:
         ctk.CTkLabel(row, text="Give up after", font=("Arial", 12)).pack(side="left", padx=(16, 2))
         self._pick(row, d, "max_wait", ["30", "60", "90", "120", "180", "300"], 60, float).pack(side="left")
         ctk.CTkLabel(row, text="s", font=("Arial", 12)).pack(side="left", padx=(2, 0))
-        self._med_steps = ctk.CTkFrame(body, fg_color="transparent"); self._med_steps.pack(fill="x", pady=(4, 0))
+        row = ctk.CTkFrame(body, fg_color="transparent"); row.pack(fill="x", pady=2)
+        stuck = ctk.CTkLabel(row, text="Stuck fix: same move", font=("Arial", 12))
+        stuck.pack(side="left", padx=(0, 4))
+        help_box(body, "When the same move casts this many times in a row, it presses the weapon / grimoire key, "
+                       "then the meditation key, and repeats until another move casts.", stuck)
+        self._pick(row, d, "stuck_after", ["off", "10", "15", "20", "30", "50"], 60, int).pack(side="left")
+        ctk.CTkLabel(row, text="times in a row", font=("Arial", 12), text_color="#adb5bd").pack(side="left", padx=4)
+        self._med_steps =ctk.CTkFrame(body, fg_color="transparent"); self._med_steps.pack(fill="x", pady=(4, 0))
         self._med_steps_ui()
 
     def _fill_med_bar_btn(self, btn):
@@ -583,9 +583,10 @@ class SmartMacroGUI:
         self._aim_mode = "move"
         card = ctk.CTkFrame(parent, **CARD); card.pack(fill="x", pady=4)
         head = ctk.CTkFrame(card, fg_color="transparent"); head.pack(fill="x", padx=10, pady=(6, 0))
-        ctk.CTkLabel(head, text="Mouse aim", font=("Arial", 13, "bold")).pack(side="left")
-        ctk.CTkLabel(head, text="optional — tick slots, then Pick spot. Order: move mouse → delay before → press → M2/M1 (if ticked) → delay after.",
-                     font=("Arial", 12), text_color="#ced4da").pack(side="left", padx=8)
+        t = ctk.CTkLabel(head, text="Mouse aim", font=("Arial", 13, "bold"))
+        t.pack(side="left")
+        help_box(card, "Optional. Tick slots, then Pick spot. Order: move mouse → delay before → press → M2/M1 (if ticked) "
+                       "→ delay after. Clear = use wherever the mouse is.", t)
         row = ctk.CTkFrame(card, fg_color="transparent"); row.pack(fill="x", padx=8, pady=4)
         self.aim_chips_box = ctk.CTkFrame(row, fg_color="transparent", width=1, height=1)
         self.aim_chips_box.pack(side="left")
@@ -1021,17 +1022,17 @@ class SmartMacroGUI:
         self.log(f"Would cast: {pick[1]['name'] or 'slot ' + str(pick[0])}" if pick else "Nothing ready.")
 
     def auto_tune(self):
-        """Find hotbar: find the hotbar in the Roblox window you click into and move the hotbar region onto
+        """Auto find hotbar: find the hotbar in the Roblox window you click into and move the hotbar region onto
         your FILLED slots. Nothing is cast and the snapshots aren't touched."""
         if self.logic.running:
-            self.log("Stop the macro first (F6), then Find hotbar.")
+            self.log("Stop the macro first (F6), then Auto find hotbar.")
             return
-        self.log("Find hotbar: click into the Roblox window you'll AFK in - it looks in 3 s.")
+        self.log("Auto find hotbar: click into the Roblox window you'll AFK in - it looks in 3 s.")
 
         def run():
             time.sleep(3)
             if not self.logic._focused():
-                self.log("Find hotbar cancelled: Roblox wasn't the focused window.")
+                self.log("Auto find hotbar cancelled: Roblox wasn't the focused window.")
                 return
             if not self.logic.auto_find_hotbar():
                 self.log("Couldn't find the hotbar in this Roblox window - set it with Hotbar region.")
@@ -1052,11 +1053,11 @@ class SmartMacroGUI:
         cc = self.cfg["combos"]
         p = self._page("Skill Combo")
         top = ctk.CTkFrame(p, **CARD); top.pack(fill="x", pady=4)
-        ctk.CTkLabel(top, text="Skill Combo", font=("Arial", 16, "bold"), text_color="#0d6efd").pack(anchor="w", padx=10, pady=(8, 0))
+        t = ctk.CTkLabel(top, text="Skill Combo", font=("Arial", 16, "bold"), text_color="#0d6efd")
+        t.pack(anchor="w", padx=10, pady=(8, 0))
         self._help_btn(top, "Skill Combo")
-        ctk.CTkLabel(top, text="You press the trigger key, the steps play top to bottom. Every press is followed by its "
-                               "wait, so skills have time to cast. 'Send trigger too' = your key still works normally.",
-                     font=("Arial", 12), text_color="#ced4da", wraplength=560, justify="left").pack(anchor="w", padx=10)
+        help_box(top, "You press the trigger key, the steps play top to bottom. Every press is followed by its "
+                      "wait, so skills have time to cast. 'Send trigger too' = your key still works normally.", t)
         row = ctk.CTkFrame(top, fg_color="transparent"); row.pack(fill="x", padx=8, pady=6)
         self._switch(row, "Enabled", "combos").pack(side="left", padx=4)
         ctk.CTkButton(row, text="+ Add Combo", width=110, height=28, **BLUE, command=self.add_combo).pack(side="left", padx=4)
@@ -1196,11 +1197,11 @@ class SmartMacroGUI:
         it = self.cfg["items"]
         p = self._page("Items")
         top = ctk.CTkFrame(p, **CARD); top.pack(fill="x", pady=4)
-        ctk.CTkLabel(top, text="Item Auto-Use (OCR) — optional", font=("Arial", 16, "bold"), text_color="#0d6efd").pack(anchor="w", padx=10, pady=(8, 0))
+        t = ctk.CTkLabel(top, text="Item Auto-Use (OCR) — optional", font=("Arial", 16, "bold"), text_color="#0d6efd")
+        t.pack(anchor="w", padx=10, pady=(8, 0))
         self._help_btn(top, "Items")
-        ctk.CTkLabel(top, text="Watches the pickup messages (like \"Obtained Copper!\"). When a name from your list shows up, "
-                               "its key is pressed once, then M1 to use it. Drag the scan area over where those messages appear.",
-                     font=("Arial", 12), text_color="#ced4da", wraplength=600, justify="left").pack(anchor="w", padx=10)
+        help_box(top, "Watches the pickup messages (like \"Obtained Copper!\"). When a name from your list shows up, "
+                      "its key is pressed once, then M1 to use it. Drag the scan area over where those messages appear.", t)
         row = ctk.CTkFrame(top, fg_color="transparent"); row.pack(fill="x", padx=8, pady=6)
         self._switch(row, "Enabled", "items").pack(side="left", padx=4)
         has_area = self.logic.items_region() is not None
@@ -1267,13 +1268,16 @@ class SmartMacroGUI:
     def build_settings(self):
         p = self._page("Settings")
         c = ctk.CTkFrame(p, **CARD); c.pack(fill="x", pady=4)
-        ctk.CTkLabel(c, text="General", font=("Arial", 16, "bold"), text_color="#0d6efd").pack(anchor="w", padx=10, pady=8)
+        t = ctk.CTkLabel(c, text="General", font=("Arial", 16, "bold"), text_color="#0d6efd")
+        t.pack(anchor="w", padx=10, pady=8)
         self._help_btn(c, "Settings")
+        help_box(c, "The hotkey starts every feature whose 'Enabled' switch is on. Rotation and Skill Combo "
+                    "can't both be on - enabling one turns the other off. Items works with either.", t)
         r = ctk.CTkFrame(c, fg_color="transparent"); r.pack(fill="x", padx=8, pady=4)
         ctk.CTkLabel(r, text="Start / Stop hotkey", font=("Arial", 12, "bold")).pack(side="left", padx=4)
         self._entry(r, self.cfg, "hotkey", 80, lambda v: v.lower(),
                     on_save=lambda: (self.register_hotkeys(), self.on_state_change(self.logic.running))).pack(side="left")
-        for key, text in (("force_roblox_focus", "Keep Roblox in focus (brings the game back to the front if it loses focus)"),
+        for key, text in (("force_roblox_focus", "Keep Roblox in focus (brings it back to the front)"),
                           ("show_action_badge", "Show what the macro is doing on top of the game")):
             var = ctk.BooleanVar(value=bool(self.settings.get(key, True)))
             ctk.CTkCheckBox(c, text=text, variable=var, font=("Arial", 12),
@@ -1288,9 +1292,7 @@ class SmartMacroGUI:
         self._pick(r2, self.cfg["rotation"], "threshold", ["0.75", "0.8", "0.85", "0.9", "0.95"], 70).pack(side="left")
         ctk.CTkLabel(r2, text="used by slots without their own 'Ready at'", font=("Arial", 12),
                      text_color="#ced4da").pack(side="left", padx=6)
-        ctk.CTkLabel(c, text="The hotkey starts every feature whose 'Enabled' switch is on. Rotation and Skill Combo "
-                             "can't both be on — enabling one turns the other off. Items works with either.",
-                     font=("Arial", 12), text_color="#ced4da").pack(anchor="w", padx=12, pady=(0, 10))
+        ctk.CTkFrame(c, fg_color="transparent", height=6).pack()
 
     def _help_btn(self, card, section):
         """Top-right corner of a page: the ▶ Video tutorial."""
@@ -1345,7 +1347,7 @@ class SmartMacroGUI:
             return
         self.logic.new_loadout(name)
         self._loadout_switched()
-        self.log(f"Loadout '{name}' created (empty) — press Find hotbar, then Snapshot all.")
+        self.log(f"Loadout '{name}' created (empty) — press Auto find hotbar, then Snapshot all.")
 
     def export_loadout(self):
         from tkinter import filedialog, messagebox
@@ -1376,7 +1378,7 @@ class SmartMacroGUI:
         self._loadout_switched()
         messagebox.showinfo("Import", f"Loadout '{name}' added and selected (your other loadouts are untouched)."
                                       "\n\nIts hotbar region and snapshots come from the other person's screen - "
-                                      "if yours differs, press Find hotbar, then Snapshot all.",
+                                      "if yours differs, press Auto find hotbar, then Snapshot all.",
                             parent=self.root)
 
     def rename_loadout(self):

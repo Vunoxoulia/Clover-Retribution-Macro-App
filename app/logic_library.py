@@ -37,10 +37,11 @@ class LibraryLogic(RouteNav):
     def __init__(self, app):
         super().__init__(app)
         self.current_move_idx = 0
+        self.start_at_wisp = False                        # Full Auto Setup: already at the wisp, skip the route
         self.click_history = []
         self.GOLD_CLOVER_COLOR = (250, 171, 33)
         self.DEFAULT_CLOVER_COLORS = {"gold": (255, 180, 51), "silver": (164, 178, 178), "bronze": (198, 62, 37)}
-        self.DEFAULT_CLOVER_TOLERANCES = {"gold": 20, "silver": 20, "bronze": 20}
+        self.DEFAULT_CLOVER_TOLERANCES = {"gold": 5, "silver": 5, "bronze": 5}
 
     # ================= Which moves to train =================
     def _nine(self, key, fill):
@@ -203,30 +204,24 @@ class LibraryLogic(RouteNav):
             return None
         return float((self.gold_mask(img) > 0).mean())
 
-    def gold_strictness(self):
-        """How alike a pixel must be to the gold colour, in % (default 95)."""
-        try:
-            return min(100.0, max(50.0, float(self.app.settings.get("gold_strict", 95))))
-        except (TypeError, ValueError):
-            return 95.0
+    GOLD_TOL = 8       # a picked gold may differ by this much per channel (edge / anti-aliased pixels)
+
+    def _color_mask(self, img_bgr, rgb):
+        """Pixels whose every channel is within GOLD_TOL of the RGB colour."""
+        c = np.array([int(v) for v in rgb[:3][::-1]])
+        return cv2.inRange(img_bgr, np.clip(c - self.GOLD_TOL, 0, 255).astype(np.uint8),
+                           np.clip(c + self.GOLD_TOL, 0, 255).astype(np.uint8))
 
     def gold_mask(self, img_bgr):
         """Gold pixels of a BGR picture.
-        - your own picked gold colour: every channel within (100 - strictness)% of it (95% = about +-13 of 255)
+        - your own picked gold colour: every channel within GOLD_TOL of it
         - built-in: the clover's strong gold only (saturation >= 160 - the move NAME text is a pale gold ~120),
-          and the strictness narrows that range further."""
+          at its strictest (the tested range narrowed a little)."""
         own = self.app.settings.get("gold_color")
-        strict = self.gold_strictness()
         if own:
-            tol = int(round((100.0 - strict) * 2.55))
-            r, g, b = (int(v) for v in own[:3])
-            lo = np.array([max(0, b - tol), max(0, g - tol), max(0, r - tol)], np.uint8)
-            hi = np.array([min(255, b + tol), min(255, g + tol), min(255, r + tol)], np.uint8)
-            return cv2.inRange(img_bgr, lo, hi)
-        k = (100.0 - strict) / 5.0                        # 95% = the tested built-in range; stricter = narrower
-        lo = (int(self.GOLD_HSV_LO[0] + (1 - min(k, 1)) * 3), int(self.GOLD_HSV_LO[1] + (1 - min(k, 1)) * 20),
-              int(self.GOLD_HSV_LO[2] + (1 - min(k, 1)) * 20))
-        hi = (int(self.GOLD_HSV_HI[0] - (1 - min(k, 1)) * 3), 255, 255)
+            return self._color_mask(img_bgr, own)
+        lo = (int(self.GOLD_HSV_LO[0]) + 3, int(self.GOLD_HSV_LO[1]) + 20, int(self.GOLD_HSV_LO[2]) + 20)
+        hi = (int(self.GOLD_HSV_HI[0]) - 3, 255, 255)
         return cv2.inRange(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV), lo, hi)
 
     def move_is_gold(self, i):
@@ -241,11 +236,7 @@ class LibraryLogic(RouteNav):
             return False
         if not self.app.settings.get("gold_color"):
             # manual boxes always compared with a colour: the built-in clover gold unless you picked your own
-            own = self.GOLD_CLOVER_COLOR
-            tol = int(round((100.0 - self.gold_strictness()) * 2.55))
-            r, g, b = own
-            mask = cv2.inRange(img, np.array([max(0, b - tol), max(0, g - tol), max(0, r - tol)], np.uint8),
-                               np.array([min(255, b + tol), min(255, g + tol), min(255, r + tol)], np.uint8))
+            mask = self._color_mask(img, self.GOLD_CLOVER_COLOR)
         else:
             mask = self.gold_mask(img)
         # a real patch of gold, not one stray pixel
@@ -397,6 +388,7 @@ class LibraryLogic(RouteNav):
 
     # ---------- Minigame detector: a snapshot of something only shown in the minigame ----------
     MINIGAME_TEMPLATE = os.path.join(DIALOG_TEMPLATE_DIR, "minigame.png")
+    MINIGAME_MATCH = 0.99     # the boxed spot must look the SAME as the snapshot (fixed, not a setting)
 
     def minigame_mode(self):
         return "snapshot"                         # the old black-bar check didn't work, so it was removed
@@ -426,6 +418,13 @@ class LibraryLogic(RouteNav):
             return None
         if now.shape[:2] != tpl.shape[:2]:
             now = cv2.resize(now, (tpl.shape[1], tpl.shape[0]))
+        return self.marker_match(now, tpl)
+
+    @staticmethod
+    def marker_match(now, tpl):
+        """0..1 how alike two same-size BGR pictures are (the minigame detector's maths)."""
+        if now is None or tpl is None or not now.size or now.shape != tpl.shape:
+            return 0.0
         a = cv2.cvtColor(now, cv2.COLOR_BGR2GRAY).astype(np.float32)
         b = cv2.cvtColor(tpl, cv2.COLOR_BGR2GRAY).astype(np.float32)
         if a.std() < 1 or b.std() < 1:                   # flat area: compare brightness only
@@ -433,6 +432,15 @@ class LibraryLogic(RouteNav):
         corr = float(cv2.matchTemplate(a, b, cv2.TM_CCOEFF_NORMED)[0][0])
         bright = 1.0 - min(1.0, abs(a.mean() - b.mean()) / max(b.mean(), 1.0))
         return max(0.0, min(corr, bright))
+
+    def nevermind_button(self, buttons=None):
+        """The 'Nevermind' button (x, y, text) among the dialogue buttons (read now if not given), or None."""
+        buttons = self.dialog_buttons() if buttons is None else buttons
+        return next((b for b in buttons if "never" in (b[2] or "").lower()), None)
+
+    def set_clover_region_auto(self):
+        """Clover Region back to automatic (no box of your own)."""
+        self.app.settings.settings.setdefault("regions", {})["score"] = [0, 0, 0, 0]
 
     # ---------- hide Roblox chat during the minigame ----------
     # Its white "Here / Global / Friends" tabs look like silver clovers to the clicker.
@@ -463,7 +471,7 @@ class LibraryLogic(RouteNav):
                 self.app.log("Minigame detector: no snapshot yet — Areas tab → Minigame detector → Capture.")
                 self._warned_no_mg = True
             return False
-        return s >= float(self.app.settings.get("minigame_threshold", 0.8))
+        return s >= self.MINIGAME_MATCH
 
     # ---------- Image / Manual dialogue modes ----------
     def dialog_mode(self):
@@ -505,9 +513,9 @@ class LibraryLogic(RouteNav):
         """Seconds to wait after clicking Clover Training before reading the move list (editable in
         Settings > Wisp dialogue). Reading too early sees a half-faded list and scrolls past the move."""
         try:
-            return max(0.0, float(self.app.settings.get("after_training_wait", 1.5)))
+            return max(0.0, float(self.app.settings.get("after_training_wait", 5)))
         except (TypeError, ValueError):
-            return 1.5
+            return 5.0
 
     def run_dialogue_fixed(self, move_idx):
         """Image / Manual mode: click Clover Training, then the move's button."""
@@ -819,6 +827,10 @@ class LibraryLogic(RouteNav):
         key, name = f"move_{move_idx + 1}", self.move_names()[move_idx]
         label = self.move_label(move_idx)
         has_pic = self.has_dialog_template(key)
+        # The list just opened: never scroll before it has been read. Wait (up to 5 s) until the move's
+        # picture shows or any button's words can be read - only then look / scroll as usual.
+        if not (has_pic and self.find_dialog_button(key)):
+            self.wait_move_list(timeout=5.0)
         for step in range(MAX_MOVES + 3):
             if not self.running:
                 return False
@@ -853,7 +865,7 @@ class LibraryLogic(RouteNav):
                     self.app.log(f"[2/2] Clicking button {move_idx + 1} = {label} (no name/picture set)")
                     self.human_click(moves[move_idx][0], moves[move_idx][1], duration=0.15)
                     return True
-            never = next((b for b in buttons if "never" in b[2].lower()), None)
+            never = self.nevermind_button(buttons)
             if never:
                 self.app.log(f"-> Reached the end of the list without finding {label}. "
                              f"Check its name / picture in Settings.")
@@ -1003,16 +1015,31 @@ class LibraryLogic(RouteNav):
                 continue
             self.app.log(f"Training {self.move_label(self.current_move_idx)}")
 
-            self.go_to_wisp()
-            if not self.running:
-                break
-            if not self.open_dialogue():
+            setup_round = self.start_at_wisp   # Full Auto Setup's minigame round only
+            if setup_round:
+                # Apply + Start after Full Auto Setup: already standing at the wisp with its move list open -
+                # close it (Nevermind) and open the dialogue fresh here instead of walking the route
+                self.start_at_wisp = False
+                never = self.nevermind_button()
+                if never:
+                    self.human_click(never[0], never[1], duration=0.15)
+                    time.sleep(1.0)
+                opened = self.reopen_dialogue()
+            else:
+                self.go_to_wisp()
+                if not self.running:
+                    break
+                opened = self.open_dialogue()
+            if not opened:
                 self.app.log("Couldn't open the wisp dialogue. Trying again from the start...")
                 time.sleep(1.0)
                 continue
             # The dialogue WAS found. If it closes before the move is picked (Nevermind, a misclick...),
             # we're still at the wisp: stay here, double jump + E until it's back - no walking again.
             done = False
+            # After Full Auto Setup: catch this minigame by itself and save its snapshot (screen before = now)
+            catch = bool(self.app.settings.get("capture_minigame_next"))
+            before = self.utils.capture_screen_bgr(list(self.get_roblox_window_region())) if catch else None
             for attempt in range(3):
                 if self.run_dialogue(self.current_move_idx):
                     done = True
@@ -1027,6 +1054,19 @@ class LibraryLogic(RouteNav):
             if not done:
                 time.sleep(1.0)
                 continue
+            if catch and before is not None:
+                self.app.log("Full Auto Setup: catching the minigame to save its snapshot...")
+                self.app.settings.set("capture_minigame_next", False)   # one try only: never spend another move on it
+                if self.capture_minigame(before):
+                    self.app.log("Minigame detector: snapshot saved by itself.")
+                elif self.has_minigame_snapshot():
+                    self.app.log("Minigame detector: couldn't catch it - keeping your old snapshot "
+                                 "(re-capture it in Areas if minigames aren't seen).")
+                else:
+                    self.app.log("Minigame detector: couldn't catch it and there's no snapshot - macro stopped "
+                                 "so no more moves are spent. Capture it once in Areas, then Start again.")
+                    self.running = False
+                    break
             played = self.perform_clover_scoring()
             if played is False and self.running:
                 # never saw it start: still at the wisp? pick the move again here instead of walking off
@@ -1034,10 +1074,16 @@ class LibraryLogic(RouteNav):
                     self.app.log("The dialogue is still open - picking the move again.")
                     if self.run_dialogue(self.current_move_idx):
                         played = self.perform_clover_scoring()
-                if played is False:
+                if played is False and not setup_round:
                     self.app.log("No minigame - starting the cycle again.")
                     time.sleep(1.0)
                     continue
+            if setup_round:
+                # just the setup - stop here, no training cycle
+                self.app.log("Full Auto Setup finished - press Start to train." if played is not False else
+                             "Full Auto Setup: no minigame seen - stopped (setup only, no cycle).")
+                self.running = False
+                break
             self.app.log("Cycle Complete")
             WATCHER.checkpoint("Library")   # minigame done: safe moment to check chat
             self.handle_ok_popup()
@@ -1065,7 +1111,7 @@ class LibraryLogic(RouteNav):
             self.app.log("No dialogue open.")
         s = self.minigame_score()
         self.app.log("Minigame: " + ("no snapshot captured yet (Areas tab)" if s is None else
-                     f"{'YES' if s >= float(self.app.settings.get('minigame_threshold', 0.8)) else 'no'} (match {s:.2f})"))
+                     f"{'YES' if s >= self.MINIGAME_MATCH else 'no'} (match {s:.2f})"))
 
     def test_scroll(self):
         """With the wisp's move list open: read the buttons, scroll ONE notch, read them again."""
@@ -1111,10 +1157,17 @@ class LibraryLogic(RouteNav):
                     out.append((n, ""))               # ticked but empty: say so in the confirmation
                 continue
             m = max(2, w // 14)
-            box = [reg[0] + x + m, reg[1] + y + m, reg[0] + x + w - m, reg[1] + y + side - m]
-            lines = self.utils.get_text_from_region(box, upscale=3)
-            lines.sort(key=lambda r: min(p[1] for p in r[0]))
-            out.append((n, " ".join(t for _, t, c in lines if c > 0.3).strip()))
+            # small windows draw the names tiny: read the slot enlarged with a wide border (like the dialogue's
+            # small buttons), fall back to the plain read
+            text = self._ocr_button(img[y + m:y + side - m, x + m:x + w - m])
+            if not self._norm_name(text):
+                box = [reg[0] + x + m, reg[1] + y + m, reg[0] + x + w - m, reg[1] + y + side - m]
+                lines = self.utils.get_text_from_region(box, upscale=3)
+                lines.sort(key=lambda r: min(p[1] for p in r[0]))
+                text = " ".join(t for _, t, c in lines if c > 0.3).strip()
+            out.append((n, text))
+        if any(t for _, t in out):
+            self._hotbar_seen = [t for _, t in out if t]     # also used to recognise the move list
         return out
 
     @staticmethod
@@ -1129,9 +1182,18 @@ class LibraryLogic(RouteNav):
         except Exception:
             return False
 
+    @staticmethod
+    def _button_like(pic):
+        """A dialogue button is a wide, mostly dark box (light text on dark fill)."""
+        if pic is None or not pic.size or pic.shape[1] < pic.shape[0] * 2:
+            return False
+        g = cv2.cvtColor(pic, cv2.COLOR_BGR2GRAY)
+        return float((g < 75).mean()) >= 0.35
+
     def scan_move_list(self, alive=lambda: True):
         """With the wisp's MOVE LIST open: read every button top to bottom, scrolling down until Nevermind.
         Returns [(name, picture)] in list order (picture = BGR crop of the button, for Image mode)."""
+        self._bad_pic_shot = False
         found, seen_names, still = [], set(), 0
         for _ in range(MAX_MOVES + 4):
             if not alive():
@@ -1156,6 +1218,14 @@ class LibraryLogic(RouteNav):
                 if self._has_word(text, self.TRAINING_WORDS) or self._has_word(text, self.NEVER_WORDS):
                     continue                             # first menu (Clover Training / Class Reset): not a move
                 pic = img[y:y + h, x:x + w].copy()
+                if not self._button_like(pic):
+                    # not a dark dialogue button (a piece of the game behind it): never save that as its picture
+                    if not self._bad_pic_shot:
+                        self._bad_pic_shot = True
+                        path = self.save_debug_shot("move_list_pictures")
+                        self.app.log(f"Move list: the button of '{text}' didn't look like a button - picture "
+                                     f"not saved. What the macro saw: {path}")
+                    pic = None
                 if any(self._same_picture(pic, p) for _, p in found):
                     continue                             # the same button again (list scrolled)
                 key = self._norm_name(text)
@@ -1469,8 +1539,8 @@ class LibraryLogic(RouteNav):
         clover_tols = settings.get("clover_tolerances", {})
         
         if all(v == 0 for v in region):
-            self.app.log("Test: Clover region not set!")
-            return
+            region = self.auto_clover_region()          # automatic: between the black bars
+            self.app.log("Test: using the automatic Clover Region (between the black bars).")
 
         self.app.log(f"Testing color detection in region: {region}")
         img = self.utils.capture_screen(region)
@@ -1498,6 +1568,141 @@ class LibraryLogic(RouteNav):
         if not found_any:
             self.app.log("Test: No clover colors found.")
 
+    # ---------- the minigame without a snapshot ----------
+    def _bar_patch(self, img, bars):
+        """A small pure-black patch inside a bar (the bars only exist in the minigame). Picked
+        away from the score text / Roblox buttons: the quietest 10x10 spot of the widest bar."""
+        H, W = img.shape[:2]
+        x1, y1, x2, y2 = bars
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        areas = [(y1, (0, 0, W, y1)), (H - y2, (0, y2, W, H)), (x1, (0, 0, x1, H)), (W - x2, (x2, 0, W, H))]
+        S = 10                                            # a 10x10 patch
+        for size, (ax1, ay1, ax2, ay2) in sorted(areas, reverse=True):
+            if size < S + 8:
+                continue
+            for fy in (0.5, 0.3, 0.7):
+                for fx in (0.75, 0.25, 0.9, 0.5, 0.1):         # the score text sits in the centre
+                    cx, cy = int(ax1 + (ax2 - ax1) * fx), int(ay1 + (ay2 - ay1) * fy)
+                    bx, by = max(0, cx - S // 2), max(0, cy - S // 2)
+                    patch = gray[by:by + S, bx:bx + S]
+                    if patch.size and int(patch.max()) < 20:      # pure black: no text / button there
+                        return bx, by, bx + S, by + S
+        return None
+
+    def capture_minigame(self, before, timeout=30):
+        """Wait for the minigame (black bars appear, or most of the view changes), then save a snapshot of a
+        part that only shows in the minigame: the biggest new thing near the top of the play area."""
+        l, t, r, b = self.get_roblox_window_region()
+        W, H = r - l, b - t
+        end, hits = time.time() + timeout, 0
+        small = before[::4, ::4]                          # the 'did it change' test needs no full resolution
+
+        def grab():                                       # the window now, or None (not captured / resized)
+            f = self.utils.capture_screen_bgr([l, t, r, b])
+            return f if f is not None and f.shape[:2] == before.shape[:2] else None
+        while self.running and time.time() < end:
+            frame = grab()
+            if frame is None:
+                time.sleep(0.3); continue
+            changed = float((cv2.absdiff(frame[::4, ::4], small).max(axis=2) > 40).mean())
+            hits = hits + 1 if (changed > 0.35 or self.black_bars(frame[::4, ::4])) else 0
+            if hits >= 3:
+                break
+            time.sleep(0.3)
+        else:
+            return False
+        time.sleep(1.0)                                   # let its UI finish appearing
+        frame = grab()
+        if frame is None:
+            return False
+        bars = self.black_bars(frame)
+        x1, _, x2, _ = bars if bars else (0, 0, W, H)
+        # colour difference (not just brightness: a gold timer on a beige floor is about as bright)
+        diff = (cv2.absdiff(frame, before).max(axis=2) > 40).astype(np.uint8) * 255
+        diff[:, :x1] = 0
+        diff[:, x2:] = 0
+        diff[int(H * 0.35):, :] = 0                      # timer / score / title sit at the top
+        diff = cv2.morphologyEx(diff, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8))
+        n, _, st, _ = cv2.connectedComponentsWithStats(diff)
+        cands = []
+        for i in range(1, n):
+            x, y, w, h, a = st[i]
+            if w >= W * 0.04 and h >= 12 and w <= W * 0.6 and h <= H * 0.25:
+                cands.append((a, (max(0, x - 4), max(0, y - 4), min(W, x + w + 4), min(H, y + h + 4))))
+        boxes = [b for _, b in sorted(cands, reverse=True)]
+        patch = self._bar_patch(frame, bars) if bars else None
+        if patch:                                         # first choice: pure black inside a bar (never changes)
+            boxes.insert(0, patch)
+        # The detector needs a 99% match, so keep only a part that stays EXACTLY the same while the minigame
+        # runs (a timer / score changes every second): look twice more and drop anything that changed.
+        later = []
+        for _ in range(2):
+            time.sleep(1.0)
+            f = grab()
+            if f is not None:
+                later.append(f)
+        for bx1, by1, bx2, by2 in (tuple(int(v) for v in bx) for bx in boxes):
+            crop = frame[by1:by2, bx1:bx2]
+            if all(self.marker_match(crop, f[by1:by2, bx1:bx2]) >= self.MINIGAME_MATCH for f in later):
+                return self.save_minigame_snapshot(crop.copy(), [l + bx1, t + by1, l + bx2, t + by2])
+        return False
+
+    @staticmethod
+    def black_bars(img):
+        """The play area between the minigame's pure-black bars - top/bottom AND/OR left/right - as
+        (x1, y1, x2, y2) in image coords, or None if there are no bars. From the middle outwards, the first
+        line (row / column) that is ~all black is a bar's edge; a bar must be 3%+ of the view thick."""
+        H, W = img.shape[:2]
+        black = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) < 20
+        rows, cols = black.mean(axis=1), black.mean(axis=0)
+
+        def edge(frac, start, step, stop, size):
+            need = max(3, int(size * 0.03))
+            k = start
+            while k != stop:
+                if frac[k] >= 0.95:
+                    far = k + step * need                     # the bar must go on for 'need' lines
+                    if 0 <= far - step < size and all(frac[i] >= 0.95 for i in range(k, far, step)):
+                        return k, True
+                k += step
+            return stop, False
+        y1, top = edge(rows, H // 2, -1, -1, H)
+        y2, bot = edge(rows, H // 2, 1, H, H)
+        x1, lft = edge(cols, W // 2, -1, -1, W)
+        x2, rgt = edge(cols, W // 2, 1, W, W)
+        if not (top or bot or lft or rgt):
+            return None
+        return (x1 + 1 if lft else 0, y1 + 1 if top else 0, x2 if rgt else W, y2 if bot else H)
+
+    PLAY_AREA = [0.0, 0.152, 1.0, 0.90]   # the minigame's view between its top / bottom black bars
+
+    def play_area(self):
+        """The whole minigame play area (between the black bars, full width) as a screen region - from the
+        last minigame seen, else where it usually is."""
+        l, t, r, b = self.get_roblox_window_region()
+        W, H = r - l, b - t
+        f = self.app.settings.get("play_area") or self.PLAY_AREA
+        m = 4                                                  # stay off the bar edges
+        return [l + int(W * f[0]) + m, t + int(H * f[1]) + m, l + int(W * f[2]) - m, t + int(H * f[3]) - m]
+
+    def auto_clover_region(self):
+        """Where clovers can appear, found by itself during the minigame: the play area between the black bars
+        (top/bottom or left/right). No bars seen -> the play area from the last minigame. Screen region."""
+        img = self.utils.capture_screen_bgr(list(self.get_roblox_window_region()))
+        bars = self.black_bars(img) if img is not None and img.size else None
+        if not bars:
+            self.app.log("Clover Region: no black bars seen - using the play area from the last minigame.")
+            return self.play_area()
+        H, W = img.shape[:2]
+        x1, y1, x2, y2 = bars
+        # remember WHERE the play area is (as parts of the window) for when no bars can be seen
+        area = [round(x1 / W, 3), round(y1 / H, 3), round(x2 / W, 3), round(y2 / H, 3)]
+        if area != self.app.settings.get("play_area"):
+            self.app.settings.set("play_area", area)
+        region = self.play_area()
+        self.app.log(f"Clover Region: found by itself between the black bars ({x2 - x1}x{y2 - y1} px).")
+        return region
+
     def minigame_start_wait(self):
         """How long to wait for the minigame to show up after picking a move (editable, default 30 s)."""
         try:
@@ -1517,11 +1722,7 @@ class LibraryLogic(RouteNav):
         session_stats = {"gold": 0, "silver": 0, "bronze": 0, "total_clicks": 0}
         self.minigame_running = True
         
-        if all(v == 0 for v in region):
-            # No Clover Region set: use the middle of the game view
-            l, t, r, b = self.get_roblox_window_region()
-            h = b - t
-            region = [l, t + int(h * 0.10), r, t + int(h * 0.90)]
+        auto_region = all(v == 0 for v in region)          # none picked: found by itself once the minigame shows
 
         # The minigame must be SEEN first (a few checks in a row, so a flash doesn't count) - only then can
         # 'it's gone' mean it ended. Until it has been seen, nothing is decided and nothing is clicked.
@@ -1536,6 +1737,8 @@ class LibraryLogic(RouteNav):
             if seen >= 3:
                 self.app.log("Minigame started.")
                 self.toggle_chat("hide")
+                if auto_region:
+                    region = self.auto_clover_region()
                 break
             if time.time() - start_wait > limit:
                 self.app.log(f"The minigame didn't start within {limit:g} s - the move probably wasn't picked.")

@@ -4,7 +4,7 @@ import sys
 import ctypes
 import os
 
-VERSION = "6.3.5"
+VERSION = "6.3.6"
 
 def get_resource_path(relative_path):
     
@@ -39,8 +39,6 @@ class SpatialApp:
 def main():
     import links
     links.refresh_async()             # newest links.txt from GitHub (videos, Discord, donate)
-    from utils import SpatialUtils
-    SpatialUtils.preload_ocr()        # load the text reader now, in the background, so Start doesn't freeze
 
     def warm_keyboard():
         # the key hook's first start builds Windows' key-name tables (~1 s); do it now, not when a macro opens
@@ -72,6 +70,10 @@ def main():
             print(f"Could not load icon: {e}")
 
     app = SpatialApp(root)
+    # load the text reader in the background once the menu is up (loading it earlier held the menu up ~1 s),
+    # so Start doesn't freeze later
+    from utils import SpatialUtils
+    root.after(300, SpatialUtils.preload_ocr)
     root.mainloop()
 
 if __name__ == "__main__":

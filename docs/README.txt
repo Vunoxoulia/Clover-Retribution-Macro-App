@@ -1,6 +1,13 @@
 HOW TO RUN SPATIAL MACRO
 ========================
 
+WHAT'S NEW IN V6.3.6
+====================
+- Library: Full Auto Setup now shows the Apply window right after reading the moves; the minigame detector is set up on the first Start after it (it picks the move, catches the minigame and saves its snapshot by itself, then plays it - only ONE try, so no moves are wasted; if it isn't caught and there's no older snapshot, the macro stops and asks you to capture it in Areas). 'Apply + Set up minigame' does it right there at the wisp (no walking the route) and then stops - it's only the setup, not a training cycle; press Start to train
+- Skill Macro meditation stuck fix: when the same move casts 20 times in a row (e.g. after an OK popup), it presses the weapon / grimoire key; still stuck after 20 more, the meditation key; and repeats until another move casts. Adjustable (or off) under Meditation -> Timing.
+- Library: the Clover Region is now automatic - each minigame it finds the play area between the black bars (no bars = the middle of the screen), so white shelves and UI at the edges are no longer clicked as silver clovers; set one yourself only to override it
+
+
 WHAT'S NEW IN V6.3.5
 ====================
 - Skill Macro: fixed ',' being pressed while Anti screen-shake is switched OFF (it happened when a spot was picked) - with it off, the macro never presses ','

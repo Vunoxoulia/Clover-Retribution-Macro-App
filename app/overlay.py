@@ -82,15 +82,15 @@ class Overlay(_FrozenScreen):
 
 
 class PersistentOverlay:
-    def __init__(self, x1, y1, x2, y2, color="red"):
+    def __init__(self, x1, y1, x2, y2, color="red", alpha=0.5):
         self.root = tk.Toplevel()
         self.root.overrideredirect(True)
-        self.root.attributes('-alpha', 0.5)
         self.root.attributes('-topmost', True)
 
         width = max(1, x2 - x1)
         height = max(1, y2 - y1)
         self.root.geometry(f"{width}x{height}+{x1}+{y1}")
+        self.root.attributes('-alpha', alpha)
         self.root.config(bg=color)
 
 

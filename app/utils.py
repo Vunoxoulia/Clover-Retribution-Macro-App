@@ -14,6 +14,32 @@ from pynput.mouse import Button, Controller as MouseController
 
 IS_WINDOWS = sys.platform.startswith('win')
 
+# cv2.imread / imwrite fail silently on Windows when the path has non-English letters (á, ñ, ü, Cyrillic...
+# in the user name or the folder the app sits in). Read / write the bytes ourselves so captures always save.
+_cv2_imread, _cv2_imwrite = cv2.imread, cv2.imwrite
+
+
+def _imread(path, flags=cv2.IMREAD_COLOR):
+    try:
+        data = np.fromfile(path, dtype=np.uint8)
+        return cv2.imdecode(data, flags) if data.size else None
+    except Exception:
+        return _cv2_imread(path, flags)
+
+
+def _imwrite(path, img, params=None):
+    try:
+        ok, buf = cv2.imencode(os.path.splitext(path)[1] or ".png", img, params or [])
+        if ok:
+            buf.tofile(path)
+        return bool(ok)
+    except Exception:
+        return _cv2_imwrite(path, img, params or [])
+
+
+if cv2.imread is _cv2_imread:
+    cv2.imread, cv2.imwrite = _imread, _imwrite
+
 if IS_WINDOWS:
     PUL = ctypes.POINTER(ctypes.c_ulong)
 
@@ -256,10 +282,52 @@ class SpatialUtils:
                     cls._shared_ocr = False
         return cls._shared_ocr
 
+    _ocr_tested = None
+
+    @classmethod
+    def ocr_works(cls):
+        """Starting isn't enough: really read a test word once ('Clover Training' drawn like a dialogue
+        button). True / False; the result is kept. ocr_error says why when it fails."""
+        if cls._ocr_tested is not None:
+            return cls._ocr_tested
+        reader = cls.load_ocr()
+        ok = False
+        if reader:
+            try:
+                img = np.full((60, 360, 3), 30, np.uint8)
+                cv2.putText(img, "Clover Training", (12, 42), cv2.FONT_HERSHEY_SIMPLEX, 1.1, (255, 255, 255), 2)
+                res, _ = reader(img)
+                text = " ".join(r[1] for r in (res or [])).lower()
+                ok = "clover" in text or "training" in text
+                if not ok:
+                    SpatialUtils.ocr_error = f"Text reading started but read the test words as '{text}'."
+            except Exception as e:
+                SpatialUtils.ocr_error = f"{OCR_HELP} (error: {e})"
+        cls._ocr_tested = ok
+        return ok
+
+    @classmethod
+    def ocr_read_screen(cls, img):
+        """Prove text reading works on a real screenshot: the lines with real words (4+ letters, not just
+        numbers like '10733'). 3+ such lines = it works (kept, like ocr_works). Returns (ok, worded, all)."""
+        import re
+        reader = cls.load_ocr()
+        if not reader or img is None or not img.size:
+            return False, [], []
+        try:
+            res, _ = reader(img)
+        except Exception:
+            return False, [], []
+        lines = [t[1].strip() for t in (res or [])]
+        worded = [ln for ln in lines if re.search(r"[A-Za-z]{4,}", ln)]
+        if len(worded) >= 3:
+            cls._ocr_tested = True
+        return len(worded) >= 3, worded, lines
+
     @classmethod
     def preload_ocr(cls):
         """Start loading the text reader in the background (called when the app opens)."""
-        threading.Thread(target=cls.load_ocr, daemon=True).start()
+        threading.Thread(target=cls.ocr_works, daemon=True).start()
 
     def _init_ocr(self):
         if self.ocr_reader is None:

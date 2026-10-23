@@ -6,7 +6,7 @@ import customtkinter as ctk
 from overlay import Overlay, PointSelector
 from logic_events import WATCHER, roblox_windows
 from logic_base import BaseLogic
-from ui_style import big_toggle, style_toggle, save_while_typing, sound_picker
+from ui_style import big_toggle, style_toggle, save_while_typing, sound_picker, fast_scroll_frame, seconds_combo, help_box
 
 CARD = dict(fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
 BTN = dict(height=28, font=("Arial", 12), fg_color="#495057", hover_color="#343a40")
@@ -23,13 +23,7 @@ class EventsPage:
         WATCHER.attach(settings)
         WATCHER.on_log = self._log
         self.cfg = WATCHER.cfg
-        sf = ctk.CTkScrollableFrame(parent, fg_color="transparent")
-        sf.pack(fill="both", expand=True, padx=4, pady=4)
-        # same scrollbar speed-up as the Skill Macro pages
-        sb_canvas = getattr(getattr(sf, "_scrollbar", None), "_canvas", None)
-        if sb_canvas is not None:
-            sb_canvas.update_idletasks = lambda: None
-        self.sf = sf
+        self.sf = fast_scroll_frame(parent, padx=4, pady=4)
         # Always OFF when the app opens; you turn it on yourself. Once on, it stays on while you switch macros.
         self._seen_windows = None
         self.build()
@@ -50,6 +44,24 @@ class EventsPage:
 
     def _save(self):
         WATCHER.save()
+
+    def _time_combo(self, parent, key, values, default_secs, minimum=0, stored_in_min=False):
+        """A seconds box (every time in the app is in seconds): pick from the list or type any number.
+        0 = never (where the list offers it)."""
+        div = 60 if stored_in_min else 1
+        cur = self.cfg.get(key)
+        cur = default_secs if cur is None else float(cur) * div
+
+        def save(v):
+            t = str(v).strip().lower()
+            try:
+                secs = 0.0 if t == "never" else float(t)
+            except ValueError:
+                return                                   # not a number yet: keep the old value
+            secs = max(minimum, secs) if secs else (0 if "0" in values else minimum)
+            self.cfg[key] = round(secs / div, 2) if stored_in_min else int(round(secs))
+            self._save()
+        return seconds_combo(parent, values, cur, save)
 
     def _entry(self, parent, d, key, width, placeholder="", show=None, on_save=None):
         e = ctk.CTkEntry(parent, width=width, font=("Arial", 12), placeholder_text=placeholder, show=show)
@@ -74,12 +86,13 @@ class EventsPage:
         cfg, p = self.cfg, self.sf
         top = ctk.CTkFrame(p, **CARD); top.pack(fill="x", pady=4)
         head = ctk.CTkFrame(top, fg_color="transparent"); head.pack(fill="x", padx=10, pady=(8, 0))
-        ctk.CTkLabel(head, text="Event Notifier", font=("Arial", 16, "bold"), text_color="#0d6efd").pack(side="left")
+        t = ctk.CTkLabel(head, text="Event Notifier", font=("Arial", 16, "bold"), text_color="#0d6efd")
+        t.pack(side="left")
+        help_box(top, "Posts the [Event] / [Leak] lines from every Roblox window's chat to Discord. "
+                      "Keeps running in every macro.", t)
         ctk.CTkButton(head, text="▶ Video", width=64, height=24, font=("Arial", 11, "bold"), fg_color="#343a40",
                       hover_color="#495057", text_color="#ff6b6b",
                       command=lambda: links.open_link("video_events")).pack(side="right")
-        ctk.CTkLabel(top, text="Posts the [Event] / [Leak] lines from every Roblox window's chat to Discord. Keeps running in every macro.",
-                     font=("Arial", 12), text_color="#ced4da", wraplength=420, justify="left").pack(anchor="w", padx=10)
         self.toggle = big_toggle(top, self.flip)
         self.toggle.pack(fill="x", padx=10, pady=(8, 4))
         self._style_toggle()
@@ -110,17 +123,12 @@ class EventsPage:
         # ---- Checking ----
         ck = self._section(p, "Checking the chat")
         row = ctk.CTkFrame(ck, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(2, 2))
-        ctk.CTkLabel(row, text="Check every", font=("Arial", 12)).pack(side="left")
-        iv_opts = {"15 s": 15, "30 s": 30, "1 min": 60, "2 min": 120, "5 min": 300}
-        iv = ctk.CTkOptionMenu(row, values=list(iv_opts), width=78, height=26,
-                               command=lambda v: (self.cfg.__setitem__("interval", iv_opts[v]), self._save()))
-        iv.set(next((k for k, v in iv_opts.items() if v == int(cfg.get("interval", 60))), "1 min"))
-        iv.pack(side="left", padx=(4, 12))
-        ctk.CTkLabel(row, text="Same event again after", font=("Arial", 12)).pack(side="left")
-        cd = ctk.CTkOptionMenu(row, values=["1 min", "2 min", "5 min", "10 min"], width=84, height=26,
-                               command=lambda v: (self.cfg.__setitem__("cooldown", int(v.split()[0]) * 60), self._save()))
-        cd.set(f"{int(cfg.get('cooldown', 120)) // 60} min")
-        cd.pack(side="left", padx=(4, 0))
+        ctk.CTkLabel(row, text="Check every (s)", font=("Arial", 12)).pack(side="left")
+        self._time_combo(row, "interval", ["15", "30", "60", "120", "300"], 60,
+                         minimum=15).pack(side="left", padx=(4, 12))   # under 15 s lags the game
+        ctk.CTkLabel(row, text="Same event again after (s)", font=("Arial", 12)).pack(side="left")
+        self._time_combo(row, "cooldown", ["60", "120", "300", "600"], 120).pack(
+            side="left", padx=(4, 0))
         only = ctk.CTkCheckBox(ck, text="Only [Event] / [Leak] lines (ignore player chat)", font=("Arial", 12),
                                command=lambda: (self.cfg.__setitem__("event_lines_only", bool(only.get())), self._save()))
         if cfg.get("event_lines_only", True):
@@ -145,12 +153,10 @@ class EventsPage:
         if snd.get():
             sound_row.pack(anchor="w", padx=38, pady=(0, 2), after=snd)
         row = ctk.CTkFrame(ck, fg_color="transparent"); row.pack(fill="x", padx=8, pady=2)
-        ctk.CTkLabel(row, text="Warn when a window's chat can't be read for", font=("Arial", 12)).pack(side="left")
-        uw_opts = {"never": 0, "3 min": 3, "5 min": 5, "10 min": 10, "15 min": 15}
-        uw = ctk.CTkOptionMenu(row, values=list(uw_opts), width=80, height=26,
-                               command=lambda v: (self.cfg.__setitem__("unreadable_warn", uw_opts[v]), self._save()))
-        uw.set(next((k for k, v in uw_opts.items() if v == int(cfg.get("unreadable_warn", 10) or 0)), "10 min"))
-        uw.pack(side="left", padx=4)
+        ctk.CTkLabel(row, text="Warn when a window's chat can't be read for (s, 0 = never)",
+                     font=("Arial", 12)).pack(side="left")
+        self._time_combo(row, "unreadable_warn", ["0", "180", "300", "600", "900"], 600,
+                         stored_in_min=True).pack(side="left", padx=4)
         row = ctk.CTkFrame(ck, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(6, 2))
         ctk.CTkButton(row, text="Test read", width=80, command=self.test_read, **BTN).pack(side="left")
         self.win_lbl = ctk.CTkLabel(row, text="", font=("Arial", 12), text_color="#ced4da")
@@ -186,12 +192,12 @@ class EventsPage:
         # ---- one PS code per Roblox window ----
         wc = ctk.CTkFrame(p, **CARD); wc.pack(fill="x", pady=4)
         wh = ctk.CTkFrame(wc, fg_color="transparent"); wh.pack(fill="x", padx=10, pady=(8, 0))
-        ctk.CTkLabel(wh, text="Roblox windows", font=("Arial", 13, "bold")).pack(side="left")
+        t = ctk.CTkLabel(wh, text="Roblox windows", font=("Arial", 13, "bold"))
+        t.pack(side="left")
+        help_box(wc, "Numbered top-left first. Show = which window is which.", t)
         ctk.CTkButton(wh, text="↻ Refresh", width=80, command=self.build_windows, **BTN).pack(side="right")
         ctk.CTkButton(wh, text="Show all", width=90, command=self.show_all_windows,
                       **{**BTN, **BLUE}).pack(side="right", padx=6)
-        ctk.CTkLabel(wc, text="Numbered top-left first. Show = which window is which.",
-                     font=("Arial", 12), text_color="#ced4da", wraplength=420, justify="left").pack(anchor="w", padx=10)
         self.win_box = ctk.CTkFrame(wc, fg_color="transparent"); self.win_box.pack(fill="x", padx=8, pady=(4, 8))
         self._show_clear_options()                       # also builds the window list
 
@@ -352,19 +358,43 @@ class EventsPage:
         self.render_events()
         self._log(f"{'Ticked' if on else 'Unticked'} {len(evs)} event(s).")
 
+    EXPORT_PARTS = (("keyword", "Chat words", True), ("role", "Role IDs", False),
+                    ("mention", "Pings (people)", False), ("enabled", "Which events are ticked", False))
+
     def export_events(self):
+        """Ask what goes in the file (names always do), then save it. Roles and people are off by default:
+        they're your server's, so only share them on purpose."""
+        win = ctk.CTkToplevel(self.root)
+        win.title("Export event list")
+        win.transient(self.root); win.resizable(False, False); win.after(150, win.lift)
+        ctk.CTkLabel(win, text="What to include", font=("Arial", 14, "bold")).pack(anchor="w", padx=14, pady=(12, 2))
+        ctk.CTkLabel(win, text="Event names are always included.", font=("Arial", 12),
+                     text_color="#adb5bd").pack(anchor="w", padx=14, pady=(0, 6))
+        picks = {}
+        for key, label, default in self.EXPORT_PARTS:
+            picks[key] = ctk.BooleanVar(value=default)
+            ctk.CTkCheckBox(win, text=label, variable=picks[key], font=("Arial", 12)).pack(anchor="w", padx=18, pady=3)
+        row = ctk.CTkFrame(win, fg_color="transparent"); row.pack(fill="x", padx=14, pady=(10, 12))
+        ctk.CTkButton(row, text="Cancel", width=80, command=win.destroy, **BTN).pack(side="right")
+        ctk.CTkButton(row, text="Export", width=90, **{**BTN, **BLUE},
+                      command=lambda: (win.destroy(), self._write_events(
+                          ["name"] + [k for k, v in picks.items() if v.get()]))).pack(side="right", padx=6)
+        win.grab_set()
+
+    def _write_events(self, keep):
         import json
         from tkinter import filedialog
         path = filedialog.asksaveasfilename(parent=self.root, title="Export event list", defaultextension=".json",
                                             initialfile="Event list.json", filetypes=[("Event list", "*.json")])
         if not path:
             return
-        keep = ("name", "keyword")            # only what the event IS - never roles or people (privacy)
         data = {"type": "event_list", "events": [{k: ev[k] for k in keep if ev.get(k) not in (None, "")}
                                                  for ev in self.cfg["events"]]}
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=1)
-        self._log(f"Exported {len(data['events'])} events - share the file, others use Import list.")
+        extra = [label.lower() for key, label, _ in self.EXPORT_PARTS if key in keep and key != "keyword"]
+        self._log(f"Exported {len(data['events'])} events" + (f" with {', '.join(extra)}" if extra else "")
+                  + " - share the file, others use Import list.")
 
     def import_events(self):
         """Add the file's events; ones with the same name are updated (your webhook / windows aren't touched)."""
@@ -386,7 +416,8 @@ class EventsPage:
         for it in items:
             if not isinstance(it, dict) or not (it.get("name") or "").strip():
                 continue
-            clean = {k: it[k] for k in ("name", "keyword") if k in it}   # roles / people never come from a file
+            # whatever the exporter chose to include (roles / people only if they ticked them)
+            clean = {k: it[k] for k in ("name", "keyword", "role", "mention", "enabled") if k in it}
             cur = by_name.get(clean["name"].strip().lower())
             if cur is not None:
                 cur.update(clean); updated += 1

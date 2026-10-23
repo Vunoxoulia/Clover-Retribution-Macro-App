@@ -12,6 +12,34 @@ BTN_BLUE = dict(height=30, font=("Arial", 12), fg_color=BLUE, hover_color=BLUE_H
 TITLE_FONT = ("Arial", 16, "bold")
 
 
+def _fit_wrapped_labels():
+    """A label's wraplength is a fixed number, so on a narrower card (or a smaller window) its text was cut
+    off at both sides. Keep every wrapped label at most as wide as the space its parent really gives it."""
+    init = ctk.CTkLabel.__init__
+
+    def __init__(self, master=None, *args, **kw):
+        init(self, master, *args, **kw)
+        want = kw.get("wraplength") or 0
+        if not want or master is None:
+            return
+
+        def fit(_e=None):
+            try:
+                pad = self.pack_info().get("padx", 0) if self.winfo_manager() == "pack" else 0
+                pad = sum(pad) if isinstance(pad, (tuple, list)) else int(pad) * 2
+                room = (master.winfo_width() - pad - 12) / self._get_widget_scaling()
+                if room > 40 and abs(min(want, room) - self.cget("wraplength")) > 2:
+                    self.configure(wraplength=min(want, room))
+            except Exception:
+                pass
+        master.bind("<Configure>", fit, add="+")
+        self.bind("<Map>", fit, add="+")               # a card rebuilt in place never resizes, so fit on show too
+    ctk.CTkLabel.__init__ = __init__
+
+
+_fit_wrapped_labels()
+
+
 def sound_picker(parent, kind):
     """Choose sound… / ▶ / Reset for one alert sound. The file is copied into the app's 'sounds' folder
     so updates never delete it. kind = 'event' or 'done'."""
@@ -57,6 +85,56 @@ def sound_picker(parent, kind):
     name.pack(side="left", padx=6)
     show()
     return f
+
+
+def help_box(card, text, title):
+    """A small '?' right after a card's title; clicking it shows / hides the explanation under the title,
+    so the page isn't a wall of text. Returns the help label (its text can be changed later)."""
+    lbl = ctk.CTkLabel(card, text=text, font=("Arial", 12), text_color="#cfe2ff", fg_color="#1b2b40",
+                       corner_radius=6, justify="left", anchor="w", wraplength=420)
+    row = title                                      # the title's line inside the card (title or its row frame)
+    while row.master is not card:
+        row = row.master
+
+    def flip():
+        if lbl.winfo_manager():
+            lbl.pack_forget()
+            q.configure(fg_color="transparent", text_color="#adb5bd")
+        else:
+            lbl.pack(after=row, fill="x", padx=8, pady=(2, 4), ipadx=6, ipady=4)
+            q.configure(fg_color="#0d6efd", text_color="#ffffff")
+    q = ctk.CTkButton(card, text="?", width=20, height=20, corner_radius=10, font=("Arial", 11, "bold"),
+                      fg_color="transparent", border_width=1, border_color="#6c757d", text_color="#adb5bd",
+                      hover_color="#2b3035", command=flip)
+    q.place(in_=title, relx=1.0, x=8, rely=0.5, anchor="w")
+    if title.winfo_manager() == "pack":              # leave room for the '?' so it never covers a neighbour
+        padx = title.pack_info().get("padx", 0)
+        left, right = padx if isinstance(padx, (tuple, list)) else (padx, padx)
+        title.pack_configure(padx=(left, int(right) + 30))
+    return lbl
+
+
+def fast_scroll_frame(parent, **pack_kw):
+    """A scrolling page. customtkinter's scrollbar forces update_idletasks() on every redraw, which makes Tk
+    re-run the whole page layout several times per click; the scrollbar doesn't need it."""
+    sf = ctk.CTkScrollableFrame(parent, fg_color="transparent")
+    sf.pack(fill="both", expand=True, **pack_kw)
+    sb_canvas = getattr(getattr(sf, "_scrollbar", None), "_canvas", None)
+    if sb_canvas is not None:
+        sb_canvas.update_idletasks = lambda: None
+    return sf
+
+
+def seconds_combo(parent, values, current, save):
+    """A number box: pick from the list or type any number. save(text) runs on pick, Enter, click-away
+    and while typing."""
+    cb = ctk.CTkComboBox(parent, values=values, width=70, height=26, command=save)
+    cb.set(f"{current:g}")
+    store = lambda *_: save(cb.get())
+    cb._entry.bind("<FocusOut>", store)
+    cb._entry.bind("<Return>", store)
+    save_while_typing(cb._entry, store)
+    return cb
 
 
 def save_while_typing(widget, save, delay=120):

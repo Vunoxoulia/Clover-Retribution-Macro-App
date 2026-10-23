@@ -24,7 +24,7 @@ DEFAULT_MOVE = {
     "click_btn": "m2",        # which mouse button 'then click' uses (Items always use M1)
     "after_click": 0.1,       # keep the mouse still this long after the click, so the cast lands where it was aimed
     "delay_before": 0.0, "delay_after": 0.0,
-    "box": None,              # a box the user drew for this slot (), else the automatic one
+    "box": None,              # a box the user drew for this slot, else the automatic one
     "ready_at": 0.0,          # this slot's own match level for READY (0 = use the global one); Auto-tune sets it
 }
 
@@ -34,6 +34,7 @@ MEDITATION_DEFAULT = {
     "out": "weapon",                            # what you fight with: weapon / grimoire / both
     "weapon_key": "r", "grimoire_key": "g", "key": "n", "max_wait": 90,
     "below": 5,                                 # meditate once mana is at or under this % (5 = basically empty)
+    "stuck_after": 20,                          # same move this many times in a row = stuck (0 = off)
     "key_delay": 1.0,                           # 'All waits' - the default for every step below
     # each step's own wait (missing = key_delay): before the first key, after each key
     "waits": {},
@@ -81,6 +82,8 @@ class SmartMacroLogic:
         self._templates = {}
         self.cast_count = {}       # confirmed casts per slot (for the log)
         self.last_cast = {}        # slot -> time of its last cast (manual cooldowns)
+        self._still = {}           # slot -> (last picture, time it last changed)
+        self._still_warned = {}    # slot -> time the 'treating as ready' note was last logged
         self._testing = False
 
     # ---------- config ----------
@@ -324,6 +327,10 @@ class SmartMacroLogic:
             boxes.append(list(full[len(boxes)]))
         moves = rot.get("moves", [])
         os.makedirs(loadout_dir(self.active_loadout()), exist_ok=True)
+        x1, y1, x2, y2 = rot["region"]
+        bar1 = self.utils.capture_screen_bgr([x1, y1, x2, y2])
+        time.sleep(0.3)
+        bar2 = self.utils.capture_screen_bgr([x1, y1, x2, y2])
         done = 0
         for i, r in enumerate(regions, start=1):
             if slots and i not in slots:
@@ -340,6 +347,10 @@ class SmartMacroLogic:
                     r = self.center_of(full_box)            # ...but only its middle is the snapshot
             img = self.utils.capture_screen_bgr(r)
             if img is not None and img.size:
+                if (bar1 is not None and bar2 is not None and x1 <= r[0] and r[2] <= x2 and y1 <= r[1] and r[3] <= y2
+                        and self.changed(bar1[r[1] - y1:r[3] - y1, r[0] - x1:r[2] - x1],
+                                         bar2[r[1] - y1:r[3] - y1, r[0] - x1:r[2] - x1])):
+                    self.app.log(f"Slot {i}: it's still counting down - retake its snapshot once it's ready.")
                 cv2.imwrite(self.template_path(i), img)
                 if i - 1 < len(moves):
                     moves[i - 1]["snap_center"] = not own       # this snapshot is already just the middle
@@ -372,8 +383,39 @@ class SmartMacroLogic:
             self._templates[slot] = img
         return self._templates[slot]
 
-    def slot_score(self, slot, frame):
+    def slot_score(self, slot, frame, around=None):
+        """How ready the slot looks. With `around` (a bigger picture of the area round the slot) the snapshot is
+        searched for there at a few sizes, so a hotbar that moved or got resized a little still matches."""
+        if around is not None:
+            v = self.search(around, self._template(slot))
+            if v is not None:
+                return v
         return self.compare(frame, self._template(slot))
+
+    SCALES = (1.0, 0.9, 1.1, 0.8, 1.25)
+
+    @staticmethod
+    def search(area, tpl):
+        """Best match of the snapshot anywhere in `area` (sizes SCALES), checked like compare(); None if it can't."""
+        if tpl is None or area is None or not area.size:
+            return None
+        a = cv2.GaussianBlur(cv2.cvtColor(area, cv2.COLOR_BGR2GRAY), (3, 3), 0).astype(np.float32)
+        b0 = cv2.GaussianBlur(cv2.cvtColor(tpl, cv2.COLOR_BGR2GRAY), (3, 3), 0).astype(np.float32)
+        best = None
+        for sc in SmartMacroLogic.SCALES:
+            b = b0 if sc == 1.0 else cv2.resize(b0, None, fx=sc, fy=sc)
+            h, w = b.shape
+            if h > a.shape[0] or w > a.shape[1] or b.std() <= 1:
+                continue
+            res = cv2.matchTemplate(a, b, cv2.TM_CCOEFF_NORMED)
+            _, corr, _, (x, y) = cv2.minMaxLoc(res)
+            if best is None or corr > best[0]:
+                best = (float(corr), a[y:y + h, x:x + w], b)
+        if best is None:
+            return None
+        corr, win, b = best
+        bright = 1.0 - min(1.0, abs(win.mean() - b.mean()) / max(b.mean(), 1.0))   # darkened cooldown overlay
+        return min(corr, bright)
 
     @staticmethod
     def compare(frame, tpl):
@@ -594,23 +636,76 @@ class SmartMacroLogic:
         regions = self.slot_regions()
         if not regions:
             return {}
-        x1, y1, x2, y2 = self.cfg["rotation"]["region"]
+        # one picture of the hotbar plus a margin round it, so each slot can be looked for a bit off its spot
+        pad = max(8, int(max(r[2] - r[0] for r in regions) * 0.4))
+        x1 = max(0, min(r[0] for r in regions) - pad); y1 = max(0, min(r[1] for r in regions) - pad)
+        x2 = max(r[2] for r in regions) + pad; y2 = max(r[3] for r in regions) + pad
         bar = self.utils.capture_screen_bgr([x1, y1, x2, y2])
         out = {}
         for i, r in enumerate(regions, start=1):
-            if bar is not None and x1 <= r[0] and r[2] <= x2 and y1 <= r[1] and r[3] <= y2:
+            crop = around = None
+            if bar is not None:
                 crop = bar[r[1] - y1:r[3] - y1, r[0] - x1:r[2] - x1]
-            else:
-                crop = self.utils.capture_screen_bgr(r)       # a box drawn outside the hotbar region
-            out[i] = self.slot_score(i, crop)
+                around = bar[max(0, r[1] - pad - y1):r[3] + pad - y1, max(0, r[0] - pad - x1):r[2] + pad - x1]
+            out[i] = self.slot_score(i, crop, around)
+            self._track_still(i, crop)
+        self._check_hotbar_moved(out)
         return out
+
+    def _check_hotbar_moved(self, scores):
+        """Every slot looking nothing like its snapshot for a while = the hotbar isn't where it was."""
+        vals = [v for v in scores.values() if v is not None]
+        if not vals or max(vals) >= 0.3:
+            self._lost_since = None
+            return
+        now = time.time()
+        if getattr(self, "_lost_since", None) is None:
+            self._lost_since = now
+        elif now - self._lost_since > 10 and now - getattr(self, "_lost_warned", 0) > 120:
+            self._lost_warned = now
+            self.app.log("None of the slots look like their snapshots - the hotbar moved or changed size "
+                         "(window size / display scaling?). Press Auto find hotbar, then retake the snapshots.")
+
+    STILL_READY = 2.5                                    # seconds without change = not counting down
+
+    @staticmethod
+    def changed(a, b):
+        """True when two pictures of a slot differ by more than screen noise (a cooldown timer ticking
+        changes a few digits every 0.1 s; a ready slot doesn't change at all)."""
+        if a is None or b is None or a.shape != b.shape or not a.size:
+            return True
+        d = cv2.absdiff(cv2.GaussianBlur(a, (3, 3), 0), cv2.GaussianBlur(b, (3, 3), 0)).max(axis=2)
+        return float((d > 40).mean()) > 0.003
+
+    def _track_still(self, slot, crop):
+        prev = self._still.get(slot)
+        if crop is None or not crop.size:
+            self._still.pop(slot, None)
+        elif prev is None or self.changed(crop, prev[0]):
+            self._still[slot] = (crop.copy(), time.time())
+
+    def still_for(self, slot):
+        """How long the slot's picture hasn't changed (0 = it just did)."""
+        prev = self._still.get(slot)
+        return time.time() - prev[1] if prev else 0.0
 
     def is_ready(self, slot, move, scores):
         score = scores.get(slot)
         if score is not None:
             # Snapshot wins: the screen reflects cooldown reduction from other casts,
             # a fixed manual timer would not.
-            return score >= self.slot_threshold(slot)
+            if score >= self.slot_threshold(slot):
+                return True
+            # Backup: a slot on cooldown counts down, so its picture keeps changing. One that doesn't match
+            # its snapshot but has sat still for a while is ready (the snapshot is off: clovers changed,
+            # taken on cooldown, lighting...).
+            if self.still_for(slot) >= self.STILL_READY:
+                if time.time() - self._still_warned.get(slot, 0) > 120:
+                    self._still_warned[slot] = time.time()
+                    self.app.log(f"{move['name'] or 'Slot ' + str(slot)}: doesn't match its snapshot but isn't "
+                                 "counting down - treating it as ready. Retake its snapshot while it's ready.")
+                return True
+            return False
         # No snapshot: rely on the manual cooldown alone (none set = unconfigured, skip)
         cd = float(move["cooldown"] or 0)
         return cd > 0 and time.time() - self.last_cast.get(slot, 0) >= cd
@@ -883,6 +978,11 @@ class SmartMacroLogic:
         cols = blue.mean(axis=0) >= 0.5                  # a column counts as mana if most of it is light blue
         n = len(cols)
         edge = max(1, n // 20)
+        # A popup (Teleport Failed, etc.) dims the whole screen: the bar stays blue but goes dark. Used mana
+        # is grey (no colour), so a dark-but-blue left end means "can't tell right now", not "empty".
+        dim = ((band[:, :, 0] >= 95) & (band[:, :, 0] <= 112) & (band[:, :, 1] >= 70) & (band[:, :, 2] >= 35))
+        if not cols[:edge].mean() >= 0.5 and (dim.mean(axis=0) >= 0.5)[:edge].mean() >= 0.5:
+            return None
         # Mana % = where the light blue ends (the grey grows from the right). The white "4010/4035" text in
         # the middle isn't blue, so look for the LAST blue column instead of counting blue columns.
         idx = np.where(cols)[0]
@@ -954,6 +1054,33 @@ class SmartMacroLogic:
         self.app.log("Mana full - back to the rotation." if full else
                      f"Meditation stopped after {int(float(d.get('max_wait', 90)))} s (mana didn't read as full).")
 
+    def stuck_check(self, slot):
+        """Meditation can get stuck (e.g. an OK popup ate a key): the same move keeps casting/retrying.
+        After N in a row press the weapon / grimoire key; N more still the same -> the meditation key;
+        and so on, alternating, until a different move casts."""
+        d = self.med()
+        limit = int(float(d.get("stuck_after", 20) or 0))
+        if not d.get("enabled") or limit <= 0:
+            return
+        if slot != getattr(self, "_same_slot", None):
+            self._same_slot, self._same_n, self._stuck_stage = slot, 0, 0
+        self._same_n += 1
+        if self._same_n < limit:
+            return
+        self._same_n = 0
+        if self._stuck_stage % 2 == 0:
+            keys = [k for k, _ in self.meditation_steps()["back"]]
+            what = "weapon / grimoire"
+        else:
+            keys = [d["key"]]
+            what = "meditation"
+        self._stuck_stage += 1
+        self.app.log(f"Same move {limit} times in a row - pressing the {what} key ({', '.join(keys)}).")
+        for k in keys:
+            with RobloxInputDriver._lock:
+                self._press(k)
+            self._wait(self.med_wait("stuck"))
+
     # ---------- rotation ----------
     def pick_move(self, scores):
         """Highest-priority enabled move that is ready."""
@@ -968,7 +1095,8 @@ class SmartMacroLogic:
         return best
 
     def _rotation_loop(self):
-        self.cast_count, self.last_cast = {}, {}
+        self.cast_count, self.last_cast, self._still = {}, {}, {}
+        self._same_slot = None
         while self.running:
             try:
                 rot = self.cfg["rotation"]
@@ -990,6 +1118,7 @@ class SmartMacroLogic:
                 if not pick:
                     self._wait(float(rot["tick"])); continue
                 slot, m = pick
+                self.stuck_check(slot)
                 for n in range(max(1, int(m["repeat"]))):
                     if not self.running:
                         return
