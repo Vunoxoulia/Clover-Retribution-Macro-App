@@ -2,8 +2,8 @@
 
 # --- video tutorials ---
 video_library  = https://youtu.be/F14jSpM0mfQ
-video_mining   = https://youtu.be/mD85aJdDbfE
-video_fishing  = https://youtu.be/a_4odPOc3e4
+video_mining   = https://youtu.be/sFeGaw_UmiY
+video_fishing  = https://youtu.be/xcZ_vrPrG-g
 video_skill    = https://youtu.be/XGNc0d6DkFo
 video_events   = https://youtu.be/Ye4gGTp7fzE
 
