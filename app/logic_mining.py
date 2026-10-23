@@ -68,24 +68,55 @@ class MiningLogic(RouteNav):
 
 
     def route_checks(self):
-        """Settings → 'Line-up checks'. Off = just follow the recorded path and press E, no checks."""
-        return bool(self.app.settings.get("mining_checks", False))
+        """Mining just follows the recorded path and presses E (no snapshot line-ups)."""
+        return False
 
     def _mine_here(self, ore_idx, seg):
-        """(Line-up checks on: line up on the ore snapshot first), then mine."""
         self.lap["targets"] += 1
         self._wait_still()
-        if not self.route_checks():                      # no checks: mine right where the path ended
-            self.mine(ore_idx, seg)
-            self.lap["mined"] += 1
-            return True
-        snap = os.path.join(self.route_dir(), f"ore_{ore_idx}.png")
-        if os.path.exists(snap):
-            if self.align_to(cv2.imread(snap), f"ore {ore_idx}", max_tries=8) == "lost":
-                self.app.log(f"   ore {ore_idx}: snapshot not recognised (off by >150px?)")
         self.mine(ore_idx, seg)
         self.lap["mined"] += 1
         return True
+
+    # ----- Wait for Interact (start spot) -----
+    def wait_interact_on(self):
+        return bool(self.app.settings.get("mining_wait_interact", False))
+
+    def interact_visible(self):
+        """The 'E Interact' prompt is on screen: read in your box (Set area), else the lower middle of the window."""
+        area = self.app.settings.get("regions", {}).get("mining_interact") or [0, 0, 0, 0]
+        if not (area[2] > area[0] and area[3] > area[1]):
+            l, t, r, b = self.get_roblox_window_region()
+            W, H = r - l, b - t
+            area = [int(l + W * 0.3), int(t + H * 0.5), int(l + W * 0.7), int(t + H * 0.85)]
+        img = self.utils.capture_screen_bgr(area)
+        # The prompt's text is white: no white pixels = no prompt, so the (heavy) text reader isn't run at all
+        if img is None or not img.size or int((img.min(axis=2) > 200).sum()) < 80:
+            return False
+        from utils import SpatialUtils
+        reader = SpatialUtils.load_ocr()
+        try:
+            res = reader(img)[0] if reader else None
+        except Exception:
+            res = None
+        return any("interact" in (r[1] or "").lower() for r in (res or []))
+
+    def wait_for_interact(self):
+        """At the start spot: wait until the Interact prompt shows (the ore has respawned). Stop = False."""
+        if self.interact_visible():
+            return True
+        self.app.log("Waiting for the Interact prompt at the start...")
+        since, note = time.time(), 60
+        while self.running:
+            time.sleep(0.7)
+            if self.interact_visible():
+                self.app.log(f"Interact seen after {time.time() - since:.0f}s - starting the route.")
+                return True
+            if time.time() - since >= note:
+                self.app.log(f"   still waiting for Interact ({time.time() - since:.0f}s)")
+                note += 60
+            self.handle_ok_popup()
+        return False
 
 
     def run_lap(self, route):
@@ -160,7 +191,7 @@ class MiningLogic(RouteNav):
             self.app.log(f"Starting route '{self.active_route()}' ({route['ores']} ores)...")
 
             # ',' locks the camera top-down and facing the same way
-            for i in (1, 2):
+            for i in ((1, 2) if self.app.settings.get("mining_press_comma", True) else ()):
                 self.app.log(f"Initialization: Pressing ',' ({i}/2)")
                 self.utils.send_key(',')
                 time.sleep(1.5)
@@ -172,6 +203,8 @@ class MiningLogic(RouteNav):
                 if not self.check_focus() and not self.wait_for_roblox_focus():
                     break
                 route = self.load_route() or route       # edits made while running apply from the next lap
+                if self.wait_interact_on() and not self.wait_for_interact():
+                    break
                 self.run_lap(route)
                 if self.running:
                     WATCHER.checkpoint("Mining")   # one full lap done: safe moment to check chat

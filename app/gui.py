@@ -387,21 +387,43 @@ class SpatialGUI:
         card = lambda: ctk.CTkFrame(tab, fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
         btn = dict(height=28, font=("Arial", 12), fg_color="#495057", hover_color="#343a40")
 
-        self._route_card(tab, None, None,
+        rc = self._route_card(tab, None, None,
                          "Test Path (F2)", self.logic.test_movement,
                          f"Recording: stand at the start, press {self.logic.rec_key()}, walk the loop, TAP E once at each ore, "
                          f"pause ~0.5s at corners (checkpoints), press {self.logic.rec_key()} again back at the start.")
+
+        share = ctk.CTkFrame(rc, fg_color="transparent"); share.pack(fill="x", padx=6, pady=(0, 6))
+        ctk.CTkButton(share, text="Import route", width=100, command=self._import_route, **btn).pack(side="right")
+        ctk.CTkButton(share, text="Export route", width=100, command=self._export_route, **btn).pack(side="right", padx=4)
 
         # Movement / alignment
         mc = card(); mc.pack(fill="x", padx=15, pady=4)
         # No checks = just follow the recorded path
         row = ctk.CTkFrame(mc, fg_color="transparent"); row.pack(fill="x", padx=6, pady=(6, 2))
-        self.checks_switch = ctk.CTkSwitch(row, text="Line-up checks", font=("Arial", 12, "bold"),
-                                           command=lambda: self.settings.set("mining_checks", bool(self.checks_switch.get())))
-        if self.settings.get("mining_checks", False): self.checks_switch.select()
-        self.checks_switch.pack(side="left")
-        help_box(mc, "Off (default) = just follow the recorded path and press E.\n"
-                     "On = also line up on the start spot, checkpoints and ores.", self.checks_switch)
+        wait_sw = ctk.CTkSwitch(row, text="Wait for Interact at the start", font=("Arial", 12, "bold"),
+                                command=lambda: self.settings.set("mining_wait_interact", bool(wait_sw.get())))
+        if self.settings.get("mining_wait_interact", False): wait_sw.select()
+        wait_sw.pack(side="left")
+        help_box(mc, "Off (default) = start the next lap as soon as it's back at the start.\n"
+                     "On = at the start spot, wait until the 'E Interact' prompt shows (the ore is back), "
+                     "then walk the route. Record the route so it starts where that prompt shows.\n"
+                     "Set area: drag a small box round the prompt - reading text is heavy, a small box is much "
+                     "lighter on the PC. No box = the lower middle of the Roblox window.", wait_sw)
+        arow = ctk.CTkFrame(mc, fg_color="transparent"); arow.pack(fill="x", padx=6, pady=(0, 4))
+        ctk.CTkButton(arow, text="Set area", width=80, command=lambda: self.pick_region("mining_interact"),
+                      **{**btn, "fg_color": "#0d6efd", "hover_color": "#0b5ed7"}).pack(side="left", padx=(42, 4))
+        ctk.CTkButton(arow, text="Clear", width=56, command=self._clear_interact_area, **btn).pack(side="left")
+        ctk.CTkButton(arow, text="Test", width=56, command=self._test_interact, **btn).pack(side="left", padx=4)
+        self.interact_area_lbl = ctk.CTkLabel(arow, text="", font=("Arial", 12))
+        self.interact_area_lbl.pack(side="left", padx=6)
+        self._show_interact_area()
+        row = ctk.CTkFrame(mc, fg_color="transparent"); row.pack(fill="x", padx=6, pady=(2, 6))
+        comma = ctk.CTkSwitch(row, text="Press ',' when starting", font=("Arial", 12, "bold"),
+                              command=lambda: self.settings.set("mining_press_comma", bool(comma.get())))
+        if self.settings.get("mining_press_comma", True): comma.select()
+        comma.pack(side="left")
+        help_box(mc, "On (default) = press ',' twice at the start to lock the camera top-down, facing the same "
+                     "way as when the route was recorded. Turn off if your camera is already set.", comma)
 
 
         # Recorded path per ore
@@ -436,6 +458,7 @@ class SpatialGUI:
         if test1_text:
             ctk.CTkButton(row, text=test1_text, width=136, command=lambda: self._run_test(test1_fn), **btn).pack(side="right", padx=4)
         ctk.CTkFrame(rc, fg_color="transparent", height=2).pack()
+        return rc
 
     # ================= Library =================
     def setup_library_settings(self, tab):
@@ -988,6 +1011,31 @@ class SpatialGUI:
         if hasattr(self, "dialog_card"):
             self.build_dialog_card()
 
+    def _export_route(self):
+        from tkinter import filedialog
+        name = self.logic.active_route()
+        if not name or not self.logic.load_route():
+            self.log("Nothing to export: pick a recorded route first.")
+            return
+        path = filedialog.asksaveasfilename(parent=self.root, title="Export route", defaultextension=".zip",
+                                            initialfile=f"{name}.zip", filetypes=[("Route", "*.zip")])
+        if path:
+            ok = self.logic.export_route(path, name)
+            self.log(f"Route '{name}' exported - others use Import route." if ok else "Couldn't export that route.")
+
+    def _import_route(self):
+        from tkinter import filedialog, messagebox
+        path = filedialog.askopenfilename(parent=self.root, title="Import route", filetypes=[("Route", "*.zip")])
+        if not path:
+            return
+        try:
+            name = self.logic.import_route(path)
+        except Exception as e:
+            messagebox.showerror("Import route", str(e), parent=self.root)
+            return
+        self.refresh_routes()
+        self.log(f"Route imported as '{name}'. Test Path (F2) to check it lines up for you.")
+
     def refresh_routes(self):
         if not hasattr(self, "route_menu"):
             return
@@ -1196,7 +1244,7 @@ class SpatialGUI:
         self.ok_preview.pack(side="left", padx=12)
 
         self.ok_area_status, row = self._ok_card(tab, 2, "Scan Area  (optional)",
-            "Where to look for the button. Defaults to the captured box plus a small margin.")
+            "Where to look for the button. Default: the whole screen. Set a smaller area to make it lighter.")
         ctk.CTkButton(row, text="Set Area", command=lambda: self.pick_region("ok_scan_area"), **btn_kw).pack(side="left")
         ctk.CTkButton(row, text="Clear", command=lambda: self._clear_ok_setting("ok_scan_area", [0, 0, 0, 0]), **sub_kw).pack(side="left", padx=6)
         self.ok_area_switch = ctk.CTkSwitch(row, text="Show on screen", font=("Arial", 12), command=self.toggle_ok_area_overlay)
@@ -1842,10 +1890,29 @@ class SpatialGUI:
                 "automatic: the whole play area between the black bars (Show Scan Areas draws it)",
                 text_color="#ffc107" if mine else "#75b798")
 
+    def _show_interact_area(self):
+        r = self.settings.get("regions", {}).get("mining_interact") or [0, 0, 0, 0]
+        own = r[2] > r[0] and r[3] > r[1]
+        self.interact_area_lbl.configure(text=f"area set ({r[2] - r[0]}x{r[3] - r[1]})" if own else "no area (lower middle)",
+                                         text_color="#75b798" if own else "#adb5bd")
+
+    def _clear_interact_area(self):
+        self.settings.settings.setdefault("regions", {}).pop("mining_interact", None)
+        self.settings.save()
+        self._show_interact_area()
+
+    def _test_interact(self):
+        def run():
+            seen = self.logic.interact_visible()
+            self.log("Interact prompt: seen" if seen else "Interact prompt: NOT seen (stand where it shows, or set the area)")
+        threading.Thread(target=run, daemon=True).start()
+
     def save_region(self, key, x1, y1, x2, y2):
         self.root.deiconify(); self.settings.settings["regions"][key] = [x1, y1, x2, y2]; self.settings.save(); self.check_calibration()
         if key == "score":
             self._show_clover_region()
+        if key == "mining_interact" and hasattr(self, "interact_area_lbl"):
+            self._show_interact_area()
         if key.startswith("gold_clover_") and getattr(self, "gold_status", {}).get(int(key[-1])):
             self.gold_status[int(key[-1])].configure(text="set", text_color="#75b798")
         if key == "ok_scan_area":
@@ -2028,7 +2095,10 @@ class SpatialGUI:
         if self.ok_area_switch.get() != 1:
             return
         rect = self.logic.get_ok_search_region()
-        if rect:
+        if rect and not any(v != 0 for v in self.settings.get("regions", {}).get("ok_scan_area", [0, 0, 0, 0])):
+            self.log("No Scan Area set: the whole screen is scanned (nothing to draw).")
+            self.ok_area_switch.deselect()
+        elif rect:
             self.overlays["_ok_area"] = PersistentOverlay(rect[0], rect[1], rect[2], rect[3], color="orange")
         else:
             self.log("No OK scan area yet — set one or capture the OK button first.")

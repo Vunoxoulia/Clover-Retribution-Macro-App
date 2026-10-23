@@ -134,6 +134,53 @@ class RouteNav(BaseLogic):
         if self.app.settings.get(self.ACTIVE_ROUTE_KEY) == name:
             self.set_active_route(self.active_route())
 
+    # ---------- sharing a route (one .zip: route.json + its snapshots) ----------
+    def export_route(self, path, name=None):
+        """Save the route (built-in ones too) as one file someone else can Import."""
+        import zipfile
+        name = name or self.active_route()
+        d = self.route_dir(name)
+        if not name or not os.path.exists(os.path.join(d, "route.json")):
+            return False
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("route_info.json", json.dumps({"type": "route", "macro": self.ROUTES_DIRNAME, "name": name}))
+            for f in os.listdir(d):
+                if f == "route.json" or f.endswith(".png"):
+                    z.write(os.path.join(d, f), f)
+        return True
+
+    def import_route(self, path):
+        """Add a shared route as a NEW route (never overwrites yours; 'Cave' -> 'Cave 2' if taken) and select it.
+        Returns its name, or raises ValueError with what's wrong."""
+        import zipfile
+        try:
+            z = zipfile.ZipFile(path)
+        except Exception:
+            raise ValueError("That file isn't a route.")
+        with z:
+            names = z.namelist()
+            try:
+                info = json.loads(z.read("route_info.json").decode("utf-8"))
+            except Exception:
+                info = {}
+            if "route.json" not in names or info.get("type", "route") != "route":
+                raise ValueError("That file isn't a route.")
+            if info.get("macro", self.ROUTES_DIRNAME) != self.ROUTES_DIRNAME:
+                raise ValueError("That route is for a different macro.")
+            base = self._clean_name(info.get("name") or os.path.splitext(os.path.basename(path))[0]) or "Imported"
+            name, k = base, 2
+            while name in self.list_routes() or name in self._builtins():
+                name, k = f"{base[:36]} {k}", k + 1
+            d = os.path.join(self._routes_dir(), name)
+            os.makedirs(d)
+            for f in names:
+                b = os.path.basename(f)                  # names only - never paths from the file
+                if b == f and (b == "route.json" or b.endswith(".png")):
+                    with z.open(f) as src, open(os.path.join(d, b), "wb") as out:
+                        shutil.copyfileobj(src, out)
+        self.set_active_route(name)
+        return name
+
     def load_route(self, name=None):
         d = self.route_dir(name)
         try:

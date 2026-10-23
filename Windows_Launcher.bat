@@ -1,6 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
-title VunVun's Macro Loader - V6.3.6
+title VunVun's Macro Loader - V6.3.7
 REM Always work from the folder this launcher is in ("Run as administrator" starts in System32)
 cd /d "%~dp0"
 

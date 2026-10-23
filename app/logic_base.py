@@ -295,17 +295,22 @@ class BaseLogic:
         return tpl
 
     def get_ok_search_region(self):
-        """Area the OK detector scans. Uses the user-set 'ok_scan_area' if present,
-        otherwise the captured OK button box plus a little padding. None = not set up."""
+        """Area the OK detector scans. Uses the user-set 'ok_scan_area' if present, otherwise the whole
+        screen (every monitor) once the OK button is captured. None = not set up."""
         regions = self.app.settings.get("regions", {})
         scan = regions.get("ok_scan_area", [0, 0, 0, 0])
         if scan and any(v != 0 for v in scan):
             return list(scan)
-        btn = regions.get("ok_button", [0, 0, 0, 0])
-        if btn and any(v != 0 for v in btn):
-            pad = self.OK_SEARCH_PAD
-            return [max(0, btn[0] - pad), max(0, btn[1] - pad), btn[2] + pad, btn[3] + pad]
+        if self._ok_button_box():
+            m = self.utils.sct.monitors[0]
+            return [m["left"], m["top"], m["left"] + m["width"], m["top"] + m["height"]]
         return None
+
+    def _ok_button_box(self, pad=0):
+        btn = self.app.settings.get("regions", {}).get("ok_button", [0, 0, 0, 0])
+        if not (btn and any(v != 0 for v in btn)):
+            return None
+        return [max(0, btn[0] - pad), max(0, btn[1] - pad), btn[2] + pad, btn[3] + pad]
 
     def find_ok_button(self):
         """Look for the OK button only inside the OK scan area. Returns (x, y, score) or None.
@@ -328,7 +333,10 @@ class BaseLogic:
                 return (sx + max_loc[0] + tw // 2, sy + max_loc[1] + th // 2, max_val)
             return None
 
-        # No template image: fall back to OCR, but only on the small area
+        # No template image: fall back to OCR, but only near the captured button (reading the whole screen is heavy)
+        if not any(self.app.settings.get("regions", {}).get("ok_scan_area") or [0]):
+            search = self._ok_button_box(self.OK_SEARCH_PAD) or search
+            sx, sy = search[0], search[1]
         for bbox, text, conf in self.utils.get_text_from_region(search, upscale=2):
             if text.strip().lower() == "ok":
                 return (sx + int(np.mean([p[0] for p in bbox])),
