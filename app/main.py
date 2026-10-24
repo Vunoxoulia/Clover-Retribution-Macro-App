@@ -4,7 +4,7 @@ import sys
 import ctypes
 import os
 
-VERSION = "6.3.7.2"
+VERSION = "6.3.7.3"
 
 def get_resource_path(relative_path):
     

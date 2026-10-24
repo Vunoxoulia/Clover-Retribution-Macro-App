@@ -885,7 +885,7 @@ class LibraryLogic(RouteNav):
         return self.dialog_mode() == "image" and self.find_dialog_button("clover_training") is not None
 
     def open_dialogue(self):
-        """Press E at the wisp until the dialogue panel appears."""
+        """Just walked to the wisp: double jump + E every 0.2 s until the Clover Training option shows."""
         if self.dialog_mode() == "manual":
             # Manual mode is for setups where detection fails, so don't wait for it.
             if not self.wait_for_roblox_focus():
@@ -893,24 +893,12 @@ class LibraryLogic(RouteNav):
             self.utils.send_key('e')
             self.app.log("Dialogue: pressed E (manual mode).")
             return True
-        for attempt in range(1, 9):
-            if not self.wait_for_roblox_focus():
-                return False
-            if attempt % 3 == 0:
-                self.utils.send_key('space')      # unstick / stand up
-                time.sleep(0.4)
-            self.utils.send_key('e')
-            end = time.time() + 2.0
-            while self.running and time.time() < end:
-                if self.dialogue_visible():
-                    self.app.log("Dialogue opened.")
-                    return True
-                time.sleep(0.15)
-        return False
+        return self.reopen_dialogue(tries=8, opened="Dialogue opened (Clover Training showing).", failed=None)
 
-    def reopen_dialogue(self, tries=10):
-        """Standing at the wisp: E every 0.2 s the whole time (also while jumping and while checking), with a
-        double jump each try, until the dialogue shows again. Returns True once it's open."""
+    def reopen_dialogue(self, tries=25, opened="Dialogue open again (Clover Training showing).",
+                        failed="Couldn't reopen the dialogue here - walking to the wisp again."):
+        """Standing at the wisp: double jump + E every 0.2 s (E keeps going while jumping and checking) until the
+        'Clover Training' option is on screen. Returns True once it is."""
         spam = threading.Event()
 
         def press_e():
@@ -924,21 +912,43 @@ class LibraryLogic(RouteNav):
                 if not spam.is_set():
                     spam.set()
                     threading.Thread(target=press_e, daemon=True).start()
-                self.utils.send_key('space'); time.sleep(0.35)     # jump
-                self.utils.send_key('space'); time.sleep(0.8)      # double jump, then land
                 if self.dialog_mode() == "manual":
-                    time.sleep(1.0)
+                    self.utils.send_key('space'); time.sleep(0.35)
+                    self.utils.send_key('space'); time.sleep(1.8)
                     return True                           # manual mode can't see the dialogue: assume it opened
-                end = time.time() + 2.0
-                while self.running and time.time() < end:
-                    if self.dialogue_visible():
-                        self.app.log("Dialogue open again.")
+                # jump, double jump, then land - looking for the Clover Training option the whole time
+                for key, wait in (('space', 0.35), ('space', 0.8), (None, 1.2)):
+                    if key:
+                        self.utils.send_key(key)
+                    if self._training_within(wait):
+                        spam.clear()
+                        self.app.log(opened)
                         return True
-                    time.sleep(0.15)
-            self.app.log("Couldn't reopen the dialogue here - walking to the wisp again.")
+            if failed:
+                self.app.log(failed)
             return False
         finally:
             spam.clear()                                 # stop pressing E before anything else happens
+
+    def _training_within(self, seconds):
+        """True as soon as the Clover Training option shows within `seconds`."""
+        end = time.time() + seconds
+        while self.running and time.time() < end:
+            if self.training_option_visible():
+                return True
+            time.sleep(0.1)
+        return False
+
+    def training_option_visible(self):
+        """The first menu's Clover Training option is on screen: a button that READS 'Clover Training' / 'research'
+        (never Class Reset), or the captured Clover Training picture in Image mode. Quiet: logs nothing."""
+        if self.dialog_mode() == "image" and self.find_dialog_button("clover_training") is not None:
+            return True
+        if not self.read_dialog()[0]:
+            return False                                 # no dialogue box: skip the (heavier) text reading
+        return any(self._has_word((t or "").lower(), self.TRAINING_WORDS)
+                   and not self._has_word((t or "").lower(), self.NEVER_WORDS)
+                   for _, _, t in self.dialog_buttons())
 
     def _park_mouse(self):
         """Keep the cursor off the option buttons (it changes how they look)."""

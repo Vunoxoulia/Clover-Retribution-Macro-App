@@ -1,6 +1,12 @@
+WHAT'S NEW IN V6.3.7.3
+======================
+- Library (fix): when reopening the dialogue it keeps double jumping + pressing E until the Clover Training option shows, then stops - also when it first walks up to the wisp
+
+
 WHAT'S NEW IN V6.3.7.2
 ======================
 - Library (fix): fixed a crash when the dialogue box was found at the edge of the window
+- Library (fix): Apply + Set up minigame keeps jumping + pressing E until the dialogue really opens
 
 WHAT'S NEW IN V6.3.7.1
 ======================
