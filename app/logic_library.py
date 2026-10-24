@@ -906,25 +906,36 @@ class LibraryLogic(RouteNav):
         return False
 
     def reopen_dialogue(self, tries=10):
-        """Standing at the wisp: double jump (space, space) then E, until the dialogue shows again.
-        Every key waits for its animation first. Returns True once it's open."""
-        for _ in range(tries):
-            if not self.running or not self.wait_for_roblox_focus():
-                return False
-            self.utils.send_key('space'); time.sleep(0.35)     # jump
-            self.utils.send_key('space'); time.sleep(0.8)      # double jump, then land
-            self.utils.send_key('e')
-            if self.dialog_mode() == "manual":
-                time.sleep(1.0)
-                return True                               # manual mode can't see the dialogue: assume it opened
-            end = time.time() + 2.0
-            while self.running and time.time() < end:
-                if self.dialogue_visible():
-                    self.app.log("Dialogue open again.")
-                    return True
-                time.sleep(0.15)
-        self.app.log("Couldn't reopen the dialogue here - walking to the wisp again.")
-        return False
+        """Standing at the wisp: E every 0.2 s the whole time (also while jumping and while checking), with a
+        double jump each try, until the dialogue shows again. Returns True once it's open."""
+        spam = threading.Event()
+
+        def press_e():
+            while spam.is_set() and self.running:
+                self.utils.send_key('e')
+                time.sleep(0.2)
+        try:
+            for _ in range(tries):
+                if not self.running or not self.wait_for_roblox_focus():
+                    return False
+                if not spam.is_set():
+                    spam.set()
+                    threading.Thread(target=press_e, daemon=True).start()
+                self.utils.send_key('space'); time.sleep(0.35)     # jump
+                self.utils.send_key('space'); time.sleep(0.8)      # double jump, then land
+                if self.dialog_mode() == "manual":
+                    time.sleep(1.0)
+                    return True                           # manual mode can't see the dialogue: assume it opened
+                end = time.time() + 2.0
+                while self.running and time.time() < end:
+                    if self.dialogue_visible():
+                        self.app.log("Dialogue open again.")
+                        return True
+                    time.sleep(0.15)
+            self.app.log("Couldn't reopen the dialogue here - walking to the wisp again.")
+            return False
+        finally:
+            spam.clear()                                 # stop pressing E before anything else happens
 
     def _park_mouse(self):
         """Keep the cursor off the option buttons (it changes how they look)."""

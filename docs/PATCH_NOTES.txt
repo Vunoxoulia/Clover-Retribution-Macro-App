@@ -1,3 +1,8 @@
+WHAT'S NEW IN V6.3.7.1
+======================
+- Library (fix): when reopening the wisp dialogue (after Apply + Set up minigame, or when it closed/cant detect), E is now pressed every 0.2 s the whole time.
+
+
 WHAT'S NEW IN V6.3.7
 ====================
 - Mining: pressing ',' at the start is now optional (Settings -> Press ',' when starting)
