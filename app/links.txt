@@ -1,7 +1,7 @@
 # VunVun's Macro - links used by the app.
 
 # --- video tutorials ---
-video_library  = https://youtu.be/F14jSpM0mfQ
+video_library  = https://youtu.be/IP7TXrQ8H-Q
 video_mining   = https://youtu.be/sFeGaw_UmiY
 video_fishing  = https://youtu.be/xcZ_vrPrG-g
 video_skill    = https://youtu.be/XGNc0d6DkFo
