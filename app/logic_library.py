@@ -893,42 +893,36 @@ class LibraryLogic(RouteNav):
             self.utils.send_key('e')
             self.app.log("Dialogue: pressed E (manual mode).")
             return True
-        return self.reopen_dialogue(tries=8, opened="Dialogue opened (Clover Training showing).", failed=None)
+        return self.reopen_dialogue(timeout=20.0, opened="Dialogue opened (Clover Training showing).", failed=None)
 
-    def reopen_dialogue(self, tries=25, opened="Dialogue open again (Clover Training showing).",
+    def reopen_dialogue(self, timeout=60.0, opened="Dialogue open again (Clover Training showing).",
                         failed="Couldn't reopen the dialogue here - walking to the wisp again."):
-        """Standing at the wisp: double jump + E every 0.2 s (E keeps going while jumping and checking) until the
-        'Clover Training' option is on screen. Returns True once it is."""
+        """Standing at the wisp: press space and E every 0.2 s until the Clover Training option shows.
+        Returns True once it does."""
+        if not self.wait_for_roblox_focus():
+            return False
+        if self.dialog_mode() == "manual":
+            for _ in range(10):
+                self.utils.send_key('space'); self.utils.send_key('e'); time.sleep(0.2)
+            return True                                  # manual mode can't see the dialogue: assume it opened
         spam = threading.Event()
+        spam.set()
 
-        def press_e():
+        def press():
             while spam.is_set() and self.running:
+                self.utils.send_key('space')
                 self.utils.send_key('e')
                 time.sleep(0.2)
+        threading.Thread(target=press, daemon=True).start()
         try:
-            for _ in range(tries):
-                if not self.running or not self.wait_for_roblox_focus():
-                    return False
-                if not spam.is_set():
-                    spam.set()
-                    threading.Thread(target=press_e, daemon=True).start()
-                if self.dialog_mode() == "manual":
-                    self.utils.send_key('space'); time.sleep(0.35)
-                    self.utils.send_key('space'); time.sleep(1.8)
-                    return True                           # manual mode can't see the dialogue: assume it opened
-                # jump, double jump, then land - looking for the Clover Training option the whole time
-                for key, wait in (('space', 0.35), ('space', 0.8), (None, 1.2)):
-                    if key:
-                        self.utils.send_key(key)
-                    if self._training_within(wait):
-                        spam.clear()
-                        self.app.log(opened)
-                        return True
+            if self._training_within(timeout):
+                self.app.log(opened)
+                return True
             if failed:
                 self.app.log(failed)
             return False
         finally:
-            spam.clear()                                 # stop pressing E before anything else happens
+            spam.clear()                                 # stop pressing before anything else happens
 
     def _training_within(self, seconds):
         """True as soon as the Clover Training option shows within `seconds`."""

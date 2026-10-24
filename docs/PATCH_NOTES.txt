@@ -1,6 +1,6 @@
 WHAT'S NEW IN V6.3.7.3
 ======================
-- Library (fix): when reopening the dialogue it keeps double jumping + pressing E until the Clover Training option shows, then stops - also when it first walks up to the wisp
+- Library (fix): when reopening the dialogue it keeps pressing space + E every 0.2 s until the Clover Training option shows, then stops - also when it first walks up to the wisp
 
 
 WHAT'S NEW IN V6.3.7.2
