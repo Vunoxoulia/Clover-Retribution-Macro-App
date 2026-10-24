@@ -380,10 +380,13 @@ class LibraryLogic(RouteNav):
         sig = None
         if panel:
             x, y, w, h = panel
-            top = cv2.cvtColor(img[y + int(h * .05):y + int(h * .45), x + int(w * .03):x + int(w * .97)],
-                               cv2.COLOR_BGR2GRAY)
-            text = cv2.dilate((top > 110).astype(np.uint8) * 255, np.ones((5, 5), np.uint8))
-            sig = cv2.resize(text, (120, 24), interpolation=cv2.INTER_AREA) > 64
+            crop = img[max(0, y + int(h * .05)):y + int(h * .45), max(0, x + int(w * .03)):x + int(w * .97)]
+            if crop.size == 0:                           # panel found at / past the window's edge: no text to read
+                sig = np.zeros((24, 120), bool)
+            else:
+                top = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+                text = cv2.dilate((top > 110).astype(np.uint8) * 255, np.ones((5, 5), np.uint8))
+                sig = cv2.resize(text, (120, 24), interpolation=cv2.INTER_AREA) > 64
         return panel is not None, centers, sig
 
     # ---------- Minigame detector: a snapshot of something only shown in the minigame ----------
@@ -998,6 +1001,11 @@ class LibraryLogic(RouteNav):
         WATCHER.hold("Library")             # event checks only after each minigame
         try:
             self._library_loop()
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            self.app.log(f"Library error: {e} - macro stopped.")
+            self.running = False
         finally:
             WATCHER.release("Library")
 
@@ -1058,8 +1066,14 @@ class LibraryLogic(RouteNav):
                 if not self.running:
                     break
                 if self.dialog_mode() != "manual" and self.dialogue_visible():
-                    continue                            # still open: just try the dialogue again
-                self.app.log("Dialogue closed - staying here: double jump + E until it opens again")
+                    # still open but stuck (timed out): close it and open it fresh with the jump + E below
+                    never = self.nevermind_button()
+                    if never:
+                        self.human_click(never[0], never[1], duration=0.15)
+                        time.sleep(1.0)
+                    self.app.log("Dialogue stuck - reopening it: double jump + E")
+                else:
+                    self.app.log("Dialogue closed - staying here: double jump + E until it opens again")
                 if not self.reopen_dialogue():
                     break
             if not done:

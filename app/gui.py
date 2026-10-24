@@ -917,11 +917,8 @@ class SpatialGUI:
                                      command=lambda v: (self.settings.set("dialog_mode", v.lower()), self.build_dialog_card()))
         seg.set(mode.capitalize())
         seg.pack(fill="x", padx=8, pady=2)
-        if mode == "auto":
-            ctk.CTkLabel(card, text="", height=2).pack()
-            return
         flags = self.logic.train_flags()
-        for key, label in DIALOG_BUTTONS.items():
+        for key, label in (DIALOG_BUTTONS.items() if mode != "auto" else ()):   # Auto reads words: nothing to capture
             if key.startswith("move_") and not flags[int(key[-1]) - 1]:
                 continue                                    # only the moves being trained
             if mode == "manual" and key.startswith("move_"):
