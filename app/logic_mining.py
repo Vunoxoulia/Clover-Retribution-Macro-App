@@ -2,9 +2,7 @@ import os
 import json
 import shutil
 import time
-import keyboard
-from utils import game_key
-import cv2
+from utils import press_key
 from route_nav import RouteNav, DEFAULT_MINE_HOLD, DEFAULT_MINE_WAIT
 
 
@@ -61,9 +59,9 @@ class MiningLogic(RouteNav):
             time.sleep(wait)
             return
         self.app.log(f"Mining ore {ore_idx} [{hold:.2f}s, then wait {wait:.2f}s]")
-        keyboard.press(game_key('e'))
+        press_key('e', True)
         time.sleep(hold)
-        keyboard.release(game_key('e'))
+        press_key('e', False)
         time.sleep(wait)
 
 
@@ -144,6 +142,9 @@ class MiningLogic(RouteNav):
 
     def test_movement(self):
         """Test Path: one lap of the selected route without mining."""
+        if self.running:
+            self.app.log("Stop the macro before Test Path.")      # it would stop the running macro when done
+            return
         route = self.load_route()
         if not route:
             self.app.log(f"No recorded route yet. Select a route and press {self.rec_key()} to record.")

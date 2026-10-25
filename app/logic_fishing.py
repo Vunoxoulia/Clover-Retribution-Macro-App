@@ -1,5 +1,5 @@
 import time
-import keyboard
+from utils import press_key
 import cv2
 import numpy as np
 from logic_base import BaseLogic
@@ -53,11 +53,11 @@ class FishingLogic(BaseLogic):
                 if fish_x:
                     if bar_x < fish_x:
                         if not self.is_holding_space:
-                            keyboard.press('space')
+                            press_key('space', True)
                             self.is_holding_space = True
                     else:
                         if self.is_holding_space:
-                            keyboard.release('space')
+                            press_key('space', False)
                             self.is_holding_space = False
             else:
                 
@@ -67,7 +67,7 @@ class FishingLogic(BaseLogic):
             time.sleep(0.005)
 
         if self.is_holding_space:
-            keyboard.release('space')
+            press_key('space', False)
             self.is_holding_space = False
         if self.test_running:
             self.app.log("Test Complete: Bar no longer detected.")
@@ -194,10 +194,8 @@ class FishingLogic(BaseLogic):
                 break
             
             self.app.log(f"Moving to {click_pos}...")
-            self.smooth_move(click_pos[0], click_pos[1], duration=0.25)
-            time.sleep(0.5)
             self.app.log("Clicking to start fishing...")
-            self.utils.mouse_click(click_pos[0], click_pos[1])
+            self.human_click(click_pos[0], click_pos[1], duration=0.25)
             time.sleep(1.0)
             
             
@@ -235,11 +233,11 @@ class FishingLogic(BaseLogic):
                     if fish_x:
                         if bar_x < fish_x:
                             if not self.is_holding_space:
-                                keyboard.press('space')
+                                press_key('space', True)
                                 self.is_holding_space = True
                         else:
                             if self.is_holding_space:
-                                keyboard.release('space')
+                                press_key('space', False)
                                 self.is_holding_space = False
                 else:
                     if time.time() - last_seen_bar > 0.5:
@@ -248,7 +246,7 @@ class FishingLogic(BaseLogic):
                 time.sleep(0.005)
             
             if self.is_holding_space:
-                keyboard.release('space')
+                press_key('space', False)
                 self.is_holding_space = False
             
             self.app.log("Caught! Waiting 2 seconds before next cast...")
@@ -265,5 +263,5 @@ class FishingLogic(BaseLogic):
     def stop(self):
         super().stop()
         if self.is_holding_space:
-            keyboard.release('space')
+            press_key('space', False)
             self.is_holding_space = False

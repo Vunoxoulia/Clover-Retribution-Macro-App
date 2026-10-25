@@ -1,6 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
-title VunVun's Macro Loader - V6.3.7.3
+title VunVun's Macro Loader - V6.4
 REM Always work from the folder this launcher is in ("Run as administrator" starts in System32)
 cd /d "%~dp0"
 
@@ -81,6 +81,7 @@ if "!NEED_INSTALL!"=="0" (
     echo                       done
 )
 
+
 REM The text reader (OCR) needs the Microsoft Visual C++ Redistributable (x64)
 if not exist "!SystemRoot!\System32\vcruntime140_1.dll" (
     echo.
@@ -89,6 +90,14 @@ if not exist "!SystemRoot!\System32\vcruntime140_1.dll" (
     echo     Download: https://aka.ms/vs/17/release/vc_redist.x64.exe
     echo.
 )
+
+REM Damaged files (cut-off download / unzip / install, antivirus, cloud-sync placeholder): Python would only show
+REM "source code string cannot contain null bytes". Check first and say what it means - and fix packages itself.
+set "REPAIRED=0"
+:check_files
+call "!PY_EXE!" "app\launcher_check.py" > "!CACHE!\damaged.txt" 2>nul
+if errorlevel 3 goto :repair_packages
+if errorlevel 1 goto :damaged
 
 REM ---------------------------------------------------------------------------
 REM [3/3] Start
@@ -111,7 +120,9 @@ REM ===========================================================================
 :check_python
 REM  ok (errorlevel 0) when %1 runs and is Python 3.11 - 3.14: the versions the text reader
 REM  (onnxruntime 1.27.0) has builds for. 3.10 is too old for it, 3.15 too new (pip finds nothing).
-call "%~1" -c "import sys; sys.exit(0 if (3, 11) <= sys.version_info[:2] <= (3, 14) else 1)" >nul 2>&1
+REM  It must also be the normal Windows Python ("MSC" build): MSYS2 / MinGW / Cygwin ones refuse pip
+REM  ("externally-managed-environment") and can't use the Windows packages anyway.
+call "%~1" -c "import sys; sys.exit(0 if (3, 11) <= sys.version_info[:2] <= (3, 14) and 'MSC v.' in sys.version else 1)" >nul 2>&1
 exit /b %errorlevel%
 
 :find_python
@@ -137,6 +148,41 @@ for %%v in (312 313 311 314) do (
 )
 exit /b 1
 
+:repair_packages
+if "!REPAIRED!"=="1" goto :repair_failed
+set "REPAIRED=1"
+echo.
+echo   [FIX] Some installed packages are damaged - reinstalling them fresh (this takes a few minutes):
+type "!CACHE!\damaged.txt"
+call "!PY_EXE!" -m pip install -r "app\requirements.txt" --force-reinstall --no-cache-dir --disable-pip-version-check --no-warn-script-location -q
+echo.
+goto :check_files
+
+:repair_failed
+echo.
+echo   [ERROR] Reinstalling didn't fix these packages:
+type "!CACHE!\damaged.txt"
+echo.
+echo     Try:
+echo     - Check your internet connection, then run the launcher again
+echo     - Allow this folder and Python in your antivirus
+echo     - Reinstall Python 3.12 from python.org, then run the launcher again
+echo.
+pause
+exit /b 1
+
+:damaged
+echo.
+echo   [ERROR] Your macro files are damaged - the download or unzip didn't finish properly:
+type "!CACHE!\damaged.txt"
+echo.
+echo     Fix: download the macro again and unzip it again ("Extract All" - let it finish).
+echo     Copy your old "data" folder into the new one first: it keeps your settings, routes and pictures.
+echo     Tip: unzip it outside OneDrive / synced folders (e.g. C:\Games), and allow it in your antivirus.
+echo.
+pause
+exit /b 1
+
 :no_python
 set "OTHER_PY="
 for /f "tokens=2 delims= " %%V in ('python --version 2^>nul') do set "OTHER_PY=%%V"
@@ -144,8 +190,9 @@ if not defined OTHER_PY for /f "tokens=2 delims= " %%V in ('py --version 2^>nul'
 if defined OTHER_PY (echo Python !OTHER_PY! - not supported) else (echo not found)
 echo.
 if defined OTHER_PY (
-    echo   [NOTE] You have Python !OTHER_PY!, but the macro needs Python 3.11 - 3.14.
-    echo       Its text reader, onnxruntime, isn't available for other versions.
+    echo   [NOTE] You have Python !OTHER_PY!, but the macro needs Python 3.11 - 3.14 from python.org.
+    echo       Its text reader, onnxruntime, isn't available for other versions, and the Python that
+    echo       comes with MSYS2 / Git tools / Cygwin can't install the macro's packages.
     echo       Python 3.12 can be installed NEXT TO it - your current Python stays as it is.
 ) else (
     echo   [ERROR] Python 3.11 - 3.14 is needed and wasn't found.

@@ -6,7 +6,6 @@ import keyboard
 import time
 import threading
 import pywinctl
-from PIL import Image
 import sys
 import ctypes
 import random
@@ -73,6 +72,52 @@ if IS_WINDOWS:
                     ("ii", Input_I)]
 
     INPUT_MOUSE = 0
+    INPUT_KEYBOARD = 1
+    _ARROWS = {"up": (0x26, 0x48), "down": (0x28, 0x50), "left": (0x25, 0x4B), "right": (0x27, 0x4D)}
+
+    def scan_key(sc, down, extended=False, vk=0):
+        """Press (down=True) / release a key by its hardware scan code (what a real keyboard sends, so the game
+        can't mistake it for another key)."""
+        flags = 0x0008 | (0x0001 if extended else 0) | (0 if down else 0x0002)   # SCANCODE | EXTENDEDKEY | KEYUP
+        extra = ctypes.c_ulong(0)
+        ii_ = Input_I()
+        ii_.ki = KeyBdInput(vk, sc, flags, 0, ctypes.pointer(extra))
+        x = Input(ctypes.c_ulong(INPUT_KEYBOARD), ii_)
+        ctypes.windll.user32.SendInput(1, ctypes.pointer(x), ctypes.sizeof(x))
+
+    def press_key(name, down):
+        """Press / release a game key BY ITS POSITION (scan code), whatever the keyboard layout or Windows language:
+        Roblox reads keys by position, and the keyboard library's look-up by NAME isn't reliable ('left' came out
+        as '3' on one PC; AZERTY's 'w' is where QWERTY has Z). Names are QWERTY positions ('w' = the key right
+        of Tab). Unknown names fall back to the keyboard library."""
+        if isinstance(name, int):
+            scan_key(name, down)
+            return
+        n = str(name).lower()
+        if n in _ARROWS:
+            arrow_key(n, down)
+            return
+        sc = key_scan_code(n)
+        if sc:
+            scan_key(sc, down)
+        elif down:
+            keyboard.press(n)
+        else:
+            keyboard.release(n)
+
+    def tap_scan(sc, hold=0.05):
+        """One press of a key by scan code (e.g. 0x01 = Esc, 0x1C = Enter)."""
+        scan_key(sc, True)
+        time.sleep(hold)
+        scan_key(sc, False)
+
+    def arrow_key(name, down):
+        """Press (down=True) / release an arrow key the way a real keyboard does: its scan code WITH the
+        'extended key' flag. Without that flag (how the keyboard library sends it) Roblox reads numpad 4 / 6 / 8 / 2,
+        so the camera didn't turn."""
+        vk, sc = _ARROWS[name]
+        scan_key(sc, down, extended=True, vk=vk)
+
     MOUSEEVENTF_MOVE = 0x0001
     MOUSEEVENTF_ABSOLUTE = 0x8000
     MOUSEEVENTF_LEFTDOWN = 0x0002
@@ -81,57 +126,35 @@ if IS_WINDOWS:
     MOUSEEVENTF_RIGHTUP = 0x0010
     MOUSEEVENTF_VIRTUALDESK = 0x4000
 
-# ---------------- Keyboard layout ----------------
+# ---------------- Keys by position ----------------
 # Roblox reads keys by their PHYSICAL position (an AZERTY player walks with ZQSD, the game sees WASD).
-# Every key the macros send is named the way Roblox names it (QWERTY positions). On a non-QWERTY
-# layout we send the physical scan code instead, so W is always the key "where W is on QWERTY".
-LAYOUTS = ["Auto", "QWERTY", "AZERTY", "QWERTZ", "Other"]
+# Every key the macros send is named the way Roblox names it (QWERTY positions) and sent as that position's
+# scan code, so it's the same key on every keyboard layout / Windows language.
 _QWERTY_SC = {c: i for i, c in enumerate("1234567890-=", start=2)}
 _QWERTY_SC.update({c: i for i, c in enumerate("qwertyuiop[]", start=16)})
 _QWERTY_SC.update({c: i for i, c in enumerate("asdfghjkl;'`", start=30)})
 _QWERTY_SC.update({c: i for i, c in enumerate(r"\zxcvbnm,./", start=43)})
-_layout_choice = None
+_SPECIAL_SC = {"space": 0x39, "shift": 0x2A, "left shift": 0x2A, "right shift": 0x36, "enter": 0x1C, "esc": 0x01,
+               "escape": 0x01, "tab": 0x0F, "ctrl": 0x1D, "left ctrl": 0x1D, "alt": 0x38, "left alt": 0x38,
+               "backspace": 0x0E, "f11": 0x57, "f12": 0x58}
+_SPECIAL_SC.update({f"f{i}": 0x3A + i for i in range(1, 11)})          # F1 = 0x3B ... F10 = 0x44
+# scan code -> its QWERTY name: recordings store keys by POSITION, so AZERTY's Z key (physical W) is saved as 'w'
+_NAME_BY_SC = {v: k for k, v in _QWERTY_SC.items()}
+_NAME_BY_SC.update({0x39: "space", 0x2A: "shift", 0x36: "shift"})
 
 
-def detect_layout():
-    """Guess the Windows keyboard layout from its language id."""
-    try:
-        hwnd = ctypes.windll.user32.GetForegroundWindow()
-        tid = ctypes.windll.user32.GetWindowThreadProcessId(hwnd, None)
-        lang = ctypes.windll.user32.GetKeyboardLayout(tid) & 0xFFFF
-    except Exception:
-        return "QWERTY"
-    if lang in (0x040C, 0x080C, 0x140C, 0x180C):      # French, Belgian, Luxembourg, Monaco
-        return "AZERTY"
-    if lang in (0x0407, 0x0807, 0x0C07, 0x1007, 0x1407, 0x0405, 0x041B, 0x040E, 0x0424, 0x041A):
-        return "QWERTZ"                                # German / Swiss / Austrian / Czech / Slovak / Hungarian / Slovene / Croatian
-    return "QWERTY"
+def key_scan_code(name):
+    """Scan code of a QWERTY key name ('w', '1', 'space', 'f1'...), or None."""
+    n = str(name).lower()
+    return _QWERTY_SC.get(n) or _SPECIAL_SC.get(n)
 
 
-def set_layout(choice):
-    global _layout_choice
-    _layout_choice = choice if choice in LAYOUTS else "Auto"
-
-
-def get_layout():
-    """The layout in use: the saved choice, or the detected one when set to Auto."""
-    global _layout_choice
-    if _layout_choice is None:
-        try:
-            from settings import SpatialSettings
-            set_layout(SpatialSettings().get("keyboard_layout", "Auto"))
-        except Exception:
-            _layout_choice = "Auto"
-    return detect_layout() if _layout_choice == "Auto" else _layout_choice
-
-
-def game_key(key):
-    """Turn a Roblox key name (QWERTY position) into what to press on this keyboard."""
-    if isinstance(key, str) and get_layout() != "QWERTY":
-        sc = _QWERTY_SC.get(key.lower())
-        if sc:
-            return sc
-    return key
+def position_name(ev):
+    """The QWERTY name of the key a keyboard-hook event came from, by its position (not the printed letter)."""
+    sc = getattr(ev, "scan_code", None)
+    if sc in _NAME_BY_SC and not getattr(ev, "is_keypad", False):
+        return _NAME_BY_SC[sc]
+    return (ev.name or "").lower()
 
 
 SOUNDS = {"done": "SystemAsterisk", "event": "SystemExclamation"}
@@ -212,6 +235,36 @@ class RobloxInputDriver:
             else:
                 cls._mouse.position = (int(x), int(y))
 
+    @staticmethod
+    def click_delay():
+        """Seconds between the mouse arriving and the click (Settings: Click delay). Roblox needs a moment
+        to see the mouse arrive - an instant move + click lands on the old spot."""
+        try:
+            from settings import SpatialSettings
+            return max(0.0, float(SpatialSettings().get("click_delay", 1.0)))
+        except (TypeError, ValueError, Exception):
+            return 1.0
+
+    @classmethod
+    def glide_click(cls, x, y, settle=None, button='left', duration=0.04, glide=0.25):
+        """Move -> wait -> click: glide to (x, y), nudge so the game registers it, wait `settle`
+        (default: the Click delay setting), then click."""
+        x, y = int(x), int(y)
+        settle = cls.click_delay() if settle is None else max(0.0, float(settle))
+        with cls._lock:
+            sx, sy = cls._mouse.position
+            steps = max(6, int(glide / 0.012))
+            for k in range(1, steps + 1):
+                t = k / steps
+                t = t * (2 - t)
+                cls.move_to(int(sx + (x - sx) * t), int(sy + (y - sy) * t))
+                time.sleep(glide / steps)
+            for dx in (2, -2, 0):
+                cls.move_to(x + dx, y)
+                time.sleep(0.03)
+            time.sleep(settle)
+            cls.click_at(x, y, duration, button)
+
     @classmethod
     def click_at(cls, x, y, duration=0.03, button='left'):
         with cls._lock:
@@ -250,6 +303,25 @@ OCR_HELP = ("Text reading (OCR) couldn't start. Install the Microsoft Visual C++
             "https://aka.ms/vs/17/release/vc_redist.x64.exe  then restart the macro.")
 
 
+class _SmallTextReader:
+    """The text reader, but a very small picture (a hotbar label, one short word) is enlarged to 120 px first:
+    tiny text read better that way (tested: 62 of 66 game lines right, none empty - the old setup 55, 7 empty).
+    Text boxes come back in the picture's own coordinates."""
+    MIN_SIDE = 120
+
+    def __init__(self, engine):
+        self.engine = engine
+
+    def __call__(self, img, *args, **kwargs):
+        if isinstance(img, np.ndarray) and img.ndim >= 2 and 0 < min(img.shape[:2]) < self.MIN_SIDE:
+            f = self.MIN_SIDE / min(img.shape[:2])
+            res, elapse = self.engine(cv2.resize(img, None, fx=f, fy=f, interpolation=cv2.INTER_CUBIC), *args, **kwargs)
+            if res:
+                res = [[[[p[0] / f, p[1] / f] for p in r[0]]] + list(r[1:]) for r in res]
+            return res, elapse
+        return self.engine(img, *args, **kwargs)
+
+
 class SpatialUtils:
     ocr_error = ""          # set when OCR can't start, so pages can tell the user why nothing is read
     def __init__(self):
@@ -260,7 +332,7 @@ class SpatialUtils:
     @property
     def sct(self):
         if not hasattr(self._thread_local, 'sct'):
-            self._thread_local.sct = mss.mss()
+            self._thread_local.sct = (getattr(mss, "MSS", None) or mss.mss)()   # mss 10+ renamed it
         return self._thread_local.sct
 
     # ONE text reader for the whole app: loading the model takes seconds, and every page / macro used to
@@ -274,7 +346,15 @@ class SpatialUtils:
             if cls._shared_ocr is None:
                 try:
                     from rapidocr_onnxruntime import RapidOCR
-                    cls._shared_ocr = RapidOCR(providers=['CPUExecutionProvider'])
+                    try:
+                        # The default blows every picture up until its SHORT side is 736 px: a 35 px tall
+                        # button became ~736 x 4900 and took 1.3 s (and read worse). 'Only shrink above
+                        # 2000 px' keeps big reads the same and makes one-line reads ~45x faster.
+                        # Game text is never rotated, so the rotation check is skipped too.
+                        cls._shared_ocr = _SmallTextReader(RapidOCR(det_model_path=None, det_limit_type="max",
+                                                                    det_limit_side_len=2000, use_angle_cls=False))
+                    except Exception:                    # another RapidOCR version: its own defaults
+                        cls._shared_ocr = RapidOCR()
                     print("RapidOCR initialized")
                 except Exception as e:
                     print(f"OCR (RapidOCR) Initialization error: {e}")
@@ -456,42 +536,6 @@ class SpatialUtils:
             return centers
         return None
 
-    def pixel_search_raw(self, region, target_color, tolerance=10):
-        img = self.capture_screen(region)
-        img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-        r, g, b = self._parse_target_color(target_color)
-        lower = np.array([max(0, b - tolerance), max(0, g - tolerance), max(0, r - tolerance)])
-        upper = np.array([min(255, b + tolerance), min(255, g + tolerance), min(255, r + tolerance)])
-        mask = cv2.inRange(img_bgr, lower, upper)
-        coords = np.column_stack(np.where(mask > 0))
-        if len(coords) == 0:
-            return []
-        return [(region[0] + int(c[1]), region[1] + int(c[0])) for c in coords]
-
-    def check_pixel_area(self, region, target_color, tolerance=10):
-        img = self.capture_screen(region)
-        img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-        r, g, b = self._parse_target_color(target_color)
-        lower = np.array([max(0, b - tolerance), max(0, g - tolerance), max(0, r - tolerance)])
-        upper = np.array([min(255, b + tolerance), min(255, g + tolerance), min(255, r + tolerance)])
-        mask = cv2.inRange(img_bgr, lower, upper)
-        return np.any(mask > 0)
-
-    def pixel_search(self, region, target_color, tolerance=10):
-        img = self.capture_screen(region)
-        img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-        
-        r, g, b = self._parse_target_color(target_color)
-        lower = np.array([max(0, b - tolerance), max(0, g - tolerance), max(0, r - tolerance)])
-        upper = np.array([min(255, b + tolerance), min(255, g + tolerance), min(255, r + tolerance)])
-        
-        mask = cv2.inRange(img_bgr, lower, upper)
-        coords = np.column_stack(np.where(mask > 0))
-        
-        if len(coords) > 0:
-            return (region[0] + coords[0][1], region[1] + coords[0][0])
-        return None
-
     def pixel_search_existing_frame(self, img_rgb, region, target_color, tolerance=15):
         img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
         
@@ -535,44 +579,15 @@ class SpatialUtils:
             print(f"Image search error: {e}")
         return None
 
-    def mouse_click(self, x, y, button='left'):
-        RobloxInputDriver.click_at(x, y, duration=0.05, button=button)
-
     def mouse_move(self, x, y):
         RobloxInputDriver.move_to(x, y)
 
     def send_key(self, key, duration=0.05):
         """Send a keyboard key press with optional duration, thread‑safe."""
         with self._key_lock:
-            k = game_key(key)
-            keyboard.press(k)
+            press_key(key, True)                         # by position: same key on every layout / language
             time.sleep(duration)
-            keyboard.release(k)
-
-    def find_color_x(self, region, target_color, tolerance=25, min_area=0):
-        """Finds the average X coordinate of a color within a region, with optional size filtering."""
-        img = self.capture_screen(region)
-        img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-        
-        r, g, b = self._parse_target_color(target_color)
-        lower = np.array([max(0, b - tolerance), max(0, g - tolerance), max(0, r - tolerance)], dtype="uint8")
-        upper = np.array([min(255, b + tolerance), min(255, g + tolerance), min(255, r + tolerance)], dtype="uint8")
-        
-        mask = cv2.inRange(img_bgr, lower, upper)
-        
-        if min_area > 0:
-            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            valid_mask = np.zeros_like(mask)
-            for cnt in contours:
-                if cv2.contourArea(cnt) >= min_area:
-                    cv2.drawContours(valid_mask, [cnt], -1, 255, -1)
-            mask = valid_mask
-
-        coords = np.column_stack(np.where(mask > 0))
-        if len(coords) > 0:
-            avg_x = np.mean(coords[:, 1])
-            return region[0] + int(avg_x)
-        return None
+            press_key(key, False)
 
     def find_color_hsv_x(self, region, target_rgb, hue_tol=10, sat_min=50, val_min=50, min_area=0):
         """
@@ -605,33 +620,6 @@ class SpatialUtils:
             avg_x = np.mean(coords[:, 1])
             return region[0] + int(avg_x)
         return None
-
-    def count_vertical_sticks(self, region, img_rgb=None):
-        """Counts the number of vertical 'sticks' (like I, II, III) in a region."""
-        if img_rgb is None:
-            img_rgb = self.capture_screen(region)
-        
-        gray = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
-        _, thresh = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
-        
-        projection = np.sum(thresh, axis=0)
-        
-        sticks = 0
-        in_stick = False
-        current_width = 0
-        min_width = 2 
-        
-        for val in projection:
-            if val > 0: 
-                current_width += 1
-                if not in_stick and current_width >= min_width:
-                    sticks += 1
-                    in_stick = True
-            else:
-                in_stick = False
-                current_width = 0
-        
-        return sticks
 
     def _parse_target_color(self, target_color):
         if isinstance(target_color, str):
@@ -746,6 +734,25 @@ def focus_roblox(prefer=0):
         return bool(EventWatcher.focus_window(target, timeout=1.0))
     except Exception:
         return False
+
+
+def on_hotkey(key, callback, debounce=0.4):
+    """Run callback when `key` is pressed - also while other keys are held. (keyboard.add_hotkey('f9') only fires
+    when F9 is the ONLY key down: F9 while still holding W did nothing.) 'ctrl+p' style: the last key, with its
+    modifiers checked. One call per press (held-key repeats ignored). Raises like keyboard does for unknown keys."""
+    key = str(key or "").strip().lower()
+    if not key:
+        return None
+    *mods, main = [k.strip() for k in key.split("+")]
+    last = [0.0]
+
+    def fire(_e):
+        if any(not keyboard.is_pressed(m) for m in mods):
+            return
+        if time.time() - last[0] > debounce:
+            last[0] = time.time()
+            callback()
+    return keyboard.on_press_key(main, fire)
 
 
 def foreground_roblox():

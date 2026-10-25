@@ -1,6 +1,10 @@
 import json
 import os
+import shutil
 import sys
+import threading
+
+_SAVE_LOCK = threading.RLock()     # the window and the macro's threads save the same file
 
 # Folder layout (only the launcher sits in the main folder):
 #   Windows_Launcher.bat
@@ -83,7 +87,6 @@ class SpatialSettings:
             "color_tolerance": 25,
             "hotkeys": {
                 "start": "f6",
-                "stop": "f7",
                 "pause": "f8",
                 "test_btn": "f1",
                 "test_color": "f2",
@@ -91,6 +94,7 @@ class SpatialSettings:
                 "test_path": "f3",
                 "test_find": "f4",
                 "test_full": "f5",
+                "test_open": "f7",
                 "record": "f9"
             },
             "positions": {
@@ -178,9 +182,16 @@ class SpatialSettings:
         If the file is broken (e.g. the PC shut down mid-save), use the backup instead of starting
         empty - an empty start would overwrite everything on the next save."""
         if not os.path.exists(self.filename):
-            return
+            if not os.path.exists(self.filename + ".bak"):
+                return                                   # first start: defaults
+            # the main file is missing but its backup is there (an old save was cut off): use the backup
+            try:
+                shutil.copy2(self.filename + ".bak", self.filename)
+                print("settings.json was missing - restored it from settings.json.bak.")
+            except OSError:
+                pass
         try:
-            data = self._read(self.filename)
+            data = self._read(self.filename if os.path.exists(self.filename) else self.filename + ".bak")
         except Exception as e:
             print(f"Error loading settings: {e}")
             data = None
@@ -200,23 +211,41 @@ class SpatialSettings:
             self.settings["hotkeys"].setdefault("test_path", "f3")
             self.settings["hotkeys"].setdefault("test_find", "f4")
             self.settings["hotkeys"].setdefault("test_full", "f5")
+            if self.settings["hotkeys"].get("stop") == "f7":
+                self.settings["hotkeys"].pop("stop")      # old entry, never used: F7 is Test opening now
+            self.settings["hotkeys"].setdefault("test_open", "f7")
             self.settings["hotkeys"].setdefault("record", "f9")
 
     def save(self):
         """Write to a temp file, then swap it in: a crash can't leave a half-written settings.json.
-        The previous good file is kept as settings.json.bak."""
-        tmp = self.filename + ".tmp"
-        try:
-            with open(tmp, 'w', encoding='utf-8') as f:
-                json.dump(self.settings, f, indent=4)
-            if os.path.exists(self.filename):
+        The previous good file is COPIED to settings.json.bak first, so settings.json is never missing.
+        One save at a time (the window and the macro save the same file)."""
+        with _SAVE_LOCK:
+            tmp = f"{self.filename}.{threading.get_ident()}.tmp"
+            try:
+                text = None
+                for _ in range(3):                       # another thread may change a setting mid-way: retry
+                    try:
+                        text = json.dumps(self.settings, indent=4)
+                        break
+                    except RuntimeError:
+                        continue
+                if text is None:
+                    return
+                with open(tmp, 'w', encoding='utf-8') as f:
+                    f.write(text)
+                if os.path.exists(self.filename):
+                    try:
+                        shutil.copy2(self.filename, self.filename + ".bak")
+                    except OSError:
+                        pass
+                os.replace(tmp, self.filename)
+            except Exception as e:
+                print(f"Error saving settings: {e}")
                 try:
-                    os.replace(self.filename, self.filename + ".bak")
+                    os.remove(tmp)
                 except OSError:
                     pass
-            os.replace(tmp, self.filename)
-        except Exception as e:
-            print(f"Error saving settings: {e}")
 
     def get(self, key, default=None):
         return self.settings.get(key, default)

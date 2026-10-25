@@ -10,11 +10,16 @@ from logic_umbral_abyss import UmbralAbyssLogic
 import keyboard
 from ui_style import big_toggle, style_toggle, save_while_typing, sound_picker, fast_scroll_frame, seconds_combo, help_box
 import os
-import sys
-import webbrowser
 import links
 import time
 import threading
+
+def umbral_beta():
+    """Umbral Abyss Stone isn't released yet: it only opens on a PC with data/umbral_beta.txt (data/ is never
+    pushed, so players see it greyed out)."""
+    from settings import get_base_path
+    return os.path.exists(os.path.join(get_base_path(), "umbral_beta.txt"))
+
 
 class MacroSelector:
     def __init__(self, root, on_select, current_version):
@@ -51,7 +56,10 @@ class MacroSelector:
             ("Fishing", "🎣", "Auto fishy",
              lambda: self.on_select("Fishing Macro", FishingLogic, tabs=["Main", "Fishing Settings", "Hotkeys"],
                                     tutorial_url="video_fishing")),
-            ("Umbral Abyss Stone", "🔥", "Auto farm lesser devil Juggernaut", None),
+            ("Umbral Abyss Stone", "🔥", "Auto farm lesser devil Juggernaut",
+             (lambda: self.on_select("Umbral Abyss Stone", UmbralAbyssLogic, tabs=["Main", "Routes", "Moves", "Juggernaut",
+                                                                        "Spawn", "Server reset", "Hotkeys"]))
+             if umbral_beta() else None),       # not released yet: greyed out unless data/umbral_beta.txt exists
         ]
         for k, (title, icon, desc, cmd) in enumerate(cards):
             badge = "on" if title == "Event Notifier" and WATCHER.running else None
@@ -84,38 +92,6 @@ class MacroSelector:
                                                                   donate_btn.winfo_rooty() + donate_btn.winfo_height()))
         donate_btn.pack(side="left", padx=3)
 
-        self.setup_layout_picker()
-
-    def setup_layout_picker(self):
-        """Keyboard layout: the macros press keys by their QWERTY position (that's how Roblox reads them)."""
-        from utils import LAYOUTS, set_layout, detect_layout
-        settings = SpatialSettings()
-        row = ctk.CTkFrame(self.root, fg_color="transparent")
-        row.pack(side="bottom", fill="x", padx=32, pady=(0, 4))
-        ctk.CTkLabel(row, text="Keyboard", font=("Arial", 12), text_color="#adb5bd").pack(side="left", padx=(0, 8))
-        hint = ctk.CTkLabel(row, text="", font=("Arial", 12), text_color="#adb5bd")
-
-        def show_hint(choice):
-            if choice == "Auto":
-                hint.configure(text=f"detected: {detect_layout()}")
-            elif choice == "QWERTY":
-                hint.configure(text="keys sent as typed")
-            else:
-                hint.configure(text="keys sent by position (WASD = ZQSD on AZERTY)")
-
-        def pick(choice):
-            settings.set("keyboard_layout", choice)
-            set_layout(choice)
-            show_hint(choice)
-
-        current = settings.get("keyboard_layout", "Auto")
-        seg = ctk.CTkSegmentedButton(row, values=LAYOUTS, command=pick, font=("Arial", 12), height=28)
-        seg.set(current if current in LAYOUTS else "Auto")
-        seg.pack(side="left", pady=4)
-        hint.pack(side="left", padx=(10, 16))
-        set_layout(seg.get())
-        show_hint(seg.get())
-
     def launch_events(self):
         from gui_events import EventsOnlyLogic
         self.on_select("Event Notifier", EventsOnlyLogic, tabs=["Events"])
@@ -127,7 +103,7 @@ class MacroSelector:
     def show_patch_notes(self):
         import requests
         from tkinter import messagebox
-        notes_url = f"https://raw.githubusercontent.com/Vunoxoulia/Clover-Retribution-Macro-App/main/docs/PATCH_NOTES.txt"
+        notes_url = "https://raw.githubusercontent.com/Vunoxoulia/Clover-Retribution-Macro-App/main/docs/PATCH_NOTES.txt"
         try:
             response = requests.get(notes_url, timeout=5)
             if response.status_code == 200:
@@ -162,7 +138,7 @@ class MacroSelector:
                          corner_radius=6, width=34, height=20).pack(side="right")
         ctk.CTkLabel(card, text=description, font=("Arial", 12), text_color="#adb5bd", justify="left",
                      anchor="w", wraplength=200).pack(fill="x", padx=14)
-        btn = ctk.CTkButton(card, text="Launch" if command else "Coming soon", command=command, height=30,
+        btn = ctk.CTkButton(card, text="Launch", command=command, height=30,
                             font=("Arial", 13, "bold"), fg_color="#0d6efd", hover_color="#0b5ed7")
         if command is None:
             btn.configure(state="disabled", fg_color="#343a40", text_color_disabled="#868e96")
@@ -172,7 +148,7 @@ class MacroSelector:
 
 NAV_ICONS = {
     "Main": "", "Settings": "", "Areas": "", "Clover Clicker": "",
-    "Fishing Settings": "", "OK Popup": "", "Events": "", "Hotkeys": "", "Statistics": "",
+    "Fishing Settings": "", "Pop Up": "", "Events": "", "Hotkeys": "", "Statistics": "",
 }
 
 class SidebarNav:
@@ -232,10 +208,6 @@ class SidebarNav:
             except Exception as e:
                 print(f"Couldn't build page {name}: {e}")
 
-    def build_all(self):
-        for name in list(self._builders):
-            self._build(name)
-
     def get(self):
         return self.current
 
@@ -244,19 +216,20 @@ class SpatialGUI:
         self.root = root
         self.on_back = on_back
         self.root.title(title)
-        self.root.geometry("720x720" if "Mining" in title else "650x700")
+        self.root.geometry("720x720" if "Mining" in title else "800x760" if "Umbral" in title else "650x700")
         self.tutorial_url = tutorial_url
         self.settings = SpatialSettings()
         self.logic = logic_class(self)
         self.overlays = {} 
         self.tabs_to_show = list(tabs) if tabs else ["Main", "Settings", "Areas", "Clover Clicker", "Hotkeys", "Statistics"]
         # Shared OK popup setup page: every macro gets it, placed before Hotkeys
-        if "OK Popup" not in self.tabs_to_show:
+        # (not Umbral Abyss Stone: it doesn't use OK popups or the Event Notifier)
+        if "Pop Up" not in self.tabs_to_show and not self._no_ok_events:
             idx = self.tabs_to_show.index("Hotkeys") if "Hotkeys" in self.tabs_to_show else len(self.tabs_to_show)
-            self.tabs_to_show.insert(idx, "OK Popup")
+            self.tabs_to_show.insert(idx, "Pop Up")
         # Shared Event Notifier page: every macro gets it too (runs alongside the macro)
-        if "Events" not in self.tabs_to_show:
-            self.tabs_to_show.insert(self.tabs_to_show.index("OK Popup") + 1, "Events")
+        if "Events" not in self.tabs_to_show and not self._no_ok_events:
+            self.tabs_to_show.insert(self.tabs_to_show.index("Pop Up") + 1, "Events")
         self.DEFAULT_CLOVER_COLORS = {"gold": (255, 180, 51), "silver": (164, 178, 178), "bronze": (198, 62, 37)}
         self.DEFAULT_CLOVER_TOLERANCES = {"gold": 5, "silver": 5, "bronze": 5}
         self.root.protocol("WM_DELETE_WINDOW", self.exit_app)
@@ -273,18 +246,26 @@ class SpatialGUI:
                           fg_color="transparent", border_color="#495057", border_width=1,
                           hover_color="#2b3035", text_color="#e9ecef", command=self.go_back).pack(fill="x")
         from logic_events import WATCHER
-        WATCHER.attach(self.settings)        # event checks work before the Events page is ever opened
+        if not self._no_ok_events:
+            WATCHER.attach(self.settings)    # event checks work before the Events page is ever opened
         # Only the page you see is built now; the others the first time you open them (building every
         # page up front froze the window for seconds when a macro was opened)
         builders = {"Main": self.setup_main_tab, "Settings": self.setup_settings_tab, "Areas": self.setup_areas_tab,
                     "Clover Clicker": self.setup_clover_tab, "Fishing Settings": self.setup_fishing_settings_tab,
-                    "OK Popup": self.setup_ok_tab, "Events": self.setup_events_tab,
+                    "Pop Up": self.setup_ok_tab, "Events": self.setup_events_tab,
                     "Hotkeys": self.setup_hotkeys_tab, "Statistics": self.setup_statistics_tab}
+        for name in self.UMBRAL_PAGES:
+            builders[name] = lambda n=name: self.umbral_page(n)
         for name in self.tabs_to_show:
             if name in builders:
                 self.tabview.lazy(name, builders[name])
         if self._is_library:
             self.root.after(1500, self._ocr_check_on_open)
+
+    @property
+    def _no_ok_events(self):
+        """Umbral Abyss Stone has no OK Popup / Events pages (they aren't used there)."""
+        return "Umbral" in self.root.title()
 
     @property
     def _is_library(self):
@@ -340,7 +321,6 @@ class SpatialGUI:
         self.status_label = ctk.CTkLabel(status_card, text="Status: <Not Started>", font=("Arial", 13, "bold"), text_color="#f8f9fa")
         self.status_label.pack(pady=12, padx=10)
 
-        hk = self.settings.get("hotkeys")
         main_btn = dict(height=40, corner_radius=8, font=("Arial", 13, "bold"))      # same size as the big toggles
         # One Start/Stop toggle on one key (F6), like the Skill Macro
         self.start_btn = ctk.CTkButton(tab, text="", command=self.toggle_macro, **main_btn)
@@ -350,19 +330,25 @@ class SpatialGUI:
 
         # Always-Click-OK toggle — works even when the macro is stopped or paused
         self._always_ok_on = False
-        self.always_ok_btn = big_toggle(tab, self.toggle_always_ok)
-        self._ok_toggles = [self.always_ok_btn]
-        style_toggle(self.always_ok_btn, False, "Always Click OK")
-        self.always_ok_btn.pack(pady=4, fill="x", padx=40)
-        ok_hint = ctk.CTkLabel(tab, text="Set up OK detection in the OK Popup page", font=("Arial", 12),
-                               text_color="#ced4da", cursor="hand2")
-        ok_hint.pack(pady=(0, 8))
-        ok_hint.bind("<Button-1>", lambda e: self.tabview.set("OK Popup"))
+        if not self._no_ok_events:
+            self.always_ok_btn = big_toggle(tab, self.toggle_always_ok)
+            self._ok_toggles = [self.always_ok_btn]
+            style_toggle(self.always_ok_btn, False, "Always Click Pop Ups")
+            self.always_ok_btn.pack(pady=4, fill="x", padx=40)
+            ok_hint = ctk.CTkLabel(tab, text="Set up pop ups (OK and others) on the Pop Up page", font=("Arial", 12),
+                                   text_color="#ced4da", cursor="hand2")
+            ok_hint.pack(pady=(0, 8))
+            ok_hint.bind("<Button-1>", lambda e: self.tabview.set("Pop Up"))
         for key, text in (("force_roblox_focus", "Keep Roblox in focus (brings it back to the front)"),
                           ("show_action_badge", "Show what the macro is doing on top of the game")):
             var = ctk.BooleanVar(value=bool(self.settings.get(key, True)))
             ctk.CTkCheckBox(tab, text=text, variable=var, font=("Arial", 12),
                             command=lambda k=key, v=var: self.settings.set(k, bool(v.get()))).pack(anchor="w", padx=42, pady=2)
+        cd_row = ctk.CTkFrame(tab, fg_color="transparent"); cd_row.pack(anchor="w", padx=42, pady=2)
+        ctk.CTkLabel(cd_row, text="Click delay: wait", font=("Arial", 12)).pack(side="left")
+        self._num_combo(cd_row, "click_delay", ["0.3", "0.5", "0.75", "1", "1.5", "2"],
+                        float(self.settings.get("click_delay", 1.0))).pack(side="left", padx=6)
+        ctk.CTkLabel(cd_row, text="s after moving the mouse, before each click", font=("Arial", 12)).pack(side="left")
         if "Library" in self.root.title():
             sound_row = ctk.CTkFrame(tab, fg_color="transparent")
 
@@ -592,7 +578,7 @@ class SpatialGUI:
         if not messagebox.askokcancel(
                 "Full Auto Setup",
                 "Stand at the desk (where your route starts), with your moves on the hotbar.\n\n"
-                "Press OK, then click into Roblox. Don't touch the mouse / keyboard until it's done - "
+                "Press OK - it switches to Roblox by itself. Don't touch the mouse / keyboard until it's done - "
                 "F6 stops it. It walks to the wisp and plays one minigame.", parent=self.root):
             return
         runner = FullSetup(self.logic)
@@ -693,7 +679,7 @@ class SpatialGUI:
         from tkinter import messagebox
         if self.logic.running:
             self.log("Stop the macro first."); return
-        self.log("Auto setup: click into Roblox (hotbar visible) within 10 s...")
+        self.log("Auto setup: switching to Roblox (hotbar visible)...")
 
         from logic_library import MAX_MOVES
         flags = self.logic.train_flags()
@@ -722,7 +708,7 @@ class SpatialGUI:
             ok = messagebox.askokcancel(
                 "Auto setup - step 2",
                 f"Read on your hotbar:\n{listing}\n\nNow talk to the wisp and open its MOVE LIST "
-                f"(click 'Clover Training'). Leave it open, press OK, then click into Roblox.",
+                f"(click 'Clover Training'). Leave it open and press OK - it switches to Roblox by itself.",
                 parent=self.root)
             if ok:
                 threading.Thread(target=lambda: step2(hotbar), daemon=True).start()
@@ -832,11 +818,11 @@ class SpatialGUI:
         hk = self.settings.get("hotkeys", {})
         if walk:
             key = (hk.get("test_full") or "f5").upper()
-            self.log(f"Full test: click into Roblox within 10 s (or press {key} while in Roblox) - it walks the route, "
+            self.log(f"Full test: switching to Roblox (or press {key} while in Roblox) - it walks the route, "
                      "opens the wisp's dialogue and hovers each move it finds (no move is clicked).")
         else:
             key = (hk.get("test_find") or "f4").upper()
-            self.log(f"Find moves (test): open the wisp's MOVE LIST, then click into Roblox within 10 s (or press {key} "
+            self.log(f"Find moves (test): open the wisp's MOVE LIST, then it switches to Roblox (or press {key} "
                      "while in Roblox) - it hovers each move it finds (no walking, nothing is clicked).")
         name = "Full test" if walk else "Find moves"
 
@@ -1036,6 +1022,13 @@ class SpatialGUI:
     def refresh_routes(self):
         if not hasattr(self, "route_menu"):
             return
+        for i, om in enumerate(getattr(self, "umbral_loc_menus", [])):   # Umbral: keep the location lists current
+            try:
+                om.configure(values=["(none)"] + self.logic.list_routes())
+                cur = self.logic.location_routes()[i]
+                om.set(cur if cur in self.logic.list_routes() else "(none)")
+            except Exception:
+                pass
         routes = self.logic.list_routes()
         active = self.logic.active_route()
         self.route_menu.configure(values=routes or ["(none)"])
@@ -1056,8 +1049,9 @@ class SpatialGUI:
             n_cp = sum(len(sg.get("checkpoints", [])) for sg in r["segments"]) + len(r["return"].get("checkpoints", []))
             what = (f"{r['ores']} ores, {n_cp} checkpoints" if "Mining" in self.root.title()
                     else f"recorded ({sum(s['duration'] for s in r['segments']) or r['return']['duration']:.1f}s walk)")
-            lock = "built-in · " if self.logic.is_locked() else ""
-            self.rec_label.configure(text=f"{lock}{what}", text_color="#75b798")
+            lock = self.logic.is_locked()
+            self.rec_label.configure(text=(f"built-in · {what} · {self.logic.rec_key()} records a new route of your own"
+                                           if lock else what), text_color="#75b798")
         else:
             builtins = list(self.logic._builtins()) if hasattr(self.logic, "_builtins") else []
             if builtins:
@@ -1217,18 +1211,19 @@ class SpatialGUI:
         return status, row
 
     def setup_ok_tab(self):
-        tab = self.tabview.tab("OK Popup")
-        t = ctk.CTkLabel(tab, text="OK Popup Detection", font=("Arial", 18, "bold"), text_color="#0d6efd")
+        tab = fast_scroll_frame(self.tabview.tab("Pop Up"))
+        t = ctk.CTkLabel(tab, text="Pop Up Detection", font=("Arial", 18, "bold"), text_color="#0d6efd")
         t.pack(pady=(12, 8))
-        help_box(tab, "Shared by every macro, so you only set it up once. OK popups are always clicked while a "
-                      "macro runs. Always Click OK also clicks them when no macro is running.", t)
+        help_box(tab, "Shared by every macro, so you only set it up once. The OK popup (steps 1-4) and your other "
+                      "pop ups (step 5) are always clicked while a macro runs. Always Click Pop Ups also clicks "
+                      "them when no macro is running.", t)
         if not hasattr(self, "_always_ok_on"):
             self._always_ok_on = False
         self._ok_toggles = getattr(self, "_ok_toggles", [])
         ok_toggle = big_toggle(tab, self.toggle_always_ok)
         ok_toggle.pack(pady=(0, 8), fill="x", padx=20)
         self._ok_toggles.append(ok_toggle)
-        style_toggle(ok_toggle, self._always_ok_on, "Always Click OK")
+        style_toggle(ok_toggle, self._always_ok_on, "Always Click Pop Ups")
         if not hasattr(self, "always_ok_btn"):
             self.always_ok_btn = ok_toggle
         btn_kw = dict(height=28, font=("Arial", 12), fg_color="#0d6efd", hover_color="#0b5ed7")
@@ -1262,6 +1257,93 @@ class SpatialGUI:
         slider.set(thr)
         slider.pack(side="right", fill="x", expand=True, padx=8)
         self.refresh_ok_status()
+
+        # 5. other pop ups: a picture of something only that pop up shows + where to click to close it
+        card = ctk.CTkFrame(tab, fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
+        card.pack(fill="x", padx=16, pady=5)
+        head = ctk.CTkFrame(card, fg_color="transparent"); head.pack(fill="x", padx=10, pady=(8, 0))
+        t5 = ctk.CTkLabel(head, text="5. Other Pop Ups", font=("Arial", 13, "bold"), text_color="#f8f9fa")
+        t5.pack(side="left")
+        help_box(card, "Any other pop up that gets in the way (e.g. Delayed Packages). For each one: open it in "
+                       "Roblox, press Capture and drag a box around something ONLY that pop up shows (its title is "
+                       "best), then Click spot = where to click to close it (e.g. its X). Test looks for it now and "
+                       "clicks. It uses the same Match % and Scan Area as the OK button.", t5)
+        self._popup_box = ctk.CTkFrame(card, fg_color="transparent"); self._popup_box.pack(fill="x", padx=6)
+        ctk.CTkButton(card, text="+ Add pop up", width=120, command=self._add_popup, **btn_kw).pack(
+            anchor="w", padx=10, pady=(4, 10))
+        for pp in self.logic.popups():
+            self._popup_row(pp)
+
+    def _add_popup(self):
+        name = self._ask("Add pop up", "Name of the pop up (e.g. Delayed Packages):")
+        if name is None:
+            return
+        self._popup_row(self.logic.add_popup(name.strip() or "Pop up"))
+
+    def _popup_row(self, pp):
+        BTN_ = dict(height=28, font=("Arial", 12), fg_color="#495057", hover_color="#343a40")
+        BLUE_ = dict(height=28, font=("Arial", 12), fg_color="#0d6efd", hover_color="#0b5ed7")
+        box = ctk.CTkFrame(self._popup_box, fg_color="#1a1d20", corner_radius=6); box.pack(fill="x", padx=4, pady=3)
+        r1 = ctk.CTkFrame(box, fg_color="transparent"); r1.pack(fill="x", padx=6, pady=(6, 2))
+        on = ctk.CTkCheckBox(r1, text="", width=24, command=lambda: (pp.__setitem__("enabled", bool(on.get())),
+                                                                     self.settings.save()))
+        if pp["enabled"]:
+            on.select()
+        on.pack(side="left")
+        name = ctk.CTkEntry(r1, width=180, font=("Arial", 12)); name.insert(0, pp["name"]); name.pack(side="left", padx=4)
+        store = lambda *_: (pp.__setitem__("name", name.get().strip() or "Pop up"), self.settings.save())
+        name.bind("<FocusOut>", store); save_while_typing(name, store)
+        pic = ctk.CTkLabel(r1, text="", font=("Arial", 12)); pic.pack(side="left", padx=8)
+        ctk.CTkButton(r1, text="Delete", width=70, fg_color="#842029", hover_color="#6a1a21", height=28,
+                      font=("Arial", 12), command=lambda: (self.logic.remove_popup(pp), box.destroy())).pack(side="right")
+        r2 = ctk.CTkFrame(box, fg_color="transparent"); r2.pack(fill="x", padx=6, pady=(2, 6))
+        spot = ctk.CTkLabel(r2, text="", font=("Arial", 12))
+
+        def show():
+            has = self.logic.has_popup_picture(pp)
+            img = None
+            if has:
+                try:
+                    from PIL import Image
+                    im = Image.open(self.logic.popup_path(pp)).convert("RGB")
+                    im.thumbnail((160, 30))
+                    img = ctk.CTkImage(light_image=im, dark_image=im, size=im.size)
+                except Exception:
+                    img = None
+            pic.configure(image=img, text="" if img else ("picture saved" if has else "no picture yet"),
+                          text_color="#75b798" if has else "#ea868f")
+            pic._img = img
+            spot.configure(text=f"click at ({pp['click'][0]}, {pp['click'][1]})" if any(pp["click"])
+                           else "no click spot yet", text_color="#75b798" if any(pp["click"]) else "#ea868f")
+
+        def capture():
+            self._hide_for_pick()
+
+            def done(x1, y1, x2, y2):
+                def save():
+                    ok = self.logic.capture_popup(pp, [x1, y1, x2, y2])
+                    self.root.deiconify()
+                    self.log(f"Pop up '{pp['name']}': picture saved." if ok else "Capture failed - drag a bigger box.")
+                    show()
+                self.root.after(300, save)
+            Overlay(done)
+
+        def pick_spot():
+            self._hide_for_pick()
+
+            def done(x, y):
+                self.root.deiconify()
+                pp["click"] = [x, y]
+                self.settings.save()
+                self.log(f"Pop up '{pp['name']}': click spot set to ({x}, {y}).")
+                show()
+            PointSelector(done)
+        ctk.CTkButton(r2, text="Capture", width=80, command=capture, **BLUE_).pack(side="left")
+        ctk.CTkButton(r2, text="Click spot", width=90, command=pick_spot, **BLUE_).pack(side="left", padx=6)
+        ctk.CTkButton(r2, text="Test", width=60, command=lambda: self._run_test(lambda: self.logic.test_popup(pp)),
+                      **BTN_).pack(side="left")
+        spot.pack(side="left", padx=8)
+        show()
 
     def _update_ok_threshold(self, val):
         self.settings.set("ok_match_threshold", round(float(val), 2))
@@ -1325,7 +1407,7 @@ class SpatialGUI:
     def toggle_always_ok(self):
         self._always_ok_on = not self._always_ok_on
         for b in getattr(self, "_ok_toggles", [self.always_ok_btn]):      # Main page + OK page stay in sync
-            style_toggle(b, self._always_ok_on, "Always Click OK")
+            style_toggle(b, self._always_ok_on, "Always Click Pop Ups")
         if self._always_ok_on:
             self.logic.start_global_ok_scanner()
         else:
@@ -1338,6 +1420,460 @@ class SpatialGUI:
             return
 
         self.setup_library_settings(fast_scroll_frame(tab))
+
+    UMBRAL_PAGES = ("Routes", "Moves", "Juggernaut", "Spawn", "Server reset")
+
+    def umbral_page(self, name):
+        """Build one Umbral Abyss Stone page (each has its own tab)."""
+        tab = fast_scroll_frame(self.tabview.tab(name))
+        {"Routes": self._umbral_routes_page, "Moves": self._umbral_moves_page, "Juggernaut": self._umbral_jug_page,
+         "Spawn": self._umbral_spawn_page, "Server reset": self._umbral_server_page}[name](tab)
+
+    def _umbral_routes_page(self, tab):
+        from logic_umbral_abyss import LOCATIONS
+        btn = dict(height=28, font=("Arial", 12), fg_color="#495057", hover_color="#343a40")
+        card_kw = dict(fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
+        # --- routes: one F9 -> F9 walk from the crystal spawn to each place the Juggernaut can be
+        rc = self._route_card(tab, None, None, "Test Path", self.logic.test_path,
+                              f"Stand at the crystal spawn (right after respawning), press {self.logic.rec_key()}, "
+                              f"walk to where the Juggernaut can be - stop close to it - and press "
+                              f"{self.logic.rec_key()} again. Make one route per location, then pick them below.")
+        share = ctk.CTkFrame(rc, fg_color="transparent"); share.pack(fill="x", padx=6, pady=(0, 6))
+        ctk.CTkButton(share, text="Import route", width=100, command=self._import_route, **btn).pack(side="right")
+        ctk.CTkButton(share, text="Export route", width=100, command=self._export_route, **btn).pack(side="right", padx=4)
+
+        # --- the 3 locations
+        lc = ctk.CTkFrame(tab, **card_kw); lc.pack(fill="x", padx=15, pady=4)
+        t = ctk.CTkLabel(lc, text="Locations", font=("Arial", 14, "bold"), text_color="#0d6efd")
+        t.pack(anchor="w", padx=8, pady=(8, 4))
+        help_box(lc, "Each run: crystal spawn -> walk location 1's route -> Juggernaut there? kill it -> respawn -> "
+                     "location 2 -> location 3 -> again. '(none)' skips a location.\n"
+                     "Loadout = your 3 routes as one bundle: switch between sets in one click. New makes a loadout "
+                     f"with 3 fresh empty routes. Stand at the crystal spawn and press Record next to a location: it "
+                     f"switches to Roblox and records - walk there, then press {self.logic.rec_key()} to finish. Delete removes the bundle only; "
+                     "its routes stay.", t)
+        row = ctk.CTkFrame(lc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(0, 6))
+        ctk.CTkLabel(row, text="Loadout", width=90, anchor="w", font=("Arial", 12, "bold")).pack(side="left")
+        self.umbral_loadout_menu = ctk.CTkOptionMenu(row, values=list(self.logic.loadouts()), width=200, height=26,
+                                                     command=self._pick_loadout)
+        self.umbral_loadout_menu.set(self.logic.active_loadout())
+        self.umbral_loadout_menu.pack(side="left", padx=4)
+        row = ctk.CTkFrame(lc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(0, 8))
+        ctk.CTkLabel(row, text="", width=90).pack(side="left")
+        ctk.CTkButton(row, text="New loadout", width=100, command=self._new_loadout,
+                      **{**btn, "fg_color": "#0d6efd", "hover_color": "#0b5ed7"}).pack(side="left", padx=(6, 2))
+        ctk.CTkButton(row, text="Rename", width=80, command=self._rename_loadout, **btn).pack(side="left", padx=4)
+        ctk.CTkButton(row, text="Delete", width=80, command=self._delete_loadout,
+                      **{**btn, "fg_color": "#842029", "hover_color": "#6a1a21"}).pack(side="left", padx=2)
+        self.umbral_loc_menus = []
+        current = self.logic.location_routes()
+        for i in range(LOCATIONS):
+            row = ctk.CTkFrame(lc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=2)
+            ctk.CTkLabel(row, text=f"Location {i + 1}", width=90, anchor="w", font=("Arial", 12, "bold")).pack(side="left")
+            om = ctk.CTkOptionMenu(row, values=["(none)"] + self.logic.list_routes(), width=200, height=26,
+                                   command=lambda v, i=i: self.logic.set_location_route(i, v))
+            om.set(current[i] or "(none)")
+            om.pack(side="left", padx=4)
+            self.umbral_loc_menus.append(om)
+            self._mark(f"umbral_loc_{i}", om)
+            rb = ctk.CTkButton(row, text="Record", width=64, command=lambda i=i: self._record_location(i), **btn)
+            rb.pack(side="left", padx=4)
+            self._mark(f"umbral_record_{i}", rb)
+        ctk.CTkFrame(lc, fg_color="transparent", height=4).pack()
+
+        self.refresh_routes()                            # fill the Route list (and the recorded / not recorded line)
+
+    def _umbral_server_page(self, tab):
+        btn = dict(height=28, font=("Arial", 12), fg_color="#495057", hover_color="#343a40")
+        card_kw = dict(fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
+        # --- server reset: after all locations -> main menu -> new server -> warm-up
+        sc = ctk.CTkFrame(tab, **card_kw); sc.pack(fill="x", padx=15, pady=4)
+        head = ctk.CTkFrame(sc, fg_color="transparent"); head.pack(fill="x", padx=8, pady=(8, 4))
+        t = ctk.CTkLabel(head, text="Main menu clicks", font=("Arial", 14, "bold"), text_color="#0d6efd")
+        t.pack(side="left")
+        help_box(sc, "Every click here is: move the mouse, wait 'Mouse: wait', then click - so it never clicks before "
+                     "the mouse has arrived. "
+                     "When every location is done it clicks Menu click 1 then Menu click 2 (waiting before each click) "
+                     "to go to the main menu. With 'Reset server' on it then waits for the main menu, clicks the server "
+                     "box, types your code, clicks Enter Server and waits until you've spawned. Once the menu is found it waits "
+                     "a few more seconds, because its buttons slide in. Warm-up: for that many "
+                     "minutes it just respawns, waits until spawned, stands still 'every' seconds, again - then the "
+                     "normal routes until all locations are done again.", t)
+        self.umbral_end_lbls = []
+        for i in range(2):
+            row = ctk.CTkFrame(sc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=2)
+            ctk.CTkLabel(row, text=f"Menu click {i + 1}", width=110, anchor="w", font=("Arial", 12)).pack(side="left")
+            ctk.CTkButton(row, text="Pick spot", width=80, command=lambda i=i: self._pick_end_click(i),
+                          **{**btn, "fg_color": "#0d6efd", "hover_color": "#0b5ed7"}).pack(side="left", padx=4)
+            ctk.CTkButton(row, text="Clear", width=56, command=lambda i=i: self._set_end_click(i, [0, 0]),
+                          **btn).pack(side="left")
+            lbl = ctk.CTkLabel(row, text="", font=("Arial", 12)); lbl.pack(side="left", padx=6)
+            self.umbral_end_lbls.append(lbl)
+        self._show_end_click()
+        row = ctk.CTkFrame(sc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(2, 6))
+        ctk.CTkLabel(row, text="Wait", font=("Arial", 12)).pack(side="left", padx=(0, 4))
+        self._num_combo(row, "umbral_end_click_wait", ["0.5", "1", "1.5", "2", "3", "5"],
+                        float(self.settings.get("umbral_end_click_wait", 1.0))).pack(side="left")
+        ctk.CTkLabel(row, text="s before each click (M1)", font=("Arial", 12)).pack(side="left", padx=4)
+        row = ctk.CTkFrame(sc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(0, 6))
+        ctk.CTkLabel(row, text="Mouse: wait", font=("Arial", 12)).pack(side="left", padx=(0, 4))
+        self._num_combo(row, "click_delay", ["0.3", "0.5", "0.75", "1", "1.5", "2"],
+                        float(self.settings.get("click_delay", 1.0))).pack(side="left")
+        ctk.CTkLabel(row, text="s after moving, before clicking (all macros)", font=("Arial", 12)).pack(side="left", padx=4)
+
+        row = ctk.CTkFrame(sc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(6, 2))
+        rs = ctk.CTkSwitch(row, text="Reset server (main menu -> new server)", font=("Arial", 12, "bold"),
+                           command=lambda: self.settings.set("umbral_reset_server", bool(rs.get())))
+        if self.settings.get("umbral_reset_server", False):
+            rs.select()
+        rs.pack(side="left")
+        row = ctk.CTkFrame(sc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=2)
+        ctk.CTkLabel(row, text="Wait for the main menu", font=("Arial", 12)).pack(side="left")
+        self._num_combo(row, "umbral_menu_wait", ["10", "15", "20", "30", "45", "60"],
+                        float(self.settings.get("umbral_menu_wait", 20)), minimum=1).pack(side="left", padx=6)
+        ctk.CTkLabel(row, text="s (at most), then", font=("Arial", 12)).pack(side="left")
+        self._num_combo(row, "umbral_menu_settle", ["1", "2", "3", "4", "5"],
+                        float(self.settings.get("umbral_menu_settle", 3.0))).pack(side="left", padx=6)
+        ctk.CTkLabel(row, text="s for the buttons", font=("Arial", 12)).pack(side="left")
+        row = ctk.CTkFrame(sc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=2)
+        ctk.CTkLabel(row, text="Main menu check", width=110, anchor="w", font=("Arial", 12)).pack(side="left")
+        mseg = ctk.CTkSegmentedButton(row, values=["Manual", "Automatic"], font=("Arial", 12, "bold"), width=170,
+                                      command=lambda v: self.settings.set("umbral_menu_mode",
+                                                                          "auto" if v == "Automatic" else "manual"))
+        mseg.set("Automatic" if self.settings.get("umbral_menu_mode", "manual") == "auto" else "Manual")
+        mseg.pack(side="left", padx=4)
+        row = ctk.CTkFrame(sc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=2)
+        self._mark("umbral_menu", ctk.CTkButton(row, text="Capture menu", width=110, command=self._capture_umbral_menu,
+                                                **{**btn, "fg_color": "#0d6efd", "hover_color": "#0b5ed7"}))
+        self._target("umbral_menu").pack(side="left")
+        ctk.CTkButton(row, text="Test", width=56, command=lambda: self._run_test(self.logic.test_menu),
+                      **btn).pack(side="left", padx=4)
+        self.umbral_menu_lbl = ctk.CTkLabel(row, text="", font=("Arial", 12))
+        self.umbral_menu_lbl.pack(side="left", padx=6)
+        self._show_umbral_menu()
+        self.umbral_server_lbls = {}
+        for key, text in (("umbral_server_box", "Server box"), ("umbral_server_enter", "Enter Server")):
+            row = ctk.CTkFrame(sc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=2)
+            ctk.CTkLabel(row, text=text, width=110, anchor="w", font=("Arial", 12)).pack(side="left")
+            pb = ctk.CTkButton(row, text="Pick spot", width=80, command=lambda k=key: self._pick_umbral_point(k),
+                               **{**btn, "fg_color": "#0d6efd", "hover_color": "#0b5ed7"})
+            pb.pack(side="left", padx=4)
+            self._mark(key, pb)
+            lbl = ctk.CTkLabel(row, text="", font=("Arial", 12)); lbl.pack(side="left", padx=6)
+            self.umbral_server_lbls[key] = lbl
+        self._show_umbral_points()
+        row = ctk.CTkFrame(sc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=2)
+        ctk.CTkLabel(row, text="Server code", width=110, anchor="w", font=("Arial", 12)).pack(side="left")
+        code = ctk.CTkEntry(row, width=160, font=("Arial", 12))
+        code.insert(0, str(self.settings.get("umbral_server_code", "")))
+        code.pack(side="left", padx=4)
+        store_code = lambda *_: self.settings.set("umbral_server_code", code.get().strip())
+        code.bind("<FocusOut>", store_code)
+        save_while_typing(code, store_code)
+        row = ctk.CTkFrame(sc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(6, 10))
+        ctk.CTkLabel(row, text="Warm-up", font=("Arial", 12)).pack(side="left")
+        self._num_combo(row, "umbral_warm_minutes", ["0", "1", "2", "3", "5", "10"],
+                        float(self.settings.get("umbral_warm_minutes", 5))).pack(side="left", padx=4)
+        ctk.CTkLabel(row, text="min: respawn every", font=("Arial", 12)).pack(side="left", padx=4)
+        self._num_combo(row, "umbral_warm_every", ["10", "20", "30", "45", "60"],
+                        float(self.settings.get("umbral_warm_every", 30)), minimum=1).pack(side="left")
+        ctk.CTkLabel(row, text="s", font=("Arial", 12)).pack(side="left", padx=4)
+
+    def _umbral_moves_page(self, tab):
+        from gui_umbral_moves import UmbralMovesPage
+        self.umbral_moves_page = UmbralMovesPage(self, tab)
+
+    def _umbral_jug_page(self, tab):
+        btn = dict(height=28, font=("Arial", 12), fg_color="#495057", hover_color="#343a40")
+        card_kw = dict(fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
+        # --- finding it
+        jc = ctk.CTkFrame(tab, **card_kw); jc.pack(fill="x", padx=15, pady=4)
+        t = ctk.CTkLabel(jc, text="Juggernaut", font=("Arial", 14, "bold"), text_color="#0d6efd")
+        t.pack(anchor="w", padx=8, pady=(8, 4))
+        help_box(jc, "At the end of each route it looks for the Juggernaut by colour: a very dark body with red marks "
+                     "(a purple haze = corrupted). Works best when the route stops close to it. Not seen = not there: "
+                     "it respawns and goes to the next location. Check now only looks - it presses nothing.\n"
+                     "Look in: Set area = only look inside your box (e.g. where it stands at the end of the route).\n"
+                     "Colours: Auto (nothing picked) handles bright fog AND dark caves. Or Pick Colour 1 (e.g. its dark "
+                     "body) AND Colour 2 (e.g. a bright red mark): it only counts when both are found together, so a red "
+                     "roof or a dark tree alone doesn't.\n"
+                     "Must be close: a colour-1 pixel only counts with colour 2 within that many pixels (its red marks "
+                     "sit right on its dark body), so a red thing and a dark thing that are just both on screen "
+                     "don't count. Fog and morning light make the marks pinker: Colour 1's Tol about 40 covers "
+                     "night, morning and fog.\n"
+                     "Checks: not seen on the first look = wait that many seconds and look again, up to that many "
+                     "looks in all, before it decides it isn't here and goes on (it may still be spawning or "
+                     "walking into view).", t)
+        row = ctk.CTkFrame(jc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(4, 10))
+        ctk.CTkButton(row, text="Check now", width=100, command=lambda: self._run_test(self.logic.test_hunt_check),
+                      **btn).pack(side="left")
+        row = ctk.CTkFrame(jc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(6, 2))
+        ctk.CTkLabel(row, text="Look in", font=("Arial", 12, "bold")).pack(side="left")
+        ctk.CTkButton(row, text="Set area", width=80, command=lambda: self.pick_region("umbral_jug_area"),
+                      **{**btn, "fg_color": "#0d6efd", "hover_color": "#0b5ed7"}).pack(side="left", padx=6)
+        ctk.CTkButton(row, text="Clear", width=56, command=self._clear_jug_area, **btn).pack(side="left")
+        self.umbral_jug_area_lbl = ctk.CTkLabel(row, text="", font=("Arial", 12))
+        self.umbral_jug_area_lbl.pack(side="left", padx=6)
+        self._show_jug_area()
+        self._umbral_color_rows(jc, "jug", "Colour 1", "umbral_jug_min",
+                                ["5", "10", "15", "30", "60", "120"], 15, "min pixels")
+        self._umbral_color_rows(jc, "jug2", "Colour 2", "umbral_jug2_min",
+                                ["3", "5", "10", "15", "30"], 5, "min pixels (on colour 1)")
+        from logic_umbral_abyss import JUG_NEAR
+        row = ctk.CTkFrame(jc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(6, 2))
+        ctk.CTkLabel(row, text="Must be close", font=("Arial", 12, "bold")).pack(side="left")
+        ctk.CTkLabel(row, text="colour 1 and colour 2 within", font=("Arial", 12)).pack(side="left", padx=(8, 4))
+        self._num_combo(row, "umbral_jug_near", ["3", "5", "8", "10", "15", "20"],
+                        float(self.settings.get("umbral_jug_near", JUG_NEAR)), minimum=1).pack(side="left")
+        ctk.CTkLabel(row, text="px of each other", font=("Arial", 12)).pack(side="left", padx=4)
+        row = ctk.CTkFrame(jc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(6, 10))
+        ctk.CTkLabel(row, text="Checks", font=("Arial", 12, "bold")).pack(side="left")
+        ctk.CTkLabel(row, text="look", font=("Arial", 12)).pack(side="left", padx=(8, 4))
+        self._num_combo(row, "umbral_jug_checks", ["1", "2", "3", "4", "5"],
+                        float(self.settings.get("umbral_jug_checks", 2)), minimum=1).pack(side="left")
+        ctk.CTkLabel(row, text="times,", font=("Arial", 12)).pack(side="left", padx=4)
+        self._num_combo(row, "umbral_jug_check_gap", ["2", "3", "5", "8", "10"],
+                        float(self.settings.get("umbral_jug_check_gap", 5)), minimum=0.5).pack(side="left")
+        ctk.CTkLabel(row, text="s apart, before 'not here'", font=("Arial", 12)).pack(side="left", padx=4)
+        ctk.CTkFrame(jc, fg_color="transparent", height=6).pack()
+
+    def _umbral_spawn_page(self, tab):
+        from logic_umbral_abyss import CAM_90_DEFAULT
+        btn = dict(height=28, font=("Arial", 12), fg_color="#495057", hover_color="#343a40")
+        card = ctk.CTkFrame(tab, fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
+        card.pack(fill="x", padx=15, pady=4)
+        t = ctk.CTkLabel(card, text="Spawn", font=("Arial", 14, "bold"), text_color="#0d6efd")
+        t.pack(anchor="w", padx=8, pady=(8, 4))
+        help_box(card, "The macro always plays from the 2nd spawn, the one with the purple crystals. If it's at the "
+                       "other one it respawns (Esc, R, Enter) until it lands there. Check spawn only looks; "
+                       "Go to crystal spawn respawns until it's there.\n"
+                       "Crystal area: drag a box over where the crystals show at that spawn (both checks only look "
+                       "there). No box = the whole view except the bottom HUD and the chat.\n"
+                       "Health bar: capture it once while spawned (drag a tight box, like the OK button) - before every "
+                       "check the macro waits until it's back (fully spawned, also after dying), then scrolls down to "
+                       "zoom out and looks. Test shows the match; lower Match if it misses the bar, raise it if it "
+                       "counts you as spawned too early.", t)
+        row = ctk.CTkFrame(card, fg_color="transparent"); row.pack(fill="x", padx=8, pady=4)
+        ctk.CTkLabel(row, text="Wait after each key (s)", font=("Arial", 12)).pack(side="left")
+        self._num_combo(row, "umbral_key_wait", ["0.5", "0.75", "1", "1.5", "2"],
+                        float(self.settings.get("umbral_key_wait", 1.0)), minimum=0.2).pack(side="left", padx=6)
+        row = ctk.CTkFrame(card, fg_color="transparent"); row.pack(fill="x", padx=8, pady=4)
+        ctk.CTkLabel(row, text="Then press", font=("Arial", 12)).pack(side="left")
+        sk = ctk.CTkEntry(row, width=50, font=("Arial", 12))
+        sk.insert(0, str(self.settings.get("umbral_spawn_key", "g")))
+        sk.pack(side="left", padx=6)
+        store_sk = lambda *_: self.settings.set("umbral_spawn_key", sk.get().strip().lower())
+        sk.bind("<FocusOut>", store_sk)
+        save_while_typing(sk, store_sk)
+        ctk.CTkLabel(row, text="once it's at the crystal spawn (empty = nothing)", font=("Arial", 11),
+                     text_color="#adb5bd").pack(side="left")
+        row = ctk.CTkFrame(card, fg_color="transparent"); row.pack(fill="x", padx=8, pady=4)
+        ctk.CTkLabel(row, text="Health bar", font=("Arial", 12, "bold")).pack(side="left")
+        hb = ctk.CTkButton(row, text="Capture", width=80, command=self._capture_umbral_health,
+                           **{**btn, "fg_color": "#0d6efd", "hover_color": "#0b5ed7"})
+        hb.pack(side="left", padx=6)
+        self._mark("umbral_health", hb)
+        self.umbral_health_lbl = ctk.CTkLabel(row, text="", font=("Arial", 12))
+        self.umbral_health_lbl.pack(side="left", padx=4)
+        self.umbral_health_preview = ctk.CTkLabel(row, text="")
+        self.umbral_health_preview.pack(side="left", padx=6)
+        row = ctk.CTkFrame(card, fg_color="transparent"); row.pack(fill="x", padx=8, pady=4)
+        ctk.CTkButton(row, text="Test", width=56, command=lambda: self._run_test(self.logic.test_health_bar),
+                      **btn).pack(side="left")
+        from logic_umbral_abyss import HEALTH_MATCH
+        thr = float(self.settings.get("umbral_health_match", HEALTH_MATCH))
+        self.umbral_thr_lbl = ctk.CTkLabel(row, text=f"Match: {int(thr * 100)}%", width=80, font=("Arial", 12))
+        self.umbral_thr_lbl.pack(side="right")
+        sl = ctk.CTkSlider(row, from_=0.5, to=0.98, number_of_steps=48,
+                           command=lambda v: (self.settings.set("umbral_health_match", round(float(v), 2)),
+                                              self.umbral_thr_lbl.configure(text=f"Match: {int(float(v) * 100)}%")))
+        sl.set(thr)
+        sl.pack(side="right", fill="x", expand=True, padx=8)
+        self._show_umbral_health()
+        row = ctk.CTkFrame(card, fg_color="transparent"); row.pack(fill="x", padx=8, pady=4)
+        ctk.CTkLabel(row, text="Camera 90° turn time (s)", font=("Arial", 12)).pack(side="left")
+        self._num_combo(row, "umbral_cam_90", ["0.6", "0.65", "0.7", "0.75", "0.8", "0.85", "0.9"],
+                        float(self.settings.get("umbral_cam_90", CAM_90_DEFAULT)), minimum=0.05).pack(side="left", padx=6)
+        ctk.CTkLabel(row, text="(F5 in Roblox turns 360° - it should end where it started)", font=("Arial", 11),
+                     text_color="#adb5bd").pack(side="left")
+        row = ctk.CTkFrame(card, fg_color="transparent"); row.pack(fill="x", padx=8, pady=4)
+        ctk.CTkLabel(row, text="Scroll down (notches)", font=("Arial", 12)).pack(side="left")
+        self._num_combo(row, "umbral_scroll", ["0", "5", "10", "15", "20", "30"],
+                        float(self.settings.get("umbral_scroll", 15))).pack(side="left", padx=6)
+        self._umbral_color_rows(card, "crystal", "Crystal colour", "umbral_crystal_min",
+                                ["0.3", "0.5", "1", "2", "3"], 0.5, "min % of the view", auto=False)
+        row = ctk.CTkFrame(card, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(6, 4))
+        ctk.CTkLabel(row, text="Crystal area", font=("Arial", 12, "bold")).pack(side="left")
+        ctk.CTkButton(row, text="Set area", width=80, command=lambda: self.pick_region("umbral_scan"),
+                      **{**btn, "fg_color": "#0d6efd", "hover_color": "#0b5ed7"}).pack(side="left", padx=6)
+        ctk.CTkButton(row, text="Clear", width=56, command=self._clear_umbral_area, **btn).pack(side="left")
+        self.umbral_area_lbl = ctk.CTkLabel(row, text="", font=("Arial", 12))
+        self.umbral_area_lbl.pack(side="left", padx=6)
+        self._show_umbral_area()
+        row = ctk.CTkFrame(card, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(4, 10))
+        ctk.CTkButton(row, text="Check spawn", width=110, command=lambda: self._run_test(self.logic.test_spawn_check),
+                      **btn).pack(side="left")
+        ctk.CTkButton(row, text="Go to crystal spawn", width=150, fg_color="#0d6efd", hover_color="#0b5ed7",
+                      height=28, font=("Arial", 12),
+                      command=lambda: self._run_test(self.logic.test_go_crystal_spawn)).pack(side="left", padx=6)
+
+    def _refresh_loadouts(self):
+        if hasattr(self, "umbral_loadout_menu"):
+            self.umbral_loadout_menu.configure(values=list(self.logic.loadouts()))
+            self.umbral_loadout_menu.set(self.logic.active_loadout())
+        self.refresh_routes()
+
+    def _pick_loadout(self, name):
+        self.logic.set_active_loadout(name)
+        self.log(f"Loadout '{name}': " + ", ".join(r or "(none)" for r in self.logic.location_routes()))
+        self._refresh_loadouts()
+
+    def _new_loadout(self):
+        name = self._ask("New loadout", "Name of the new loadout (3 new empty routes are made for it):")
+        if name is None:
+            return
+        made = self.logic.new_loadout(name.strip() or None)
+        if not made:
+            self.log("That loadout name is empty or already taken.")
+            return
+        self.log(f"Loadout '{made}' made with routes " + ", ".join(self.logic.location_routes())
+                 + ". Stand at the crystal spawn and press Record next to Location 1.")
+        self._refresh_loadouts()
+
+    def _rename_loadout(self):
+        old = self.logic.active_loadout()
+        new = self._ask("Rename loadout", f"New name for '{old}':", old)
+        if new and self.logic.rename_loadout(old, new):
+            self._refresh_loadouts()
+
+    def _delete_loadout(self):
+        from tkinter import messagebox
+        name = self.logic.active_loadout()
+        if len(self.logic.loadouts()) <= 1:
+            self.log("That's the only loadout - make another one first.")
+            return
+        if messagebox.askyesno("Delete loadout", f"Delete the loadout '{name}'?\nIts routes are kept.",
+                               parent=self.root):
+            self.logic.delete_loadout(name)
+            self._refresh_loadouts()
+
+    def _record_location(self, i):
+        """Select this location's route so the record key records into it (makes one if it has none)."""
+        route = self.logic.location_routes()[i]
+        if not route or route not in self.logic.list_routes() or self.logic.is_locked(route):
+            base = f"{self.logic.active_loadout()} {i + 1}"
+            route = self.logic.create_route(base) or self.logic.create_route(self.logic.free_route_name(base))
+            self.logic.set_location_route(i, route)
+        if self.logic.is_recording():
+            self.log(f"Already recording - press {self.logic.rec_key()} in Roblox to finish that one first.")
+            return
+        self.logic.set_active_route(route)
+        self.refresh_routes()
+
+        def start():                                     # switch to Roblox, then record straight away
+            if not self.logic.wait_focus_for_test():
+                return
+            self.logic.toggle_recording()
+            self.log(f"Location {i + 1}: recording '{route}' - walk there from the crystal spawn, then press "
+                     f"{self.logic.rec_key()} to finish.")
+        threading.Thread(target=start, daemon=True).start()
+
+    def _show_end_click(self):
+        for lbl, p in zip(self.umbral_end_lbls, self.logic.end_spots()):
+            lbl.configure(text=f"({p[0]}, {p[1]})" if any(p) else "not set (skipped)",
+                          text_color="#75b798" if any(p) else "#adb5bd")
+
+    def _show_umbral_points(self):
+        for key, lbl in self.umbral_server_lbls.items():
+            p = self.settings.get(key) or [0, 0]
+            lbl.configure(text=f"({p[0]}, {p[1]})" if any(p) else "not set", text_color="#75b798" if any(p) else "#ea868f")
+
+    def _pick_umbral_point(self, key):
+        self._hide_for_pick()
+
+        def done(x, y):
+            self.root.deiconify()
+            self.settings.set(key, [int(x), int(y)])
+            self._show_umbral_points()
+        PointSelector(done)
+
+    def _set_end_click(self, i, pos):
+        spots = self.logic.end_spots()
+        spots[i] = [int(pos[0]), int(pos[1])]
+        self.settings.settings.pop("umbral_end_click", None)          # replaced by the 2-spot list
+        self.settings.set("umbral_end_clicks", spots)
+        self._show_end_click()
+
+    def _pick_end_click(self, i):
+        self._hide_for_pick()
+
+        def done(x, y):
+            self.root.deiconify()
+            self._set_end_click(i, (x, y))
+        PointSelector(done)
+
+    def _show_jug_area(self):
+        r = self.settings.get("regions", {}).get("umbral_jug_area") or [0, 0, 0, 0]
+        own = r[2] > r[0] and r[3] > r[1]
+        self.umbral_jug_area_lbl.configure(text=f"area set ({r[2] - r[0]}x{r[3] - r[1]})" if own else
+                                           "no area (play area, not you / HUD)",
+                                           text_color="#75b798" if own else "#adb5bd")
+
+    def _clear_jug_area(self):
+        self.settings.settings.setdefault("regions", {}).pop("umbral_jug_area", None)
+        self.settings.save()
+        self._show_jug_area()
+
+    def _umbral_color_rows(self, card, key, label, min_key, min_values, min_default, min_text, auto=True):
+        """Pick a colour + tolerance (like Fishing) for the Umbral crystal / Juggernaut check. 'Auto' = the
+        built-in check (no colour picked)."""
+        row = ctk.CTkFrame(card, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(6, 2))
+        ctk.CTkLabel(row, text=label, font=("Arial", 12, "bold")).pack(side="left")
+        swatch = ctk.CTkFrame(row, width=20, height=20, corner_radius=4)
+        swatch.pack(side="left", padx=6)
+        lbl = ctk.CTkLabel(row, text="", font=("Arial", 12))
+        btn = dict(height=26, font=("Arial", 12))
+
+        def show():
+            c = self.settings.get(f"umbral_{key}_color")
+            swatch.configure(fg_color="#%02x%02x%02x" % tuple(c[:3]) if c else "#343a40")
+            lbl.configure(text=str(list(c[:3])) if c else ("automatic" if auto else "not picked yet"),
+                          text_color="#e9ecef" if c else "#adb5bd")
+
+        def picked(color):
+            self.root.deiconify()
+            self.settings.set(f"umbral_{key}_color", [int(v) for v in color[:3]])
+            show()
+
+        def pick():
+            self._hide_for_pick()
+            ColorPicker(picked)
+
+        def to_auto():
+            self.settings.settings.pop(f"umbral_{key}_color", None)
+            self.settings.save()
+            show()
+        pk = ctk.CTkButton(row, text="Pick", width=56, fg_color="#0d6efd", hover_color="#0b5ed7", command=pick, **btn)
+        pk.pack(side="left", padx=2)
+        self._mark(f"umbral_pick_{key}", pk)
+        if auto:
+            ctk.CTkButton(row, text="Auto", width=56, fg_color="#495057", hover_color="#343a40", command=to_auto,
+                          **btn).pack(side="left", padx=2)
+        lbl.pack(side="left", padx=6)
+        show()
+        row = ctk.CTkFrame(card, fg_color="transparent"); row.pack(fill="x", padx=8, pady=2)
+        from logic_umbral_abyss import PICK_TOL
+        tol = int(float(self.settings.get(f"umbral_{key}_tol", PICK_TOL[key])))
+        tol_lbl = ctk.CTkLabel(row, text=f"Tol: {tol}", width=56, font=("Arial", 12))
+        sl = ctk.CTkSlider(row, from_=1, to=80, number_of_steps=79, height=16,
+                           command=lambda v: (self.settings.set(f"umbral_{key}_tol", int(v)),
+                                              tol_lbl.configure(text=f"Tol: {int(v)}")))
+        sl.set(tol)
+        tol_lbl.pack(side="left")
+        sl.pack(side="left", fill="x", expand=True, padx=6)
+        self._num_combo(row, min_key, min_values, float(self.settings.get(min_key, min_default)),
+                        minimum=0.05).pack(side="left", padx=(6, 2))
+        ctk.CTkLabel(row, text=min_text, font=("Arial", 11), text_color="#adb5bd").pack(side="left")
 
     def setup_areas_tab(self):
         tab = fast_scroll_frame(self.tabview.tab("Areas"))   # scroll, don't squish
@@ -1524,8 +2060,10 @@ class SpatialGUI:
                        "score). It needs a 99% match. Walking starts once it's gone.", t)
         row = ctk.CTkFrame(card, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(0, 4))
         ok = self.logic.has_minigame_snapshot()
-        ctk.CTkButton(row, text="Re-capture" if ok else "Capture", width=120, height=28, fg_color="#0d6efd",
-                      hover_color="#0b5ed7", command=self.capture_minigame).pack(side="left")
+        mg = ctk.CTkButton(row, text="Re-capture" if ok else "Capture", width=120, height=28, fg_color="#0d6efd",
+                           hover_color="#0b5ed7", command=self.capture_minigame)
+        mg.pack(side="left")
+        self._mark("lib_minigame", mg)
         ctk.CTkLabel(row, text="captured" if ok else "not captured", font=("Arial", 12),
                      text_color="#75b798" if ok else "#ea868f").pack(side="left", padx=8)
         ctk.CTkButton(row, text="Test", width=56, height=28, fg_color="#495057", hover_color="#343a40",
@@ -1569,7 +2107,6 @@ class SpatialGUI:
         self.clover_tol_sliders, self.clover_tol_labels = {}, {}
 
         colors = self.settings.get("clover_colors", self.DEFAULT_CLOVER_COLORS)
-        global_tol = self.settings.get("color_tolerance", 25)
         clover_tols = self.settings.get("clover_tolerances", {})
 
         for c in ["bronze", "silver", "gold"]:
@@ -1668,6 +2205,11 @@ class SpatialGUI:
             self.fishing_tolerance_val_label.configure(text="Value: 25")
         self.log("Fishing Defaults Restored")
 
+    # Umbral Abyss Stone: camera turn hotkeys (action, default key, label, degrees; negative = left)
+    UMBRAL_TURNS = (("umbral_l90", "f1", "Turn left 90°", -90), ("umbral_l180", "f2", "Turn left 180°", -180),
+                    ("umbral_r90", "f3", "Turn right 90°", 90), ("umbral_r180", "f4", "Turn right 180°", 180),
+                    ("umbral_360", "f5", "Full 360°", 360))
+
     def setup_hotkeys_tab(self):
         tab = self.tabview.tab("Hotkeys")
         ctk.CTkLabel(tab, text="Custom Hotkeys", font=("Arial", 16, "bold"), text_color="#0d6efd").pack(pady=10)
@@ -1675,7 +2217,11 @@ class SpatialGUI:
         hotkeys = self.settings.get("hotkeys")
         actions = ["start"]
 
-        if "Fishing" in self.root.title():
+        if "Umbral" in self.root.title():
+            for a, key, _, _ in self.UMBRAL_TURNS:
+                hotkeys.setdefault(a, key)
+                actions.append(a)
+        elif "Fishing" in self.root.title():
             if hasattr(self.logic, 'test_bar_detection'): actions.append('test_btn')
             if hasattr(self.logic, 'test_fish_detection'): actions.append('test_color')
         else:
@@ -1684,7 +2230,7 @@ class SpatialGUI:
 
         if hasattr(self.logic, 'test_movement'): actions.append('test_movement')
         if hasattr(self.logic, 'test_path') and not hasattr(self.logic, 'test_movement'): actions.append('test_path')
-        if hasattr(self.logic, 'test_find_moves'): actions += ['test_find', 'test_full']
+        if hasattr(self.logic, 'test_find_moves'): actions += ['test_find', 'test_full', 'test_open']
 
         for a in actions:
             f = ctk.CTkFrame(tab, fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
@@ -1695,7 +2241,9 @@ class SpatialGUI:
                 display_names.update({"test_btn": "Test Prompt", "test_movement": "Test Path"})
             elif "Library" in self.root.title():
                 display_names.update({"test_btn": "Test Dialogue", "test_path": "Test Path", "test_find": "Find moves (list open)",
-                                      "test_full": "Full test (route + moves)"})
+                                      "test_full": "Full test (route + moves)",
+                                      "test_open": "Test opening (space + E)"})
+            display_names.update({a: label for a, _, label, _ in self.UMBRAL_TURNS})
             label_text = display_names.get(a, a.replace("_", " ").capitalize())
             ctk.CTkLabel(f, text=label_text, width=120, font=("Arial", 12, "bold"), anchor="w").pack(side="left", padx=10, pady=6)
             e = ctk.CTkEntry(f, width=80, font=("Arial", 12))
@@ -1728,9 +2276,39 @@ class SpatialGUI:
             except Exception as e:
                 self.log(f"Hotkey Error ({key_name}): {e}")
 
-        try_add('start', self.toggle_macro)          # F6 starts AND stops
+        def press_hotkey(key_name, callback, default=""):
+            """A hotkey that fires even while other keys are held (a plain hotkey only fires when it's the only
+            key down - so F9 while still holding W never stopped a recording, and F1-F5 while walking were
+            recorded as turns but didn't turn the camera). 'ctrl+p' style: the last key, with its modifiers
+            checked. One call per press (held-key repeats are ignored)."""
+            from utils import on_hotkey
+            try:
+                on_hotkey(hk.get(key_name) or default, callback)
+            except Exception as e:
+                self.log(f"Hotkey Error ({key_name}): {e}")
 
-        if "Fishing" in self.root.title():
+        # F6 starts AND stops. A single key fires even while the macro holds W/A/S/D or an arrow key
+        # (a plain hotkey only fires when F6 is the only key down, so it was ignored mid-route).
+        start_key = str(hk.get('start') or "").strip()
+        if start_key and "+" not in start_key:
+            last = [0.0]
+
+            def on_start(_e):
+                if time.time() - last[0] > 0.5:          # held key repeats: one toggle per press
+                    last[0] = time.time()
+                    self.toggle_macro()
+            try:
+                keyboard.on_press_key(start_key, on_start)
+            except Exception as e:
+                self.log(f"Hotkey Error (start): {e}")
+        else:
+            try_add('start', self.toggle_macro)
+
+        if "Umbral" in self.root.title():
+            for a, key, _, deg in self.UMBRAL_TURNS:
+                hk.setdefault(a, key)
+                press_hotkey(a, lambda d=deg: self._run_test(lambda: self.logic.test_turn(d)))
+        elif "Fishing" in self.root.title():
             if hasattr(self.logic, 'test_bar_detection'):
                 try_add('test_btn', lambda: self._run_test(self.logic.test_bar_detection))
             if hasattr(self.logic, 'test_fish_detection'):
@@ -1747,12 +2325,10 @@ class SpatialGUI:
         if hasattr(self.logic, 'test_find_moves'):
             try_add('test_find', self.test_find_moves)                        # F4: move list already open
             try_add('test_full', lambda: self.test_find_moves(walk=True))     # F5: route + dialogue + moves
+            try_add('test_open', lambda: self._run_test(self.logic.test_open_dialogue))   # F7: space + E opening
 
         if hasattr(self.logic, "toggle_recording"):
-            try:
-                keyboard.add_hotkey(hk.get("record") or "f9", self.logic.toggle_recording)
-            except Exception as e:
-                self.log(f"Hotkey Error (record): {e}")
+            press_hotkey("record", self.logic.toggle_recording, default="f9")
 
         self.log("Hotkeys registered")
 
@@ -1763,8 +2339,126 @@ class SpatialGUI:
         elif self._is_library and self.logic.dialog_mode() == "auto" and not self._ocr_ok():
             self.log("Not started: text reading doesn't work (Auto mode needs it) - see the popup.")
         else:
-            self.logic.start()
+            self.root.after(0, self._start_with_check)   # F6 comes from the key hook's thread: build the dialog here
+            return
         self.root.after(0, self._sync_start_btn)
+
+    def _start_with_check(self):
+        """Start, unless the setup check finds something not ignored: then show it first."""
+        if self.logic.running or getattr(self, "_setup_dialog", None) is not None:
+            return
+        try:
+            problems = self.logic.setup_problems()
+        except Exception as e:
+            print(f"Setup check error: {e}")
+            problems = []
+        ignored = set(self.settings.get("setup_check_ignored") or [])
+        show = [p for p in problems if p["block"] or p["id"] not in ignored]
+        if not show:
+            self.logic.start()
+            self._sync_start_btn()
+            return
+        for p in show:
+            self.log(("Can't start: " if p["block"] else "Setup: ") + p["text"])
+        self._setup_dialog_open(show)
+
+    # ----- pointing at a setting: open its tab, scroll to it, make it blink -----
+    def _mark(self, name, widget):
+        self.__dict__.setdefault("_targets", {})[name] = widget
+        return widget
+
+    def _target(self, name):
+        w = self.__dict__.get("_targets", {}).get(name)
+        try:
+            return w if w is not None and w.winfo_exists() else None
+        except Exception:
+            return None
+
+    def point_to(self, page, name):
+        """Show the setting `name` on page `page` (built if it wasn't yet) and make it blink."""
+        if page in getattr(self.tabview, "pages", {}):
+            self.tabview.set(page)
+        self.root.after(200, lambda: self._blink(self._target(name) or getattr(self, name, None)))
+
+    def _blink(self, w):
+        if w is None:
+            return
+        try:
+            self.root.update_idletasks()
+            p = w.master                                 # scroll its page so it's in view
+            while p is not None and not isinstance(p, ctk.CTkScrollableFrame):
+                p = getattr(p, "master", None)
+            if p is not None:
+                y = w.winfo_rooty() - p.winfo_rooty()
+                p._parent_canvas.yview_moveto(max(0.0, (y - 80) / max(1, p.winfo_height())))
+        except Exception:
+            pass
+        try:
+            orig = (w.cget("border_width"), w.cget("border_color"))
+            flip = lambda on: w.configure(border_width=3 if on else orig[0],
+                                          border_color="#ffc107" if on else orig[1])
+        except Exception:
+            try:
+                row, orig_bg = w.master, w.master.cget("fg_color")
+                flip = lambda on: row.configure(fg_color="#664d03" if on else orig_bg)
+            except Exception:
+                return
+        for k in range(8):                               # 4 blinks over 2 s, ends as it was
+            self.root.after(k * 250, lambda on=(k % 2 == 0): self._safe(flip, on))
+
+    @staticmethod
+    def _safe(fn, *a):
+        try:
+            fn(*a)
+        except Exception:
+            pass
+
+    def _setup_dialog_open(self, show):
+        win = ctk.CTkToplevel(self.root)
+        self._setup_dialog = win
+        win.title("Before starting")
+        win.minsize(540, 120)
+        win.transient(self.root)
+        win.after(150, win.lift)
+        blocked = any(p["block"] for p in show)
+
+        def close():
+            self._setup_dialog = None
+            win.destroy()
+        ctk.CTkLabel(win, text="Can't start yet:" if blocked else "Your setup is missing something:",
+                     font=("Arial", 14, "bold"), text_color="#ea868f" if blocked else "#ffc107").pack(
+            anchor="w", padx=14, pady=(12, 6))
+        ticks = {}
+        for p in show:
+            box = ctk.CTkFrame(win, fg_color="#212529", corner_radius=6); box.pack(fill="x", padx=12, pady=3)
+            top = ctk.CTkFrame(box, fg_color="transparent"); top.pack(fill="x", padx=8, pady=(6, 2))
+            ctk.CTkLabel(top, text=("X  " if p["block"] else "!  ") + p.get("short", p["text"]),
+                         font=("Arial", 13, "bold"), anchor="w").pack(side="left")
+            if p.get("go"):
+                ctk.CTkButton(top, text="Go there  →", width=100, height=28, fg_color="#0d6efd", hover_color="#0b5ed7",
+                              command=lambda g=p["go"]: (close(), self.point_to(*g))).pack(side="right")
+            if not p["block"]:
+                var = ctk.BooleanVar(value=False)
+                ctk.CTkCheckBox(box, text="Don't warn me about this again", variable=var,
+                                font=("Arial", 11)).pack(anchor="w", padx=10, pady=(0, 6))
+                ticks[p["id"]] = var
+            else:
+                ctk.CTkFrame(box, fg_color="transparent", height=4).pack()
+        row = ctk.CTkFrame(win, fg_color="transparent"); row.pack(fill="x", padx=12, pady=(8, 12))
+
+        def start():
+            ign = set(self.settings.get("setup_check_ignored") or [])
+            ign |= {k for k, v in ticks.items() if v.get()}
+            self.settings.set("setup_check_ignored", sorted(ign))
+            close()
+            self.logic.start()
+            self._sync_start_btn()
+        ctk.CTkButton(row, text="Cancel", width=90, fg_color="#495057", hover_color="#343a40",
+                      command=close).pack(side="right")
+        if not blocked:
+            ctk.CTkButton(row, text="Start anyway", width=120, fg_color="#0d6efd", hover_color="#0b5ed7",
+                          command=start).pack(side="right", padx=6)
+        win.protocol("WM_DELETE_WINDOW", close)
 
     def _sync_start_btn(self):
         """Keep the button in step with the macro, also when it stops by itself (e.g. all moves trained)."""
@@ -1800,7 +2494,13 @@ class SpatialGUI:
             try:
                 fn()
             finally:
-                self.logic.test_running = False
+                # keep the test's last line on the action bar for a few seconds, then hide it
+                def done():
+                    self.logic.test_running = False
+                    if not self.logic.running:
+                        from overlay import show_action
+                        show_action(self, "", False)
+                self.root.after(5000, done)
         threading.Thread(target=wrapper, daemon=True).start()
 
     def update_hotkey(self, a):
@@ -1845,8 +2545,11 @@ class SpatialGUI:
             self.clover_tol_labels[color_type].configure(text=str(int(val)))
         self.log(f"{color_type.capitalize()} Tolerance: {int(val)}")
 
-    def log(self, msg):
-        print(msg)
+    def log(self, msg, _printed=False, hold=0):
+        """hold = keep this message on the action bar at least that many seconds (later ones wait their turn
+        on the bar; the console still gets every line right away)."""
+        if not _printed:
+            print(msg)
         if not hasattr(self, 'status_label'):
             return
         # the macro logs from its own thread; the window may only be touched from the window's thread
@@ -1856,16 +2559,33 @@ class SpatialGUI:
                 self.status_label.configure(text=f"Status: {msg}")
             except Exception:
                 pass
-            try:
-                from overlay import show_action
-                show_action(self, msg, bool(getattr(self.logic, "running", False)))
-            except Exception:
-                pass
+            now = time.time()
+            if not hold and now < getattr(self, "_bar_hold_until", 0):
+                self._bar_pending = msg                  # shown once the held message has had its time
+                return
+            if hold:
+                self._bar_hold_until, self._bar_pending = now + hold, None
+                self.root.after(int(hold * 1000) + 50, self._bar_release)
+            self._show_on_bar(msg)
         else:
             try:
-                self.root.after(0, lambda m=msg: self.log(m))
+                self.root.after(0, lambda m=msg: self.log(m, _printed=True, hold=hold))   # already printed above
             except Exception:
                 pass
+
+    def _show_on_bar(self, msg):
+        try:
+            from overlay import show_action
+            show_action(self, msg, bool(getattr(self.logic, "running", False)
+                                        or getattr(self.logic, "test_running", False)))
+        except Exception:
+            pass
+
+    def _bar_release(self):
+        if time.time() >= getattr(self, "_bar_hold_until", 0) - 0.01:
+            msg, self._bar_pending = getattr(self, "_bar_pending", None), None
+            if msg:
+                self._show_on_bar(msg)
 
     def _hide_for_pick(self):
         """Hide the macro window and give Windows time to repaint, so the
@@ -1886,6 +2606,57 @@ class SpatialGUI:
                 text=f"YOUR box is used {tuple(r)} - Full Auto Setup switches back to automatic" if mine else
                 "automatic: the whole play area between the black bars (Show Scan Areas draws it)",
                 text_color="#ffc107" if mine else "#75b798")
+
+    def _show_umbral_health(self):
+        ok = self.logic.has_health_bar()
+        self.umbral_health_lbl.configure(text="captured" if ok else "not captured",
+                                         text_color="#75b798" if ok else "#ea868f")
+        try:
+            if ok:
+                from PIL import Image
+                img = Image.open(self.logic.health_path())
+                img.thumbnail((140, 30))
+                self._umbral_health_img = ctk.CTkImage(light_image=img, dark_image=img, size=img.size)
+                self.umbral_health_preview.configure(image=self._umbral_health_img)
+        except Exception:
+            pass
+
+    def _show_umbral_menu(self):
+        ok = os.path.exists(self.logic.menu_path())
+        self.umbral_menu_lbl.configure(text="captured (for Manual)" if ok else "not captured (for Manual)",
+                                       text_color="#75b798" if ok else "#adb5bd")
+
+    def _capture_umbral_menu(self):
+        self._hide_for_pick()
+
+        def finish(x1, y1, x2, y2):
+            ok = self.logic.capture_menu([x1, y1, x2, y2])
+            self.root.deiconify()
+            self.log("Main menu captured." if ok else "Capture failed - drag a bigger box.")
+            self._show_umbral_menu()
+        Overlay(lambda x1, y1, x2, y2: self.root.after(150, lambda: finish(x1, y1, x2, y2)))
+
+    def _capture_umbral_health(self):
+        self._hide_for_pick()
+
+        def finish(x1, y1, x2, y2):
+            ok = self.logic.capture_health_bar([x1, y1, x2, y2])
+            self.root.deiconify()
+            self.log("Health bar captured." if ok else "Capture failed - drag a bigger box.")
+            self._show_umbral_health()
+        Overlay(lambda x1, y1, x2, y2: self.root.after(150, lambda: finish(x1, y1, x2, y2)))
+
+    def _show_umbral_area(self):
+        r = self.settings.get("regions", {}).get("umbral_scan") or [0, 0, 0, 0]
+        own = r[2] > r[0] and r[3] > r[1]
+        self.umbral_area_lbl.configure(text=f"area set ({r[2] - r[0]}x{r[3] - r[1]})" if own else
+                                       "no area (whole view, no HUD / chat)",
+                                       text_color="#75b798" if own else "#adb5bd")
+
+    def _clear_umbral_area(self):
+        self.settings.settings.setdefault("regions", {}).pop("umbral_scan", None)
+        self.settings.save()
+        self._show_umbral_area()
 
     def _show_interact_area(self):
         r = self.settings.get("regions", {}).get("mining_interact") or [0, 0, 0, 0]
@@ -1910,6 +2681,12 @@ class SpatialGUI:
             self._show_clover_region()
         if key == "mining_interact" and hasattr(self, "interact_area_lbl"):
             self._show_interact_area()
+        if key == "umbral_scan" and hasattr(self, "umbral_area_lbl"):
+            self._show_umbral_area()
+        if key == "umbral_jug_area" and hasattr(self, "umbral_jug_area_lbl"):
+            self._show_jug_area()
+        if key == "umbral_kill_region" and hasattr(self, "umbral_moves_page"):
+            self.umbral_moves_page.show_kill_box()
         if key.startswith("gold_clover_") and getattr(self, "gold_status", {}).get(int(key[-1])):
             self.gold_status[int(key[-1])].configure(text="set", text_color="#75b798")
         if key == "ok_scan_area":

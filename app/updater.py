@@ -72,86 +72,124 @@ class SpatialUpdater:
         except:
             return latest != current
 
-    def install_update(self, download_url):
-        try:
-            response = requests.get(download_url, stream=True)
-            if response.status_code != 200:
-                messagebox.showerror("Error", "Failed to download update.")
-                return
+    # ---------- installing an update: download -> check -> install, never leaving half a program ----------
+    def _download(self, url, path, tries=3):
+        """Download to `path` and make sure it's a complete, undamaged zip (every file's checksum is tested).
+        Retries a cut-off / damaged download. Returns None when fine, else what went wrong."""
+        why = "unknown error"
+        for attempt in range(1, tries + 1):
+            try:
+                with requests.get(url, stream=True, timeout=(10, 60)) as r:
+                    if r.status_code != 200:
+                        why = f"GitHub answered {r.status_code}"
+                        continue
+                    expected = int(r.headers.get("Content-Length") or 0)
+                    got = 0
+                    with open(path, "wb") as f:
+                        for chunk in r.iter_content(chunk_size=65536):
+                            if chunk:
+                                f.write(chunk)
+                                got += len(chunk)
+                if expected and got != expected:
+                    why = f"download cut off ({got} of {expected} bytes)"
+                    continue
+                with zipfile.ZipFile(path) as z:
+                    bad = z.testzip()                    # reads every file and checks its checksum
+                    if bad:
+                        why = f"damaged file in the download: {bad}"
+                        continue
+                return None
+            except (requests.RequestException, zipfile.BadZipFile, OSError) as e:
+                why = f"{type(e).__name__}: {e}"
+        return why
 
+    @staticmethod
+    def _program_ok(folder):
+        """The new app/ folder looks complete: main.py there, and every .py file readable as Python."""
+        if not os.path.exists(os.path.join(folder, "main.py")):
+            return "main.py is missing"
+        for root, _, files in os.walk(folder):
+            for f in files:
+                if f.endswith(".py"):
+                    path = os.path.join(root, f)
+                    try:
+                        with open(path, "rb") as fh:
+                            src = fh.read()
+                        if b"\0" in src:
+                            return f"{f} is damaged"
+                        compile(src, path, "exec")
+                    except (SyntaxError, ValueError, OSError):
+                        return f"{f} is damaged"
+        return None
+
+    def install_update(self, download_url):
+        from settings import get_root_path
+        dest_dir = get_root_path()                       # the main folder (launcher + app/ + data/ + docs/)
+        try:
             with tempfile.TemporaryDirectory() as temp_dir:
                 zip_path = os.path.join(temp_dir, "update.zip")
-                with open(zip_path, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        f.write(chunk)
-
-                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                    zip_ref.extractall(temp_dir)
-
-                extracted_folder = None
-                for item in os.listdir(temp_dir):
-                    item_path = os.path.join(temp_dir, item)
-                    if os.path.isdir(item_path) and item != "__MACOSX":
-                        extracted_folder = item_path
-                        break
-
-                if not extracted_folder:
-                    messagebox.showerror("Error", "Update extraction failed.")
+                why = self._download(download_url, zip_path)
+                if why:
+                    messagebox.showerror("Update", f"The download didn't come through properly ({why}).\n\n"
+                                                   "Nothing was changed - try again later.")
+                    return
+                unpack = os.path.join(temp_dir, "unpacked")
+                with zipfile.ZipFile(zip_path) as z:
+                    z.extractall(unpack)
+                folders = [os.path.join(unpack, d) for d in os.listdir(unpack)
+                           if os.path.isdir(os.path.join(unpack, d)) and d != "__MACOSX"]
+                src_root = folders[0] if len(folders) == 1 else unpack
+                new_app = os.path.join(src_root, "app")
+                why = self._program_ok(new_app) if os.path.isdir(new_app) else "no app folder in the download"
+                if why:
+                    messagebox.showerror("Update", f"The update looks incomplete ({why}).\n\nNothing was changed.")
                     return
 
-                from settings import get_root_path
-                dest_dir = get_root_path()                      # the main folder (launcher + app/ + data/ + docs/)
+                # 1. the program folder: put the new one next to the old one, then swap (old one kept until
+                #    the swap worked, put back if anything fails) - never a half-copied app/
+                app_dir = os.path.join(dest_dir, "app")
+                staged, old = app_dir + ".new", app_dir + ".old"
+                for d in (staged, old):
+                    shutil.rmtree(d, ignore_errors=True)
+                shutil.copytree(new_app, staged, ignore=shutil.ignore_patterns("__pycache__"))
+                why = self._program_ok(staged)
+                if why:
+                    shutil.rmtree(staged, ignore_errors=True)
+                    messagebox.showerror("Update", f"Copying the update failed ({why}).\n\nNothing was changed.")
+                    return
+                try:
+                    os.replace(app_dir, old)
+                    try:
+                        os.replace(staged, app_dir)
+                    except OSError:
+                        os.replace(old, app_dir)          # put the old program back
+                        raise
+                except OSError:
+                    # a file is locked (antivirus scanning it...): copy over the old files one by one instead
+                    shutil.copytree(staged, app_dir, dirs_exist_ok=True)
+                    shutil.rmtree(staged, ignore_errors=True)
+                shutil.rmtree(old, ignore_errors=True)
 
-                # data/ = everything the user saved; .launcher = the launcher's cache; .git for developers
-                PRESERVE = {"data", ".launcher", ".git", "__pycache__"}
-                # The user's own saved data: never deleted or overwritten by an update.
-                # (recorded routes, Skill Macro snapshots, captured dialogue / minigame / OK pictures)
-                USER_DATA = {"routes", "routes_library", "smart_templates", "library_templates",
-                             "ok_template.png", "event_roles_import.json", "sounds"}
-
-                incoming_names = set(os.listdir(extracted_folder))
-
-                for existing in os.listdir(dest_dir):
-                    if existing in PRESERVE or existing in USER_DATA:
-                        continue
-                    if existing not in incoming_names:
-                        existing_path = os.path.join(dest_dir, existing)
-                        try:
-                            if os.path.isdir(existing_path):
-                                shutil.rmtree(existing_path)
-                            else:
-                                os.remove(existing_path)
-                        except Exception:
-                            pass                                             
-
-                for item in incoming_names:
-                    src_path = os.path.join(extracted_folder, item)
-                    dest_path = os.path.join(dest_dir, item)
-
-                    if item in PRESERVE or (item in USER_DATA and os.path.exists(dest_path)):
-                        if os.path.isdir(src_path) and os.path.isdir(dest_path):
-                            # only add files the user doesn't have yet; never replace theirs
-                            for root, _, files in os.walk(src_path):
-                                rel = os.path.relpath(root, src_path)
-                                os.makedirs(os.path.join(dest_path, rel), exist_ok=True)
-                                for f in files:
-                                    target = os.path.join(dest_path, rel, f)
-                                    if not os.path.exists(target):
-                                        shutil.copy2(os.path.join(root, f), target)
-                        continue
-
-                    if os.path.isdir(src_path):
-                        if os.path.exists(dest_path):
-                            shutil.rmtree(dest_path)
-                        shutil.copytree(src_path, dest_path)
+                # 2. docs / readme: replaced. The launcher only when it really changed - it's running right now,
+                #    and Windows reads a running .bat as it goes, so rewriting it for nothing confuses it.
+                for item in os.listdir(src_root):
+                    src, dst = os.path.join(src_root, item), os.path.join(dest_dir, item)
+                    if item in ("app", "data", ".launcher", ".git") or item.startswith("."):
+                        continue                         # data/ = the player's own: never touched
+                    if os.path.isdir(src):
+                        shutil.copytree(src, dst, dirs_exist_ok=True)
                     else:
-                        shutil.copy2(src_path, dest_path)
+                        if item.lower().endswith(".bat") and os.path.exists(dst):
+                            with open(src, "rb") as a, open(dst, "rb") as b:
+                                if a.read() == b.read():
+                                    continue
+                        shutil.copy2(src, dst)
 
                 messagebox.showinfo("Success", "Update installed successfully! The application will now restart.")
                 self.restart_app()
-
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to install update: {e}")
+            messagebox.showerror("Error", f"Failed to install update: {e}\n\nIf the macro doesn't start, download it "
+                                          "again from GitHub and copy your old data folder into the new one.")
 
     def restart_app(self):
         try:

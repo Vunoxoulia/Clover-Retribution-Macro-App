@@ -2,7 +2,6 @@ import os
 import time
 import threading
 import math
-import keyboard
 import numpy as np
 import cv2
 from route_nav import RouteNav
@@ -285,6 +284,7 @@ class LibraryLogic(RouteNav):
         # New recordings: the whole walk is one piece ('return'). Old ones: the walk up to the first E.
         seg = route["segments"][0] if route["segments"] else route["return"]
         self.align_home()
+        self.handle_ok_popup()                           # never set off into an open pop up
         self.app.log(f"Walking to the wisp (route '{name}')...")
         self.play_segment(seg, label="wisp")
         self._wait_still()
@@ -392,9 +392,6 @@ class LibraryLogic(RouteNav):
     # ---------- Minigame detector: a snapshot of something only shown in the minigame ----------
     MINIGAME_TEMPLATE = os.path.join(DIALOG_TEMPLATE_DIR, "minigame.png")
     MINIGAME_MATCH = 0.99     # the boxed spot must look the SAME as the snapshot (fixed, not a setting)
-
-    def minigame_mode(self):
-        return "snapshot"                         # the old black-bar check didn't work, so it was removed
 
     def has_minigame_snapshot(self):
         return os.path.exists(self.MINIGAME_TEMPLATE) and any(self.app.settings.get("regions", {}).get("minigame_marker", [0]))
@@ -620,6 +617,24 @@ class LibraryLogic(RouteNav):
                 return int(area[0] + cx), int(area[1] + cy)
         return None
 
+    @staticmethod
+    def reading_order(res):
+        """Text boxes in reading order: words on the same line (their middles within half a line height) left to
+        right, then the next line. Sorting by each word's top edge alone put 'Flare' (1 px higher) before
+        'Blessed' when the reader returns separate words."""
+        boxes = []
+        for r in res or []:
+            ys = [p[1] for p in r[0]]
+            boxes.append(((min(ys) + max(ys)) / 2, max(1.0, max(ys) - min(ys)), min(p[0] for p in r[0]), r))
+        boxes.sort(key=lambda b: b[0])
+        lines = []
+        for b in boxes:
+            if lines and abs(b[0] - lines[-1][0]) <= 0.5 * max(b[1], lines[-1][1]):
+                lines[-1][2].append(b)
+            else:
+                lines.append([b[0], b[1], [b]])
+        return [b[3] for line in lines for b in sorted(line[2], key=lambda b: b[2])]
+
     def _ocr_button(self, crop):
         """Read ONE button picture. Small, pixelated text (e.g. 'Sovereign Magic: Cage Gates' squeezed into
         a smaller font) reads blank or as 'Cagt' straight off the screen; enlarging it smoothly and giving it
@@ -638,8 +653,7 @@ class LibraryLogic(RouteNav):
                 res, _ = reader(big)
             except Exception:
                 res = None
-            res = sorted(res or [], key=lambda r: (min(p[1] for p in r[0]), min(p[0] for p in r[0])))
-            text = " ".join(t for _, t, c in res if float(c) > 0.3).strip()
+            text = " ".join(t for _, t, c in self.reading_order(res) if float(c) > 0.3).strip()
             if len(self._norm_name(text)) > len(self._norm_name(best)):
                 best = text
         return best
@@ -846,7 +860,7 @@ class LibraryLogic(RouteNav):
             buttons = self.wait_move_list(timeout=4 if has_pic else 12)
             if not buttons:
                 if not has_pic:
-                    self.app.log(f"-> The move list didn't show up (only 'Skip' / no buttons).")
+                    self.app.log("-> The move list didn't show up (only 'Skip' / no buttons).")
                     return False
                 # Image mode: the button shapes weren't detected, but the picture is what counts -
                 # scroll over the dialogue and look for the picture again
@@ -909,10 +923,14 @@ class LibraryLogic(RouteNav):
         spam.set()
 
         def press():
+            # space and E take turns 0.1 s apart (each one every 0.2 s): pressed at the same instant, E
+            # swallowed the jump, so the second (air) jump never happened
             while spam.is_set() and self.running:
-                self.utils.send_key('space')
-                self.utils.send_key('e')
-                time.sleep(0.2)
+                for key in ('space', 'e'):
+                    if not spam.is_set():
+                        return
+                    self.utils.send_key(key)
+                    time.sleep(0.05)
         threading.Thread(target=press, daemon=True).start()
         try:
             if self._training_within(timeout):
@@ -1000,6 +1018,29 @@ class LibraryLogic(RouteNav):
         return False
 
     # ================= Main loop =================
+    def setup_problems(self):
+        """Only what makes EVERY cycle fail. Ticked moves on empty hotbar slots are fine (they're skipped)."""
+        out = []
+        if not self.has_minigame_snapshot() and not self.app.settings.get("capture_minigame_next"):
+            out.append({"id": "lib_minigame", "block": False, "short": "No minigame snapshot",
+                        "go": ("Areas", "lib_minigame"),
+                        "text": "No minigame snapshot - the minigame won't be seen, so every move waits for it and "
+                                "starts over. Capture it in Areas -> Minigame detector (or run Full Auto Setup)."})
+        mode = self.dialog_mode()
+        if mode == "manual" and not self.manual_point("clover_training"):
+            out.append({"id": "lib_manual_training", "block": False, "short": "No Clover Training spot",
+                        "go": ("Settings", "dialog_card"),
+                        "text": "Manual dialogue: no click spot for Clover Training (Settings -> Wisp dialogue)."})
+        if mode == "image" and not self.has_dialog_template("clover_training"):
+            out.append({"id": "lib_image_training", "block": False, "short": "No Clover Training picture",
+                        "go": ("Settings", "dialog_card"),
+                        "text": "Image dialogue: no picture of Clover Training yet (Settings -> Wisp dialogue)."})
+        if not self.load_route() and not any(self.load_route(b) for b in self._builtins()):
+            out.append({"id": "lib_route", "block": False, "short": "No route recorded",
+                        "go": ("Settings", "route_menu"),
+                        "text": f"No recorded route - it uses the old D/S/W walk (record one with {self.rec_key()})."})
+        return out
+
     def main_loop(self):
         from logic_events import WATCHER
         WATCHER.hold("Library")             # event checks only after each minigame
@@ -1191,8 +1232,7 @@ class LibraryLogic(RouteNav):
             text = self._ocr_button(img[y + m:y + side - m, x + m:x + w - m])
             if not self._norm_name(text):
                 box = [reg[0] + x + m, reg[1] + y + m, reg[0] + x + w - m, reg[1] + y + side - m]
-                lines = self.utils.get_text_from_region(box, upscale=3)
-                lines.sort(key=lambda r: min(p[1] for p in r[0]))
+                lines = self.reading_order(self.utils.get_text_from_region(box, upscale=3))
                 text = " ".join(t for _, t, c in lines if c > 0.3).strip()
             out.append((n, text))
         if any(t for _, t in out):
@@ -1430,6 +1470,24 @@ class LibraryLogic(RouteNav):
         say("Nothing was clicked except Clover Training." if walk else "Nothing was clicked.")
         return result
 
+    def test_open_dialogue(self):
+        """Hotkey test: standing at the wisp, press space + E (taking turns) until Clover Training shows, exactly
+        like the macro does - up to 20 s. Start/Stop ends it early."""
+        if self.running:
+            self.app.log("Stop the macro first, then test the opening.")
+            return
+        if not self.wait_focus_for_test():
+            return
+        self.app.log("--- Test opening: space + E until Clover Training shows (up to 20 s) ---")
+        self.running = True                              # the opening runs while this is set; Stop clears it
+        try:
+            ok = self.reopen_dialogue(timeout=20.0, opened="--- Test opening: Clover Training seen - OK ---",
+                                      failed="--- Test opening: Clover Training NOT seen in 20 s ---")
+            if not ok and not self.running:
+                self.app.log("--- Test opening stopped ---")
+        finally:
+            self.running = False
+
     def test_find_moves(self, walk=False):
         """Dry run of the move search: go down the move list ONCE and only HOVER each ticked move it finds
         (never clicks a move). walk=False (F4): the move list must already be open - no walking, no clicks.
@@ -1614,15 +1672,17 @@ class LibraryLogic(RouteNav):
                     cx, cy = int(ax1 + (ax2 - ax1) * fx), int(ay1 + (ay2 - ay1) * fy)
                     bx, by = max(0, cx - S // 2), max(0, cy - S // 2)
                     patch = gray[by:by + S, bx:bx + S]
-                    if patch.size and int(patch.max()) < 20:      # pure black: no text / button there
+                    if patch.size and int(patch.max()) < 28:      # (near) pure black: no text / button there
                         return bx, by, bx + S, by + S
         return None
 
     def capture_minigame(self, before, timeout=30):
-        """Wait for the minigame (black bars appear, or most of the view changes), then save a snapshot of a
-        part that only shows in the minigame: the biggest new thing near the top of the play area."""
+        """Wait for the minigame (black bars appear, or most of the view changes), then save a snapshot of a part
+        that only shows in the minigame AND never changes while it runs (the detector needs a 99% match):
+        a pure-black patch of a bar, else the biggest new-and-still area (title, frame...) - timers, scores and
+        clovers move, so they're left out. Several tries while the minigame runs; on failure the frames are
+        saved to data/debug so it can be looked at."""
         l, t, r, b = self.get_roblox_window_region()
-        W, H = r - l, b - t
         end, hits = time.time() + timeout, 0
         small = before[::4, ::4]                          # the 'did it change' test needs no full resolution
 
@@ -1639,42 +1699,70 @@ class LibraryLogic(RouteNav):
                 break
             time.sleep(0.3)
         else:
+            self.app.log("   minigame catch: never saw the minigame start (no black bars, view didn't change)")
+            self._save_catch_debug(before, grab())
             return False
         time.sleep(1.0)                                   # let its UI finish appearing
-        frame = grab()
-        if frame is None:
-            return False
-        bars = self.black_bars(frame)
-        x1, _, x2, _ = bars if bars else (0, 0, W, H)
-        # colour difference (not just brightness: a gold timer on a beige floor is about as bright)
-        diff = (cv2.absdiff(frame, before).max(axis=2) > 40).astype(np.uint8) * 255
-        diff[:, :x1] = 0
-        diff[:, x2:] = 0
-        diff[int(H * 0.35):, :] = 0                      # timer / score / title sit at the top
-        diff = cv2.morphologyEx(diff, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8))
-        n, _, st, _ = cv2.connectedComponentsWithStats(diff)
-        cands = []
-        for i in range(1, n):
-            x, y, w, h, a = st[i]
-            if w >= W * 0.04 and h >= 12 and w <= W * 0.6 and h <= H * 0.25:
-                cands.append((a, (max(0, x - 4), max(0, y - 4), min(W, x + w + 4), min(H, y + h + 4))))
-        boxes = [b for _, b in sorted(cands, reverse=True)]
-        patch = self._bar_patch(frame, bars) if bars else None
-        if patch:                                         # first choice: pure black inside a bar (never changes)
-            boxes.insert(0, patch)
-        # The detector needs a 99% match, so keep only a part that stays EXACTLY the same while the minigame
-        # runs (a timer / score changes every second): look twice more and drop anything that changed.
-        later = []
-        for _ in range(2):
-            time.sleep(1.0)
-            f = grab()
-            if f is not None:
-                later.append(f)
-        for bx1, by1, bx2, by2 in (tuple(int(v) for v in bx) for bx in boxes):
-            crop = frame[by1:by2, bx1:bx2]
-            if all(self.marker_match(crop, f[by1:by2, bx1:bx2]) >= self.MINIGAME_MATCH for f in later):
-                return self.save_minigame_snapshot(crop.copy(), [l + bx1, t + by1, l + bx2, t + by2])
+        H, W = before.shape[:2]
+        frames = []
+        for attempt in range(4):
+            frames = [grab()]
+            for _ in range(2):
+                time.sleep(0.7)
+                frames.append(grab())
+            if any(f is None for f in frames) or not self.running:
+                continue
+            f0 = frames[0]
+            bars = self.black_bars(f0)
+            boxes = []
+            patch = self._bar_patch(f0, bars) if bars else None
+            if patch:                                     # first choice: pure black inside a bar (never changes)
+                boxes.append(patch)
+            # new (wasn't there before the move was picked) AND still (same in all 3 frames)
+            new = cv2.absdiff(f0, before).max(axis=2) > 40
+            still = np.ones(new.shape, bool)
+            for f in frames[1:]:
+                still &= cv2.absdiff(f0, f).max(axis=2) < 12
+            mask = (new & still).astype(np.uint8) * 255
+            mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+            n, _, st, _ = cv2.connectedComponentsWithStats(mask)
+            cands = []
+            for i in range(1, n):
+                x, y, w, h, a = (int(v) for v in st[i])
+                if w >= W * 0.03 and h >= max(10, H * 0.015) and w <= W * 0.6 and h <= H * 0.4 and a >= w * h * 0.5:
+                    cands.append((a, (x, y, x + w, y + h)))
+            # A whole new view (camera moved, screen dimmed) is one area too big to use: then cut it into tiles
+            # and take tiles that are fully new + still AND show detail (a flat colour would match anything).
+            T = max(24, int(min(W, H) * 0.08))
+            gray = cv2.cvtColor(f0, cv2.COLOR_BGR2GRAY)
+            for ty in range(0, H - T + 1, T):
+                for tx in range(0, W - T + 1, T):
+                    if (mask[ty:ty + T, tx:tx + T] > 0).mean() >= 0.98 and gray[ty:ty + T, tx:tx + T].std() > 12:
+                        cands.append((-abs(tx + T / 2 - W / 2) - abs(ty + T / 2 - H * 0.3), (tx, ty, tx + T, ty + T)))
+            # upper half first (title / top of the play area), biggest / most central first; lower half as a fallback
+            cands.sort(key=lambda c: ((c[1][1] + c[1][3]) / 2 > H * 0.5, -c[0]))
+            boxes += [bx for _, bx in cands[:12]]
+            for bx1, by1, bx2, by2 in boxes:
+                crop = f0[by1:by2, bx1:bx2]
+                if all(self.marker_match(crop, f[by1:by2, bx1:bx2]) >= self.MINIGAME_MATCH for f in frames[1:]):
+                    return self.save_minigame_snapshot(crop.copy(), [l + bx1, t + by1, l + bx2, t + by2])
+            self.app.log(f"   minigame catch: nothing stayed still yet (try {attempt + 1}/4)")
+            time.sleep(0.5)
+        self._save_catch_debug(before, *frames)
         return False
+
+    def _save_catch_debug(self, before, *frames):
+        """What the minigame catch saw -> data/debug/minigame_catch_*.png (for a bug report)."""
+        try:
+            from settings import get_base_path
+            d = os.path.join(get_base_path(), "debug")
+            os.makedirs(d, exist_ok=True)
+            for name, img in (("before", before),) + tuple((f"during_{k}", f) for k, f in enumerate(frames)):
+                if img is not None and img.size:
+                    cv2.imwrite(os.path.join(d, f"minigame_catch_{name}.png"), img)
+            self.app.log(f"   minigame catch: what it saw is saved in {d} (minigame_catch_*.png)")
+        except Exception:
+            pass
 
     @staticmethod
     def black_bars(img):
@@ -1682,7 +1770,7 @@ class LibraryLogic(RouteNav):
         (x1, y1, x2, y2) in image coords, or None if there are no bars. From the middle outwards, the first
         line (row / column) that is ~all black is a bar's edge; a bar must be 3%+ of the view thick."""
         H, W = img.shape[:2]
-        black = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) < 20
+        black = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) < 28        # pure black, or the near-black some screens show
         rows, cols = black.mean(axis=1), black.mean(axis=0)
 
         def edge(frac, start, step, stop, size):
@@ -1805,7 +1893,6 @@ class LibraryLogic(RouteNav):
             upper = np.array([min(255, b + tol), min(255, g + tol), min(255, r + tol)], dtype=np.uint8)
             bgr_targets[ctype] = (lower, upper)
 
-        minigame_start_time = time.time()
         
         try:
             while self.running and self.minigame_running:
@@ -1876,15 +1963,3 @@ class LibraryLogic(RouteNav):
             self.app.settings.set("move_stats", move_stats)
         self.app.root.after(0, self.app.update_gold_display)
         return True
-
-    def test_active_movement(self):
-        """Tests the 5-pixel toggle movement"""
-        region = self.app.settings.get("regions")["score"]
-        if all(v == 0 for v in region): return
-        cx = region[0] + (region[2] - region[0]) // 2
-        cy = region[1] + (region[3] - region[1]) // 2
-        for _ in range(10):
-            RobloxInputDriver.move_to(cx + 5, cy)
-            time.sleep(0.1)
-            RobloxInputDriver.move_to(cx - 5, cy)
-            time.sleep(0.1)

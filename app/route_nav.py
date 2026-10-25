@@ -4,12 +4,10 @@ import shutil
 import threading
 import time
 import keyboard
-from utils import game_key
+from utils import press_key, position_name, key_scan_code
 import numpy as np
 import cv2
 from logic_base import BaseLogic
-
-OPPOSITE = {"w": "s", "s": "w", "a": "d", "d": "a"}
 
 DEFAULT_MINE_HOLD = 3.0
 DEFAULT_MINE_WAIT = 1.75
@@ -107,19 +105,31 @@ class RouteNav(BaseLogic):
         name = "".join(c for c in name.strip() if c.isalnum() or c in " -_").strip()
         return name[:40]
 
+    def name_taken(self, name):
+        """A route with this name exists already - upper / lower case ignored, like Windows folders."""
+        low = name.strip().lower()
+        return any(n.lower() == low for n in list(self.list_routes()) + list(self._builtins()))
+
     def create_route(self, name):
         name = self._clean_name(name)
-        if not name or name in self.list_routes() or name in self._builtins():
+        if not name or self.name_taken(name):
             return None
         os.makedirs(self.route_dir(name))
         self.set_active_route(name)
         return name
 
+    def free_route_name(self, base="My Route"):
+        """'My Route 1', 'My Route 2', ... - the first name not taken yet."""
+        n = 1
+        while self.name_taken(f"{base} {n}"):
+            n += 1
+        return f"{base} {n}"
+
     def rename_route(self, old, new):
         if self.is_locked(old):
             return None
         new = self._clean_name(new)
-        if not new or new in self.list_routes() or old not in self.list_routes():
+        if not new or old not in self.list_routes() or (self.name_taken(new) and new.lower() != old.lower()):
             return None
         os.rename(self.route_dir(old), self.route_dir(new))
         if self.app.settings.get(self.ACTIVE_ROUTE_KEY) == old:
@@ -169,7 +179,7 @@ class RouteNav(BaseLogic):
                 raise ValueError("That route is for a different macro.")
             base = self._clean_name(info.get("name") or os.path.splitext(os.path.basename(path))[0]) or "Imported"
             name, k = base, 2
-            while name in self.list_routes() or name in self._builtins():
+            while self.name_taken(name):
                 name, k = f"{base[:36]} {k}", k + 1
             d = os.path.join(self._routes_dir(), name)
             os.makedirs(d)
@@ -192,8 +202,11 @@ class RouteNav(BaseLogic):
     def save_route(self, route, name=None):
         if self.is_locked(name):
             return                                       # the built-in route is never changed
-        with open(os.path.join(self.route_dir(name), "route.json"), "w", encoding="utf-8") as f:
+        path = os.path.join(self.route_dir(name), "route.json")
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:     # written in full first: a crash can't leave half a file
             json.dump(route, f, indent=1)
+        os.replace(tmp, path)
 
 
     # ================= Screen helpers =================
@@ -236,8 +249,10 @@ class RouteNav(BaseLogic):
 
     def save_snapshot(self, path):
         if self.game_view_clear():
-            cv2.imwrite(path, self._screen())
-            return True
+            if cv2.imwrite(path, self._screen()):
+                return True
+            self.app.log(f"   !! {os.path.basename(path)} couldn't be saved to {os.path.dirname(path)}")
+            return False
         self.app.log(f"   !! {os.path.basename(path)} not saved: game was covered")
         return False
 
@@ -249,31 +264,33 @@ class RouteNav(BaseLogic):
         if not self.ok_busy.is_set():
             return 0.0
         t0 = time.perf_counter()
+        # the character was already frozen a moment before the pop up was seen: give that time back too
+        since = getattr(self, "_popup_since", None)
+        before = min(1.0, max(0.0, t0 - since)) if since else 0.0
         for k in held:
-            keyboard.release(k)
-        self.app.log("   'Ok' popup: route paused")
+            press_key(k, False)
+        self.app.log(f"   Pop up: route paused (frozen ~{before:.1f} s before it was seen - walking that again)")
         while self.ok_busy.is_set() and alive():
             time.sleep(0.05)
         time.sleep(0.3)                                  # let the game take control back
         for k in held:
-            keyboard.press(k)
-        return time.perf_counter() - t0
+            press_key(k, True)
+        return time.perf_counter() - t0 + before
 
     def hold_key(self, key, seconds, alive=None):
         """Hold a key for `seconds` (an 'Ok' popup pauses the clock while it's being clicked)."""
-        key = game_key(key)                              # WASD by position (AZERTY / QWERTZ)
-        alive = alive or (lambda: self.running)
+        alive = alive or (lambda: self.running)         # pressed by position: WASD on AZERTY / QWERTZ too
         if seconds <= 0:
             return alive()
         self.walking = True
-        keyboard.press(key)
+        press_key(key, True)
         end = time.perf_counter() + seconds
         try:
             while alive() and time.perf_counter() < end:
                 end += self._ok_pause([key], alive)
                 time.sleep(min(0.02, max(0.0, end - time.perf_counter())))
         finally:
-            keyboard.release(key)
+            press_key(key, False)
             self.walking = False
         return alive()
 
@@ -364,13 +381,6 @@ class RouteNav(BaseLogic):
     def has_home(self):
         return bool(self.active_route()) and os.path.exists(self._home_path())
 
-    def capture_home(self):
-        if not self.active_route():
-            self.app.log("Create or select a route first.")
-            return
-        if self.save_snapshot(self._home_path()):
-            self.app.log(f"Home saved for route '{self.active_route()}'.")
-
     def align_home(self, alive=None):
         alive = alive or (lambda: self.running)
         if not self.route_checks():
@@ -393,7 +403,13 @@ class RouteNav(BaseLogic):
     @classmethod
     def _key_is_down(cls, name):
         """Is this key physically held right now (asks Windows, not the keyboard hook)?"""
-        vk = cls._VK.get(name) or (ord(name.upper()) if len(name) == 1 else None)
+        vk = cls._VK.get(name)
+        if vk is None and key_scan_code(name):           # by position: AZERTY's physical W is recorded as 'w'
+            try:
+                import ctypes
+                vk = ctypes.windll.user32.MapVirtualKeyW(key_scan_code(name), 1) or None   # MAPVK_VSC_TO_VK
+            except Exception:
+                vk = None
         if vk is None:
             return True                                  # unknown key: trust the hook
         try:
@@ -413,48 +429,63 @@ class RouteNav(BaseLogic):
     def toggle_recording(self):
         """Record key (default F9): start recording into the selected route, or finish the recording."""
         if self.is_recording():
+            if not getattr(self, "_rec_live", False):
+                # pressed again while it's still starting (the 3 s 'click into Roblox' wait): stopping now
+                # would save an empty route over your old one
+                self.app.log(f"Recording is still starting - walk once it says RECORDING, then {self.rec_key()} "
+                             "to finish.")
+                return
             self._rec_stop = True
             return
         if self.running:
             self.app.log("Stop the macro before recording.")
             return
-        if self.is_locked():
-            name = self.active_route()
-            self.app.log(f"'{name}' is a built-in route and can't be recorded over. "
-                         f"Press New to make your own route, then {self.rec_key()}.")
-            try:
-                from tkinter import messagebox
-                self.app.root.after(0, lambda: messagebox.showinfo(
-                    "Built-in route",
-                    f"'{name}' is a built-in route - it can't be recorded over.\n\n"
-                    f"Click  New  (next to the route list) to create your own route, then press {self.rec_key()} "
-                    "to record it.", parent=self.app.root))
-            except Exception:
-                pass
-            return
-        if not self.active_route():
-            self.create_route("Route 1")
+        if self.is_locked() or not self.active_route():
+            # a built-in route can't be recorded over: record into a new route of your own instead
+            old = self.active_route()
+            new = self.create_route(self.free_route_name())
+            if old:
+                self.app.log(f"'{old}' is built-in - recording into a new route '{new}' instead.")
             if hasattr(self.app, "refresh_routes"):
                 self.app.root.after(0, self.app.refresh_routes)
         self._rec_stop = False
-        self._rec_thread = threading.Thread(target=self._record, daemon=True)
+        self._rec_live = False
+        self._rec_thread = threading.Thread(target=self._record_safe, daemon=True)
         self._rec_thread.start()
+
+    def _record_safe(self):
+        """The recording thread: an error is shown instead of the recording just vanishing."""
+        try:
+            self._record()
+        except Exception as e:
+            self.app.log(f"!! Recording failed and was NOT saved ({type(e).__name__}: {e}). "
+                         "Your previous recording of this route is kept.")
+            if hasattr(self.app, "set_recording_ui"):
+                self.app.root.after(0, lambda: self.app.set_recording_ui(False))
+        finally:
+            self._rec_live = False
 
     def _record(self):
         name = self.active_route()
-        folder = self.route_dir(name)
+        home_dir = self.route_dir(name)
         if not self.check_focus():
             self.app.log("Recording: click into Roblox now - starting in 3s...")
             time.sleep(3)
         if not self.game_view_clear():
-            self.app.log("!! Recording NOT started: something is covering the Roblox window.")
-            return
+            self.app.log("Recording: something is covering the Roblox window - move it away (waiting up to 15 s)...")
+            if not self.wait_for_clear_view(alive=lambda: not self._rec_stop, timeout=15.0):
+                self.app.log(f"!! Recording NOT started: Roblox stayed covered. Nothing was changed - press "
+                             f"{self.rec_key()} again once Roblox is uncovered.")
+                return
         old = self.load_route(name) or {}
         old_timers = [(s.get("mine_hold"), s.get("mine_wait")) for s in old.get("segments", [])]
-        for f in os.listdir(folder):            # previous recording of this route
-            if f.endswith(".png") or f == "route.json":
-                os.remove(os.path.join(folder, f))
+        # Snapshots go into a side folder; the old recording is only replaced once the new one is saved
+        folder = os.path.join(home_dir, "_recording")
+        shutil.rmtree(folder, ignore_errors=True)
+        os.makedirs(folder, exist_ok=True)
         self.save_snapshot(os.path.join(folder, "home.png"))
+        self._rec_stop = False                           # an early press during the start is forgotten
+        self._rec_live = True
 
         st = {"seg_start": time.perf_counter(), "last_mark": 0.0,
               "idle_since": time.perf_counter(), "idle_t": 0.0, "cp_taken": True}
@@ -481,10 +512,24 @@ class RouteNav(BaseLogic):
                 events.append([0.0, k, "down"])
             return seg
 
+        turns = self.turn_keys()                         # hotkey -> degrees (Umbral camera turns), else {}
+
         def on_event(ev):
-            name_ = (ev.name or "").lower()
+            raw = (ev.name or "").lower()
+            name_ = position_name(ev)                    # by position: AZERTY's Z key (physical W) is 'w
             now = time.perf_counter()
             with lock:
+                if raw in turns:
+                    name_ = raw
+                if name_ in turns:
+                    # a camera-turn hotkey: saved as an exact turn step (the hotkey turns the camera live too)
+                    if ev.event_type == "down" and not st.get("turn_held_" + name_):
+                        st["turn_held_" + name_] = True
+                        events.append([round(now - st["seg_start"], 3), f"turn:{turns[name_]}", "turn"])
+                        self.app.log(f"   camera turn {turns[name_]:+d} degrees recorded")
+                    elif ev.event_type == "up":
+                        st["turn_held_" + name_] = False
+                    return
                 if name_ == "e" and not self.E_MARKS_TARGET:
                     pass                                 # recorded like any other key below
                 elif name_ == "e" and ev.event_type == "up":
@@ -552,15 +597,30 @@ class RouteNav(BaseLogic):
         with lock:
             ret = close_segment(time.perf_counter())
         route = {"ores": len(segments), "segments": segments, "return": ret}
+        moved = sum(1 for sg in segments + [ret] for e in sg["events"] if e[2] in ("down", "turn"))
+        if not segments and not moved:
+            shutil.rmtree(folder, ignore_errors=True)
+            self.app.log(f"Recording of '{name}' had no key presses - NOT saved, your previous recording is kept.")
+            return
+        time.sleep(0.5)                                  # an ore snapshot taken right before the stop finishes
+        for f in os.listdir(home_dir):                   # now replace the previous recording
+            if f.endswith(".png") or f == "route.json":
+                os.remove(os.path.join(home_dir, f))
+        for f in os.listdir(folder):
+            shutil.move(os.path.join(folder, f), os.path.join(home_dir, f))
+        shutil.rmtree(folder, ignore_errors=True)
         self.save_route(route, name)
+        if not self.load_route(name):
+            raise IOError(f"route.json couldn't be read back from {home_dir}")
         n_cp = sum(len(sg["checkpoints"]) for sg in segments) + len(ret["checkpoints"])
         if self.ROUTE_TARGET == "ore":
             self.app.log(f"Route '{name}' saved: {len(segments)} ore{'s' if len(segments) != 1 else ''} "
                          f"+ the walk back to the start ({ret['duration']:.1f}s), {n_cp} checkpoints.")
         elif not self.E_MARKS_TARGET:
             n_keys = sum(1 for e in ret["events"] if e[2] == "down")
+            n_turns = sum(1 for e in ret["events"] if e[2] == "turn")
             self.app.log(f"Route '{name}' saved: walk to the {self.ROUTE_TARGET} ({ret['duration']:.1f}s, "
-                         f"{n_keys} key presses incl. jumps / E).")
+                         f"{n_keys} key presses incl. jumps / E" + (f", {n_turns} camera turn(s)" if n_turns else "") + ").")
         elif segments:
             self.app.log(f"Route '{name}' saved: walk to the {self.ROUTE_TARGET} ({segments[0]['duration']:.1f}s).")
         else:
@@ -568,6 +628,13 @@ class RouteNav(BaseLogic):
                          f"({ret['duration']:.1f}s) will be used to reach the {self.ROUTE_TARGET}.")
         if hasattr(self.app, "refresh_routes"):
             self.app.root.after(0, self.app.refresh_routes)
+
+    def turn_keys(self):
+        """{hotkey: degrees} recorded as camera turns while recording a route. None here (Umbral has F1-F5)."""
+        return {}
+
+    def rotate_camera(self, degrees):
+        pass
 
     # ================= Playback =================
     def play_segment(self, seg, label="", alive=None):
@@ -594,11 +661,16 @@ class RouteNav(BaseLogic):
                 while ei < len(events) and events[ei][0] <= t:
                     _, key, kind = events[ei]
                     ei += 1
+                    if kind == "turn":
+                        # exact camera turn, alongside the walk (keys held while turning stay held, as recorded)
+                        deg = int(key.split(":", 1)[1])
+                        threading.Thread(target=self.rotate_camera, args=(deg,), daemon=True).start()
+                        continue
                     if kind == "down":
                         if key in down:                  # pressed again without a release: re-tap it
-                            keyboard.release(key)
+                            press_key(key, False)
                             time.sleep(0.02)
-                        keyboard.press(key); down.add(key)
+                        press_key(key, True); down.add(key)
                         pressed_at[key] = time.perf_counter()
                     else:
                         # quick taps (jumps): keep the key down long enough for Roblox to see it
@@ -606,7 +678,7 @@ class RouteNav(BaseLogic):
                         if held_for < self.MIN_TAP:
                             time.sleep(self.MIN_TAP - held_for)
                             shift += self.MIN_TAP - held_for
-                        keyboard.release(key); down.discard(key)
+                        press_key(key, False); down.discard(key)
                 if ci < len(cps) and cps[ci]["t"] <= t and not down:
                     cp = cps[ci]
                     ci += 1
@@ -625,26 +697,12 @@ class RouteNav(BaseLogic):
         finally:
             self.walking = False
             for k in down:
-                keyboard.release(k)
+                press_key(k, False)
         return alive()
 
 
 
 
-    def wait_focus_for_test(self, seconds=10):
-        """Tests started from the macro window's button: give the user time to click into Roblox."""
-        if self.check_focus():
-            return True
-        self.app.log(f"Click into Roblox — the test starts as soon as it's focused (within {seconds}s)...")
-        end = time.time() + seconds
-        while time.time() < end:
-            if self.check_focus():
-                time.sleep(0.3)
-                return True
-            time.sleep(0.1)
-        self.app.log("Roblox wasn't focused — test cancelled. (Tip: press the test's hotkey while in Roblox - "
-                     "see the Hotkeys tab.)")
-        return False
 
     def _new_lap(self):
         self.lap = {"start": time.perf_counter(), "mined": 0, "targets": 0, "nudges": 0,

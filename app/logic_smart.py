@@ -1024,9 +1024,6 @@ class SmartMacroLogic:
     def meditate(self):
         """Weapon out: R → N … full … N → R.  Grimoire out: G → N … N → G.  Both: R, G → N … N → G, R."""
         d = self.med()
-        out = d.get("out", "weapon")
-        away = ([d["weapon_key"]] if out in ("weapon", "both") else []) + \
-               ([d["grimoire_key"]] if out in ("grimoire", "both") else [])
         steps = self.meditation_steps()
         gap = lambda name: self.med_wait(name)           # every step waits for its animation (own value or 'All')
         self.app.log("Mana empty → meditating…")

@@ -1,7 +1,7 @@
 customtkinter
 mss
 numpy
-opencv-python
+opencv-python<5
 keyboard
 rapidocr_onnxruntime==1.2.3
 onnxruntime==1.27.0

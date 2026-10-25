@@ -113,15 +113,6 @@ def roblox_windows():
     return sorted(wins, key=lambda w: (round(w.top / 200), w.left))
 
 
-def check_mentions(text):
-    """Split what's typed into an @user box into (pingable, names_that_wont_ping)."""
-    ok, bad = [], []
-    for part in (text or "").replace(",", " ").split():
-        digits = re.sub(r"[<@&!>]|^role:", "", part, flags=re.I)
-        (ok if digits.isdigit() and len(digits) >= 15 else bad).append(part)
-    return ok, bad
-
-
 def role_text(r):
     """A role ID typed in an event's Role box -> <@&ID> (anything already formatted is kept)."""
     r = (r or "").strip()
@@ -405,9 +396,10 @@ class EventWatcher:
 
     @staticmethod
     def _tap(key, hold=0.04):
-        keyboard.press(key)
+        from utils import press_key                      # by position: key names differ between Windows languages
+        press_key(key, True)
         time.sleep(hold)
-        keyboard.release(key)
+        press_key(key, False)
 
     @staticmethod
     def _type_char(ch, hold=0.04):
@@ -519,7 +511,7 @@ class EventWatcher:
                 if self.cfg.get("clear_in_global", True):
                     tabs = self.find_chat_tabs(w)
                     if "global" in tabs:
-                        RobloxInputDriver.click_at(*tabs["global"], duration=0.05)
+                        RobloxInputDriver.glide_click(*tabs["global"], duration=0.05)
                         time.sleep(0.35)
                     else:
                         self.log(f"Window {self.window_number(w)}: couldn't find the Global tab - clearing in the current tab.")
@@ -537,7 +529,7 @@ class EventWatcher:
                 self._tap("enter", hold=0.1)             # a quick tap gets missed by Roblox's chat
                 time.sleep(0.3)
                 if "global" in tabs and "here" in tabs:
-                    RobloxInputDriver.click_at(*tabs["here"], duration=0.05)   # back to 'Here'
+                    RobloxInputDriver.glide_click(*tabs["here"], duration=0.05)   # back to 'Here'
                     time.sleep(0.25)
                 self.log(f"Chat cleared ({cmd}{' in Global' if 'global' in tabs else ''}) in window {self.window_number(w)}.")
             if prev and prev != w.getHandle():

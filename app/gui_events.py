@@ -1,5 +1,4 @@
 import time
-import webbrowser
 import links
 import threading
 import customtkinter as ctk
@@ -484,25 +483,6 @@ class EventsPage:
                                                    lambda: btn.configure(text=self._people_label(d.get(key), wide))))
         return btn
 
-    def _check_mention(self, value, where=None):
-        """Warn right away when a NAME was typed: webhooks can only ping by ID."""
-        from logic_events import check_mentions
-        ok, bad = check_mentions(value)
-        if bad:
-            text = (f"{', '.join(bad)} won't ping{' (' + where + ')' if where else ''}: Discord needs the ID, "
-                    f"not the name. Turn on Developer Mode (Settings → Advanced), right-click the user → Copy User ID. "
-                    f"Role: right-click it → Copy Role ID, put & in front.")
-            color = "#ffc107"
-        elif ok:
-            kinds = ["role" if "&" in x else "user" for x in ok]
-            text, color = f"will ping {len(ok)} {'/'.join(sorted(set(kinds)))}{'s' if len(ok) > 1 else ''}", "#75b798"
-        else:
-            text, color = "", "#adb5bd"
-        if where is None:
-            self.mention_hint.configure(text=text, text_color=color)
-        elif bad:
-            self._log(text)
-
     def pick_window_chat(self, n):
         """Drag the chat box of ONE window."""
         self.root.withdraw(); self.root.update(); time.sleep(0.2)
@@ -572,7 +552,7 @@ class EventsPage:
             card = ctk.CTkFrame(self.win_box, fg_color="#1a1d20", corner_radius=6); card.pack(fill="x", pady=3)
             r = ctk.CTkFrame(card, fg_color="transparent"); r.pack(fill="x", padx=6, pady=(5, 2))
             ctk.CTkLabel(r, text=f"Window {i}", width=72, anchor="w", font=("Arial", 12, "bold")).pack(side="left")
-            worlds = self.cfg.setdefault("window_world", {})
+            self.cfg.setdefault("window_world", {})
             seg = ctk.CTkSegmentedButton(r, values=list(WATCHER.WORLDS), height=26, font=("Arial", 12),
                                          command=lambda v, n=i: (self.cfg["window_world"].__setitem__(str(n), v),
                                                                  self._save()))
@@ -780,9 +760,9 @@ class PeoplePicker(ctk.CTkToplevel):
 
 class EventsOnlyLogic(BaseLogic):
     """Logic for the Event Notifier hub card. There's nothing to automate besides the OK popup
-    clicker, so it reuses the normal macro window with just the Events + OK Popup pages."""
+    clicker, so it reuses the normal macro window with just the Events + Pop Up pages."""
 
     def main_loop(self):
         self.app.log("Nothing to start here: use Event alerts on the Events page "
-                     "and Always Click OK on the OK Popup page.")
+                     "and Always Click OK on the Pop Up page.")
         self.running = False

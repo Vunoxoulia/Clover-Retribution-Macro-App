@@ -8,8 +8,6 @@ TEXT_DIM = "#adb5bd"
 
 CARD = dict(fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
 BTN = dict(height=30, font=("Arial", 12), fg_color="#495057", hover_color="#343a40", corner_radius=6)
-BTN_BLUE = dict(height=30, font=("Arial", 12), fg_color=BLUE, hover_color=BLUE_HOVER, corner_radius=6)
-TITLE_FONT = ("Arial", 16, "bold")
 
 
 def _fit_wrapped_labels():

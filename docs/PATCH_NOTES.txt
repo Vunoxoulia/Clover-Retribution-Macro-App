@@ -1,7 +1,18 @@
+WHAT'S NEW IN V6.4
+==================
+- New Pop Up page (was OK Popup): add other pop ups like Delayed Packages and the macro closes them for you
+- Fixed recorded routes not saving
+- Fixed clicks happening before the mouse got there (Click delay on the Main page)
+- Library: pop ups showing up mid-walk don't throw the route off anymore
+- Library: Full Auto Setup works on more screens (4K, no black bars)
+- Text reading is way faster, so the Library dialogue and Auto setup are quicker
+- Routes work on any keyboard layout now - AZERTY players, record your routes again
+- Pressing Start tells you if something in your setup is missing, with a button that takes you to it
+- Updates can't break your install anymore if the download gets cut off
+
 WHAT'S NEW IN V6.3.7.3
 ======================
 - Library (fix): when reopening the dialogue it keeps pressing space + E every 0.2 s until the Clover Training option shows, then stops - also when it first walks up to the wisp
-
 
 WHAT'S NEW IN V6.3.7.2
 ======================

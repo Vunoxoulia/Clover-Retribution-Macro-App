@@ -1,7 +1,6 @@
 import os
 import time
 import threading
-import webbrowser
 import links
 import customtkinter as ctk
 import keyboard
@@ -85,8 +84,8 @@ class SmartMacroGUI:
         self.on_state_change(False)
 
         NAV_ICONS["Events"] = ""
-        NAV_ICONS["OK Popup"] = ""
-        for name in ["Rotation", "Skill Combo", "Items", "Events", "OK Popup", "Settings"]:
+        NAV_ICONS["Pop Up"] = ""
+        for name in ["Rotation", "Skill Combo", "Items", "Events", "Pop Up", "Settings"]:
             self.nav.add(name)
         if self.on_back:
             ctk.CTkButton(self.nav.footer, text="←  Back to Menu", anchor="w", height=32, fg_color="transparent",
@@ -103,7 +102,7 @@ class SmartMacroGUI:
 
         def ok():
             from gui import OkPopupPage
-            self.ok_page = OkPopupPage(self.root, self.nav.tab("OK Popup"), self.settings, self.log)
+            self.ok_page = OkPopupPage(self.root, self.nav.tab("Pop Up"), self.settings, self.log)
         ok()                                          # built now: the rotation's OK clicker uses its setup
         for name, fn in (("Skill Combo", self.build_combos), ("Items", self.build_items),
                          ("Settings", self.build_settings), ("Events", events)):
@@ -456,7 +455,6 @@ class SmartMacroGUI:
         # -- when
         section("When to meditate")
         row = ctk.CTkFrame(body, fg_color="transparent"); row.pack(fill="x", pady=2)
-        has = d["region"][2] > d["region"][0]
 
         def pick_bar():
             win.withdraw()
@@ -550,20 +548,6 @@ class SmartMacroGUI:
         key(r2, d["key"], "#75b798"); wait_box(r2, "stand")
         for k, name in steps["back"]:
             key(r2, k); wait_box(r2, name)
-
-    def _rebuild_meditation(self):
-        old = getattr(self, "_med_card", None)
-        if old is not None:
-            nxt = None
-            try:
-                kids = old.master.pack_slaves()
-                nxt = kids[kids.index(old) + 1] if old in kids and kids.index(old) + 1 < len(kids) else None
-            except Exception:
-                pass
-            old.destroy()
-            self.build_meditation(old.master)
-            if nxt is not None:
-                self._med_card.pack_configure(before=nxt)
 
     def test_mana(self):
         r = self.logic.mana_reading()
@@ -995,7 +979,6 @@ class SmartMacroGUI:
         w = self._cards.get(slot)
         if not w:
             return
-        has = self.logic.has_template(slot)
         img = self._thumb(slot)
         self.score_labels[slot].configure(text="" if img else "no img", image=img, text_color="#ea868f")
         if img is None:
@@ -1248,7 +1231,6 @@ class SmartMacroGUI:
         self._item_row(item)
 
     def test_items(self):
-        it = self.cfg["items"]
         if not self.logic.items_region():
             self.log("Set the scan area first."); return
         self.ocr_label.configure(text="Reading…")
@@ -1407,8 +1389,9 @@ class SmartMacroGUI:
     # ---------- app hooks ----------
     def register_hotkeys(self):
         keyboard.unhook_all()
+        from utils import on_hotkey
         try:
-            keyboard.add_hotkey(self.cfg["hotkey"], self.logic.toggle)
+            on_hotkey(self.cfg["hotkey"], self.logic.toggle)      # also fires while you hold W / a skill key
         except Exception as e:
             self.log(f"Hotkey error: {e}")
         if self.logic.running and self.cfg["combos"]["enabled"]:
