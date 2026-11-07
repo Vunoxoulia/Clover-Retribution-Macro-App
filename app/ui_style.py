@@ -193,9 +193,22 @@ class SmoothScrollFrame(ctk.CTkScrollableFrame):
         except Exception:
             pass
 
+    def _inside_me(self, widget):
+        canvas = getattr(self, "_parent_canvas", None)
+        while widget is not None:
+            if widget == canvas:
+                return True
+            widget = getattr(widget, "master", None)
+        return False
+
     def _mouse_wheel_all(self, event):
-        if getattr(self, "_shift_pressed", False) or not self.check_if_master_is_canvas(event.widget):
-            return super()._mouse_wheel_all(event)
+        if getattr(self, "_shift_pressed", False):
+            try:
+                return super()._mouse_wheel_all(event)
+            except Exception:
+                return
+        if not self._inside_me(event.widget):
+            return
         self._wheel_px = getattr(self, "_wheel_px", 0.0) - event.delta / 120 * self.STEP
         if not getattr(self, "_wheel_job", None):
             self._wheel_job = self.after(12, self._apply_wheel)

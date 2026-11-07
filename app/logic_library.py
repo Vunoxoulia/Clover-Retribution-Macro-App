@@ -484,10 +484,6 @@ class LibraryLogic(RouteNav):
             time.sleep(0.6)
         self.app.log("Chat hidden for the minigame." if why == "hide" else "Chat shown again.")
 
-    def menu_showing(self):
-        has_panel, buttons = self.read_dialog()
-        return has_panel and len(buttons) >= 2
-
     def letterbox_shown(self, img=None):
         img = self._hud_shot() if img is None else img
         if img is None or not img.size:
@@ -1008,10 +1004,17 @@ class LibraryLogic(RouteNav):
         self.app.log(f"-> Couldn't find {label} in the move list.")
         return False
 
+    def dialogue_place(self):
+        if self.dialog_mode() != "image":
+            return None
+        if self.find_dialog_button("clover_training") is not None:
+            return "first menu"
+        if self._any_move_picture(range(MAX_MOVES)):
+            return "move list"
+        return None
+
     def dialogue_visible(self):
-        if self.read_dialog()[0]:
-            return True
-        return self.dialog_mode() == "image" and self.find_dialog_button("clover_training") is not None
+        return self.dialogue_place() is not None
 
     def open_dialogue(self):
         if self.dialog_mode() == "manual":
@@ -1069,8 +1072,8 @@ class LibraryLogic(RouteNav):
         return False
 
     def training_option_visible(self):
-        if self.dialog_mode() == "image" and self.find_dialog_button("clover_training") is not None:
-            return True
+        if self.dialog_mode() == "image" and self.has_dialog_template("clover_training"):
+            return self.find_dialog_button("clover_training") is not None
         if not self.read_dialog()[0]:
             return False
         return any(self._has_word((t or "").lower(), self.TRAINING_WORDS)
@@ -1161,11 +1164,10 @@ class LibraryLogic(RouteNav):
                 continue
             self.app.log(f"Training {self.move_label(self.current_move_idx)}")
 
-            if self.dialogue_visible():
+            where = self.dialogue_place()
+            if where:
                 opened = True
-                mode = self.dialog_mode()
-                on_first_menu = self.find_dialog_button("clover_training") is not None if mode == "image" else True
-                if not on_first_menu:
+                if where == "move list":
                     self.app.log("Already in the move list - picking the move here.")
                     if self.pick_move_button(self.current_move_idx):
                         played = self.perform_clover_scoring()

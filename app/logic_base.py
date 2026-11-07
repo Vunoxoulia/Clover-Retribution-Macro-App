@@ -135,6 +135,9 @@ class BaseLogic:
     def _global_ok_loop(self):
         while self._global_ok_active:
             took = 0.0
+            if getattr(self, "turning", False):
+                time.sleep(0.05)
+                continue
             if self._ok_scanner_lock.acquire(blocking=False):
                 t0 = time.perf_counter()
                 try:
@@ -153,6 +156,9 @@ class BaseLogic:
     def _ok_scanner_loop(self):
         while self.running and self.ok_scanner_running:
             took = 0.0
+            if getattr(self, "turning", False):
+                time.sleep(0.05)
+                continue
             if self._ok_scanner_lock.acquire(blocking=False):
                 t0 = time.perf_counter()
                 try:

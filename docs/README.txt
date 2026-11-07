@@ -1,6 +1,12 @@
 HOW TO RUN SPATIAL MACRO
 ========================
 
+WHAT'S NEW IN V6.5.1
+====================
+
+- Fixed issue with skipping route
+- Fixed scrolling errors on some PCs
+
 WHAT'S NEW IN V6.5
 ==================
 
