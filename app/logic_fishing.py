@@ -5,16 +5,27 @@ import numpy as np
 from logic_base import BaseLogic
 
 class FishingLogic(BaseLogic):
+    def setup_problems(self):
+        regions = self.app.settings.get("regions", {}) or {}
+        out = []
+        for key, pid, short, text in (
+                ("fishing_click_pos", "fishing_click_pos", "No click position",
+                 "No click position - it doesn't know where to click to cast and reel (Setup -> step 1)."),
+                ("minigame_bar", "fishing_minigame_bar", "No minigame bar",
+                 "No minigame bar box - the fishing bar can't be followed (Setup -> step 2).")):
+            v = regions.get(key)
+            if not v or all(x == 0 for x in v):
+                out.append({"id": pid, "block": False, "short": short, "go": ("Setup", key), "text": text})
+        return out
+
     def __init__(self, app):
         super().__init__(app)
         self.is_holding_space = False
 
     def _hue_tol(self, tolerance):
-        """Map the color-tolerance setting onto a usable HSV hue window (hue spans 0-179)."""
         return max(3, min(45, int(tolerance)))
 
     def test_detection(self):
-        """The 'Test Full Tracking' button logic."""
         self.app.log("Manual Test: Waiting for Minigame Bar...")
         bar_region = self.app.settings.get("regions", {}).get("minigame_bar")
         bar_color = self.app.settings.get("bar_color", [95, 153, 98])
@@ -112,7 +123,6 @@ class FishingLogic(BaseLogic):
             self.app.log("Fish NOT found. Check area/color.")
 
     def _get_positions(self, region, bar_color, fish_color, tolerance):
-        """Unified method to find Bar and Fish positions."""
         img_rgb = self.utils.capture_screen(region)
         img_hsv = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2HSV)
         
@@ -155,7 +165,7 @@ class FishingLogic(BaseLogic):
 
     def main_loop(self):
         from logic_events import WATCHER
-        WATCHER.hold("Fishing")             # event checks only between catches (see checkpoint below)
+        WATCHER.hold("Fishing")
         try:
             self._fishing_loop()
         finally:
@@ -252,7 +262,7 @@ class FishingLogic(BaseLogic):
             self.app.log("Caught! Waiting 2 seconds before next cast...")
             self.handle_ok_popup()
             if self.running:
-                WATCHER.checkpoint("Fishing")   # minigame finished, before the recast: safe moment to check chat
+                WATCHER.checkpoint("Fishing")
             time.sleep(2.0) 
             
             if not self.running:

@@ -1,12 +1,3 @@
-"""Share a setup with someone else: one .zip file that holds the settings AND the pictures.
-
-- Skill Macro: one loadout (rotation, combos, items + its slot snapshots)
-- Library: moves to train, dialogue mode / spots / waits, gold check, areas, captured button pictures
-  and your own route to the wisp (built-in routes ship with the app already)
-
-Nothing private goes in: no webhook, no Discord / event settings, no stats.
-Positions and pictures come from the sharer's screen - if the other PC's screen or Roblox window size
-differs, run Find hotbar / Snapshot all (Skill Macro) or re-pick the spots (Library)."""
 import copy
 import json
 import os
@@ -19,7 +10,7 @@ LIBRARY_KEYS = ("move_names", "train_moves", "gold_move_slots", "dialog_mode", "
                 "after_training_wait", "manual_moves", "positions", "gold_hotbar", "gold_mode",
                 "hide_chat_in_minigame", "minigame_threshold", "clover_colors", "clover_tolerances",
                 "color_tolerance", "sound_when_done")
-LIBRARY_REGIONS = ("score", "chat_button", "minigame_marker")
+LIBRARY_REGIONS = ("score", "chat_button")
 
 
 def _write_json(z, data):
@@ -37,7 +28,6 @@ def _read(path):
 
 
 def _extract_folder(z, prefix, dest):
-    """Copy every file under `prefix/` in the zip into `dest` (names only - no paths from the file)."""
     n = 0
     for info in z.infolist():
         if info.is_dir() or not info.filename.startswith(prefix + "/"):
@@ -52,7 +42,6 @@ def _extract_folder(z, prefix, dest):
     return n
 
 
-# ---------------- Skill Macro loadout ----------------
 def export_skill_loadout(logic, path):
     from logic_smart import loadout_dir
     logic._store_active()
@@ -70,7 +59,6 @@ def export_skill_loadout(logic, path):
 
 
 def import_skill_loadout(logic, path):
-    """Adds the loadout under its own name ('Name (2)' if taken) and switches to it. Returns that name."""
     from logic_smart import loadout_dir, LOADOUT_SECTIONS
     z, data = _read(path)
     with z:
@@ -87,7 +75,7 @@ def import_skill_loadout(logic, path):
         dest = loadout_dir(name)
         shutil.rmtree(dest, ignore_errors=True)
         _extract_folder(z, "pictures", dest)
-    logic.app.settings.settings["skill_active_loadout"] = None   # so switch_loadout doesn't skip it
+    logic.app.settings.settings["skill_active_loadout"] = None
     for s, v in copy.deepcopy(sections).items():
         logic._fill_section(s, v)
     logic.app.settings.settings["skill_active_loadout"] = name
@@ -96,7 +84,6 @@ def import_skill_loadout(logic, path):
     return name
 
 
-# ---------------- Library ----------------
 def export_library(logic, path):
     from logic_library import DIALOG_TEMPLATE_DIR
     st = logic.app.settings.settings
@@ -121,8 +108,6 @@ def export_library(logic, path):
 
 
 def import_library(logic, path):
-    """Replaces the Library setup with the file's. The current one is NOT kept - export it first if needed.
-    Returns the imported route's name (or None)."""
     from logic_library import DIALOG_TEMPLATE_DIR
     z, data = _read(path)
     with z:
@@ -134,7 +119,6 @@ def import_library(logic, path):
             if k not in LIBRARY_KEYS:
                 continue
             cur = st.get(k)
-            # in place where possible, so pages holding on to these lists / dicts keep the live copy
             if isinstance(cur, list) and isinstance(v, list):
                 cur[:] = v
             elif isinstance(cur, dict) and isinstance(v, dict):

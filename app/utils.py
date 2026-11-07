@@ -13,8 +13,6 @@ from pynput.mouse import Button, Controller as MouseController
 
 IS_WINDOWS = sys.platform.startswith('win')
 
-# cv2.imread / imwrite fail silently on Windows when the path has non-English letters (á, ñ, ü, Cyrillic...
-# in the user name or the folder the app sits in). Read / write the bytes ourselves so captures always save.
 _cv2_imread, _cv2_imwrite = cv2.imread, cv2.imwrite
 
 
@@ -38,6 +36,10 @@ def _imwrite(path, img, params=None):
 
 if cv2.imread is _cv2_imread:
     cv2.imread, cv2.imwrite = _imread, _imwrite
+
+_HELD_KEYS = set()
+_HELD_NAMES = set()
+_HELD_LOCK = threading.Lock()
 
 if IS_WINDOWS:
     PUL = ctypes.POINTER(ctypes.c_ulong)
@@ -76,20 +78,37 @@ if IS_WINDOWS:
     _ARROWS = {"up": (0x26, 0x48), "down": (0x28, 0x50), "left": (0x25, 0x4B), "right": (0x27, 0x4D)}
 
     def scan_key(sc, down, extended=False, vk=0):
-        """Press (down=True) / release a key by its hardware scan code (what a real keyboard sends, so the game
-        can't mistake it for another key)."""
-        flags = 0x0008 | (0x0001 if extended else 0) | (0 if down else 0x0002)   # SCANCODE | EXTENDEDKEY | KEYUP
+        flags = 0x0008 | (0x0001 if extended else 0) | (0 if down else 0x0002)
         extra = ctypes.c_ulong(0)
         ii_ = Input_I()
         ii_.ki = KeyBdInput(vk, sc, flags, 0, ctypes.pointer(extra))
         x = Input(ctypes.c_ulong(INPUT_KEYBOARD), ii_)
         ctypes.windll.user32.SendInput(1, ctypes.pointer(x), ctypes.sizeof(x))
+        with _HELD_LOCK:
+            if down:
+                _HELD_KEYS.add((sc, bool(extended), vk))
+            else:
+                _HELD_KEYS.discard((sc, bool(extended), vk))
+
+    def release_all_keys():
+        with _HELD_LOCK:
+            held = list(_HELD_KEYS)
+            names = list(_HELD_NAMES)
+        for sc, ext, vk in held:
+            try:
+                scan_key(sc, False, extended=ext, vk=vk)
+            except Exception:
+                pass
+        for n in names:
+            try:
+                keyboard.release(n)
+            except Exception:
+                pass
+        with _HELD_LOCK:
+            _HELD_NAMES.clear()
+        return len(held) + len(names)
 
     def press_key(name, down):
-        """Press / release a game key BY ITS POSITION (scan code), whatever the keyboard layout or Windows language:
-        Roblox reads keys by position, and the keyboard library's look-up by NAME isn't reliable ('left' came out
-        as '3' on one PC; AZERTY's 'w' is where QWERTY has Z). Names are QWERTY positions ('w' = the key right
-        of Tab). Unknown names fall back to the keyboard library."""
         if isinstance(name, int):
             scan_key(name, down)
             return
@@ -102,19 +121,19 @@ if IS_WINDOWS:
             scan_key(sc, down)
         elif down:
             keyboard.press(n)
+            with _HELD_LOCK:
+                _HELD_NAMES.add(n)
         else:
             keyboard.release(n)
+            with _HELD_LOCK:
+                _HELD_NAMES.discard(n)
 
     def tap_scan(sc, hold=0.05):
-        """One press of a key by scan code (e.g. 0x01 = Esc, 0x1C = Enter)."""
         scan_key(sc, True)
         time.sleep(hold)
         scan_key(sc, False)
 
     def arrow_key(name, down):
-        """Press (down=True) / release an arrow key the way a real keyboard does: its scan code WITH the
-        'extended key' flag. Without that flag (how the keyboard library sends it) Roblox reads numpad 4 / 6 / 8 / 2,
-        so the camera didn't turn."""
         vk, sc = _ARROWS[name]
         scan_key(sc, down, extended=True, vk=vk)
 
@@ -126,10 +145,6 @@ if IS_WINDOWS:
     MOUSEEVENTF_RIGHTUP = 0x0010
     MOUSEEVENTF_VIRTUALDESK = 0x4000
 
-# ---------------- Keys by position ----------------
-# Roblox reads keys by their PHYSICAL position (an AZERTY player walks with ZQSD, the game sees WASD).
-# Every key the macros send is named the way Roblox names it (QWERTY positions) and sent as that position's
-# scan code, so it's the same key on every keyboard layout / Windows language.
 _QWERTY_SC = {c: i for i, c in enumerate("1234567890-=", start=2)}
 _QWERTY_SC.update({c: i for i, c in enumerate("qwertyuiop[]", start=16)})
 _QWERTY_SC.update({c: i for i, c in enumerate("asdfghjkl;'`", start=30)})
@@ -137,20 +152,217 @@ _QWERTY_SC.update({c: i for i, c in enumerate(r"\zxcvbnm,./", start=43)})
 _SPECIAL_SC = {"space": 0x39, "shift": 0x2A, "left shift": 0x2A, "right shift": 0x36, "enter": 0x1C, "esc": 0x01,
                "escape": 0x01, "tab": 0x0F, "ctrl": 0x1D, "left ctrl": 0x1D, "alt": 0x38, "left alt": 0x38,
                "backspace": 0x0E, "f11": 0x57, "f12": 0x58}
-_SPECIAL_SC.update({f"f{i}": 0x3A + i for i in range(1, 11)})          # F1 = 0x3B ... F10 = 0x44
-# scan code -> its QWERTY name: recordings store keys by POSITION, so AZERTY's Z key (physical W) is saved as 'w'
+_SPECIAL_SC.update({f"f{i}": 0x3A + i for i in range(1, 11)})
 _NAME_BY_SC = {v: k for k, v in _QWERTY_SC.items()}
 _NAME_BY_SC.update({0x39: "space", 0x2A: "shift", 0x36: "shift"})
 
 
 def key_scan_code(name):
-    """Scan code of a QWERTY key name ('w', '1', 'space', 'f1'...), or None."""
     n = str(name).lower()
     return _QWERTY_SC.get(n) or _SPECIAL_SC.get(n)
 
 
+_VK_NAMES = {"space": 0x20, "enter": 0x0D, "esc": 0x1B, "escape": 0x1B, "tab": 0x09, "backspace": 0x08,
+             "shift": 0x10, "left shift": 0xA0, "right shift": 0xA1, "ctrl": 0x11, "left ctrl": 0xA2,
+             "right ctrl": 0xA3, "alt": 0x12, "left alt": 0xA4, "right alt": 0xA5, "up": 0x26, "down": 0x28,
+             "left": 0x25, "right": 0x27, "insert": 0x2D, "delete": 0x2E, "home": 0x24, "end": 0x23,
+             "page up": 0x21, "page down": 0x22, "caps lock": 0x14}
+_VK_NAMES.update({f"f{i}": 0x6F + i for i in range(1, 25)})
+
+
+def key_vk(name):
+    n = str(name or "").strip().lower()
+    if n in _VK_NAMES:
+        return _VK_NAMES[n]
+    sc = key_scan_code(n)
+    try:
+        if sc:
+            vk = ctypes.windll.user32.MapVirtualKeyW(sc, 1)
+            if vk:
+                return vk
+        if len(n) == 1:
+            r = ctypes.windll.user32.VkKeyScanW(ord(n))
+            if r != -1:
+                return r & 0xFF
+    except Exception:
+        pass
+    return None
+
+
+def _async_key_state(vk):
+    return ctypes.windll.user32.GetAsyncKeyState(vk)
+
+
+def key_down(name):
+    vk = key_vk(name)
+    if vk is None:
+        try:
+            return keyboard.is_pressed(name)
+        except Exception:
+            return False
+    try:
+        return bool(_async_key_state(vk) & 0x8000)
+    except Exception:
+        return False
+
+
+KEY_BACKUP = {"fired": 0}
+_KW_LOCK = threading.Lock()
+_KW = []
+_KW_THREAD = [None]
+_KW_POLL = 0.025
+
+
+def _kw_loop():
+    from types import SimpleNamespace
+    while True:
+        time.sleep(_KW_POLL)
+        with _KW_LOCK:
+            entries = list(_KW)
+        now = time.time()
+        for en in entries:
+            try:
+                down = bool(_async_key_state(en["vk"]) & 0x8000)
+            except Exception:
+                continue
+            if down and not en["down"]:
+                en["down"], en["pressed_at"], en["pending"] = True, now, True
+            elif not down:
+                en["down"] = False
+                en["armed"] = True
+            if en["pending"] and now - en["pressed_at"] >= 0.15:
+                en["pending"] = False
+                if en["last_hook"] < en["pressed_at"] - 0.3:
+                    en["backup_fired"] = now
+                    KEY_BACKUP["fired"] += 1
+                    if KEY_BACKUP["fired"] == 1:
+                        print("Keys: the keyboard hook missed a press - the backup key check is handling it.")
+                    try:
+                        en["callback"](SimpleNamespace(name=en["name"], event_type="down", backup=True,
+                                                       scan_code=key_scan_code(en["name"]) or 0))
+                    except Exception as e:
+                        print(f"Key backup ({en['name']}): {e}")
+
+
+def on_key(name, callback, suppress=False):
+    name = str(name).strip().lower()
+    vk = key_vk(name)
+    held = False
+    if vk:
+        try:
+            held = bool(_async_key_state(vk) & 0x8000)
+        except Exception:
+            held = False
+    en = {"name": name, "vk": vk, "callback": callback, "down": held, "pending": False,
+          "pressed_at": 0.0, "last_hook": 0.0, "backup_fired": 0.0, "armed": not held}
+
+    def hooked(e):
+        now = time.time()
+        en["last_hook"] = now
+        if not en["armed"]:
+            if en["vk"] and _async_key_state(en["vk"]) & 0x8000:
+                return
+            en["armed"] = True
+        handled = en["backup_fired"] >= en["pressed_at"] > 0
+        if handled and (en["down"] or now - en["backup_fired"] < 0.3):
+            return
+        callback(e)
+    en["hooked"] = hooked
+    en["hook"] = keyboard.on_press_key(name, hooked, suppress=suppress)
+    if en["vk"]:
+        with _KW_LOCK:
+            _KW.append(en)
+            if _KW_THREAD[0] is None or not _KW_THREAD[0].is_alive():
+                _KW_THREAD[0] = threading.Thread(target=_kw_loop, daemon=True)
+                _KW_THREAD[0].start()
+    return en
+
+
+def remove_key(handle):
+    try:
+        keyboard.unhook(handle["hook"])
+    except Exception:
+        pass
+    with _KW_LOCK:
+        _KW[:] = [x for x in _KW if x is not handle]
+
+
+def clear_keys():
+    try:
+        keyboard.unhook_all()
+    except Exception:
+        pass
+    with _KW_LOCK:
+        _KW.clear()
+
+
+def wait_any_key(stop, callback, skip_modifiers=True):
+    from types import SimpleNamespace
+    skip = {0x10, 0x11, 0x12, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0x5B, 0x5C} if skip_modifiers else set()
+    codes = [vk for vk in range(0x08, 0xFF) if vk not in skip and vk not in (0x01, 0x02, 0x04, 0x05, 0x06)]
+
+    def run():
+        u = ctypes.windll.user32
+        was = {vk: bool(_async_key_state(vk) & 0x8000) for vk in codes}
+        while not stop.is_set():
+            time.sleep(0.02)
+            for vk in codes:
+                down = bool(_async_key_state(vk) & 0x8000)
+                if down and not was[vk]:
+                    sc = u.MapVirtualKeyW(vk, 0)
+                    buf = ctypes.create_unicode_buffer(32)
+                    u.GetKeyNameTextW(sc << 16, buf, 32)
+                    name = (buf.value or f"key {vk}").lower()
+                    if not stop.is_set():
+                        callback(SimpleNamespace(name="esc" if vk == 0x1B else name, scan_code=sc,
+                                                 event_type="down", backup=True))
+                    return
+                was[vk] = down
+    threading.Thread(target=run, daemon=True).start()
+
+
+_MODIFIERS = ((0x11, "ctrl"), (0x10, "shift"), (0x12, "alt"))
+_MODIFIER_VKS = {0x10, 0x11, 0x12, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0x5B, 0x5C}
+
+
+def _recorded_name(vk):
+    for name, code in _VK_NAMES.items():
+        if code == vk:
+            return name
+    u = ctypes.windll.user32
+    sc = u.MapVirtualKeyW(vk, 0)
+    if sc in _NAME_BY_SC:
+        return _NAME_BY_SC[sc]
+    buf = ctypes.create_unicode_buffer(32)
+    u.GetKeyNameTextW(sc << 16, buf, 32)
+    return (buf.value or f"key {vk}").lower()
+
+
+def record_keys(done, timeout=10.0):
+    codes = [vk for vk in range(0x08, 0xFF) if vk not in _MODIFIER_VKS]
+
+    def run():
+        was = {vk: bool(_async_key_state(vk) & 0x8000) for vk in codes}
+        held = []
+        end = time.time() + timeout
+        while time.time() < end:
+            time.sleep(0.01)
+            now = [name for vk, name in _MODIFIERS if _async_key_state(vk) & 0x8000]
+            held += [name for name in now if name not in held]
+            for vk in codes:
+                down = bool(_async_key_state(vk) & 0x8000)
+                if down and not was[vk]:
+                    done(None if vk == 0x1B and not now else "+".join(now + [_recorded_name(vk)]))
+                    return
+                was[vk] = down
+            if held and not now:
+                done("+".join(held))
+                return
+        done(None)
+    threading.Thread(target=run, daemon=True).start()
+
+
 def position_name(ev):
-    """The QWERTY name of the key a keyboard-hook event came from, by its position (not the printed letter)."""
     sc = getattr(ev, "scan_code", None)
     if sc in _NAME_BY_SC and not getattr(ev, "is_keypad", False):
         return _NAME_BY_SC[sc]
@@ -164,7 +376,6 @@ SOUND_TYPES = (".mp3", ".wav", ".wma", ".m4a", ".mp4", ".aac")
 
 
 def custom_sound(kind):
-    """The sound file the user picked for this kind ('event' / 'done'), or None (= Windows sound)."""
     try:
         from settings import SpatialSettings, get_base_path
         rel = (SpatialSettings().get("sound_files") or {}).get(kind)
@@ -183,13 +394,11 @@ def _mci(cmd):
 
 
 def play_sound(kind="event"):
-    """Play the user's own sound file for this kind (mp3 / wav / m4a / mp4...) or, if none is set, a Windows
-    notification sound. Never blocks (done = macro finished, event = alert posted)."""
     path = custom_sound(kind)
     if path and IS_WINDOWS:
         try:
             alias = f"vv_{kind}"
-            _mci(f"close {alias}")                       # stop the previous one of the same kind
+            _mci(f"close {alias}")
             err, _ = _mci(f'open "{path}" type mpegvideo alias {alias}')
             if err == 0:
                 _mci(f"play {alias}")
@@ -201,7 +410,7 @@ def play_sound(kind="event"):
         winsound.PlaySound(SOUNDS.get(kind, "SystemDefault"), winsound.SND_ALIAS | winsound.SND_ASYNC)
     except Exception:
         try:
-            print("\a", end="", flush=True)              # not Windows: terminal bell
+            print("\a", end="", flush=True)
         except Exception:
             pass
 
@@ -237,8 +446,6 @@ class RobloxInputDriver:
 
     @staticmethod
     def click_delay():
-        """Seconds between the mouse arriving and the click (Settings: Click delay). Roblox needs a moment
-        to see the mouse arrive - an instant move + click lands on the old spot."""
         try:
             from settings import SpatialSettings
             return max(0.0, float(SpatialSettings().get("click_delay", 1.0)))
@@ -247,10 +454,16 @@ class RobloxInputDriver:
 
     @classmethod
     def glide_click(cls, x, y, settle=None, button='left', duration=0.04, glide=0.25):
-        """Move -> wait -> click: glide to (x, y), nudge so the game registers it, wait `settle`
-        (default: the Click delay setting), then click."""
         x, y = int(x), int(y)
         settle = cls.click_delay() if settle is None else max(0.0, float(settle))
+        with cls._lock:
+            cls.glide_to(x, y, glide)
+            time.sleep(settle)
+            cls.click_at(x, y, duration, button)
+
+    @classmethod
+    def glide_to(cls, x, y, glide=0.12):
+        x, y = int(x), int(y)
         with cls._lock:
             sx, sy = cls._mouse.position
             steps = max(6, int(glide / 0.012))
@@ -262,8 +475,6 @@ class RobloxInputDriver:
             for dx in (2, -2, 0):
                 cls.move_to(x + dx, y)
                 time.sleep(0.03)
-            time.sleep(settle)
-            cls.click_at(x, y, duration, button)
 
     @classmethod
     def click_at(cls, x, y, duration=0.03, button='left'):
@@ -304,26 +515,155 @@ OCR_HELP = ("Text reading (OCR) couldn't start. Install the Microsoft Visual C++
 
 
 class _SmallTextReader:
-    """The text reader, but a very small picture (a hotbar label, one short word) is enlarged to 120 px first:
-    tiny text read better that way (tested: 62 of 66 game lines right, none empty - the old setup 55, 7 empty).
-    Text boxes come back in the picture's own coordinates."""
     MIN_SIDE = 120
 
     def __init__(self, engine):
         self.engine = engine
 
+    _lock = threading.Lock()
+
     def __call__(self, img, *args, **kwargs):
         if isinstance(img, np.ndarray) and img.ndim >= 2 and 0 < min(img.shape[:2]) < self.MIN_SIDE:
             f = self.MIN_SIDE / min(img.shape[:2])
-            res, elapse = self.engine(cv2.resize(img, None, fx=f, fy=f, interpolation=cv2.INTER_CUBIC), *args, **kwargs)
+            big = cv2.resize(img, None, fx=f, fy=f, interpolation=cv2.INTER_CUBIC)
+            with self._lock:
+                res, elapse = self.engine(big, *args, **kwargs)
             if res:
                 res = [[[[p[0] / f, p[1] / f] for p in r[0]]] + list(r[1:]) for r in res]
             return res, elapse
-        return self.engine(img, *args, **kwargs)
+        with self._lock:
+            return self.engine(img, *args, **kwargs)
+
+
+CAPTURE = {"mode": "screen"}
+
+
+def _not_blank(img):
+    return img is not None and img.size > 0 and int(img[::7, ::7, :3].max()) > 0
+
+
+class _BitmapInfo(ctypes.Structure):
+    _fields_ = [("biSize", ctypes.c_uint32), ("biWidth", ctypes.c_int32), ("biHeight", ctypes.c_int32),
+                ("biPlanes", ctypes.c_uint16), ("biBitCount", ctypes.c_uint16), ("biCompression", ctypes.c_uint32),
+                ("biSizeImage", ctypes.c_uint32), ("biXPelsPerMeter", ctypes.c_int32),
+                ("biYPelsPerMeter", ctypes.c_int32), ("biClrUsed", ctypes.c_uint32), ("biClrImportant", ctypes.c_uint32),
+                ("bmiColors", ctypes.c_uint32 * 3)]
+
+
+def _gdi():
+    if getattr(_gdi, "f", None) is None:
+        from ctypes import wintypes as w
+        u, g = ctypes.WinDLL("user32"), ctypes.WinDLL("gdi32")
+        sig = ((u.GetWindowRect, w.BOOL, [w.HWND, ctypes.POINTER(w.RECT)]),
+               (u.GetWindowDC, w.HDC, [w.HWND]), (u.ReleaseDC, ctypes.c_int, [w.HWND, w.HDC]),
+               (u.PrintWindow, w.BOOL, [w.HWND, w.HDC, w.UINT]), (u.IsIconic, w.BOOL, [w.HWND]),
+               (g.CreateCompatibleDC, w.HDC, [w.HDC]),
+               (g.CreateCompatibleBitmap, w.HBITMAP, [w.HDC, ctypes.c_int, ctypes.c_int]),
+               (g.SelectObject, w.HGDIOBJ, [w.HDC, w.HGDIOBJ]), (g.DeleteObject, w.BOOL, [w.HGDIOBJ]),
+               (g.DeleteDC, w.BOOL, [w.HDC]),
+               (g.GetDIBits, ctypes.c_int, [w.HDC, w.HBITMAP, w.UINT, w.UINT, ctypes.c_void_p, ctypes.c_void_p,
+                                            w.UINT]))
+        for fn, res, args in sig:
+            fn.restype, fn.argtypes = res, args
+        _gdi.f = (u, g, w)
+    return _gdi.f
+
+
+def window_shot(hwnd):
+    try:
+        u, g, w = _gdi()
+        r = w.RECT()
+        if not u.GetWindowRect(hwnd, ctypes.byref(r)) or u.IsIconic(hwnd):
+            return None, None
+        wd, ht = r.right - r.left, r.bottom - r.top
+        if wd <= 0 or ht <= 0:
+            return None, None
+        hdc = u.GetWindowDC(hwnd)
+        mem = g.CreateCompatibleDC(hdc)
+        bmp = g.CreateCompatibleBitmap(hdc, wd, ht)
+        old = g.SelectObject(mem, bmp)
+        try:
+            u.PrintWindow(hwnd, mem, 2)
+            bmi = _BitmapInfo(biSize=40, biWidth=wd, biHeight=-ht, biPlanes=1, biBitCount=32, biCompression=0)
+            buf = ctypes.create_string_buffer(wd * ht * 4)
+            if not g.GetDIBits(mem, bmp, 0, ht, buf, ctypes.byref(bmi), 0):
+                return None, None
+            img = np.frombuffer(buf, np.uint8).reshape(ht, wd, 4).copy()
+            img[:, :, 3] = 255
+            return img, (r.left, r.top)
+        finally:
+            g.SelectObject(mem, old)
+            g.DeleteObject(bmp)
+            g.DeleteDC(mem)
+            u.ReleaseDC(hwnd, hdc)
+    except Exception as e:
+        print(f"Window picture: {e}")
+        return None, None
+
+
+_RW_CACHE = {"t": 0.0, "list": []}
+
+
+def _roblox_rects():
+    now = time.time()
+    if now - _RW_CACHE["t"] > 1.0:
+        out = []
+        try:
+            u, g, w = _gdi()
+            for h, _ in roblox_windows():
+                r = w.RECT()
+                if u.GetWindowRect(h, ctypes.byref(r)):
+                    out.append((h, (r.left, r.top, r.right, r.bottom)))
+        except Exception:
+            pass
+        _RW_CACHE["t"], _RW_CACHE["list"] = now, out
+    return _RW_CACHE["list"]
+
+
+def window_region(l, t, r, b):
+    best, hit = 0, None
+    for h, (wl, wt, wr, wb) in _roblox_rects():
+        area = max(0, min(r, wr) - max(l, wl)) * max(0, min(b, wb) - max(t, wt))
+        if area > best:
+            best, hit = area, h
+    if hit is None:
+        return None
+    img, at = window_shot(hit)
+    if img is None:
+        return None
+    out = np.zeros((max(1, b - t), max(1, r - l), 4), np.uint8)
+    out[:, :, 3] = 255
+    x1, y1 = max(l, at[0]), max(t, at[1])
+    x2, y2 = min(r, at[0] + img.shape[1]), min(b, at[1] + img.shape[0])
+    if x2 > x1 and y2 > y1:
+        out[y1 - t:y2 - t, x1 - l:x2 - l] = img[y1 - at[1]:y2 - at[1], x1 - at[0]:x2 - at[0]]
+    return out
+
+
+def backup_screen_image(size):
+    from PIL import Image
+    canvas, any_ = Image.new("RGB", size, (0, 0, 0)), False
+    for h, _ in _roblox_rects():
+        img, at = window_shot(h)
+        if img is not None:
+            canvas.paste(Image.fromarray(img[:, :, 2::-1].copy()), at)
+            any_ = True
+    return canvas if any_ else None
+
+
+class _ThreadGrabber:
+    def __init__(self):
+        self.sct = (getattr(mss, "MSS", None) or mss.mss)()
+
+    def __del__(self):
+        try:
+            self.sct.close()
+        except Exception:
+            pass
 
 
 class SpatialUtils:
-    ocr_error = ""          # set when OCR can't start, so pages can tell the user why nothing is read
+    ocr_error = ""
     def __init__(self):
         self._thread_local = threading.local()
         self._key_lock = threading.RLock()
@@ -331,12 +671,37 @@ class SpatialUtils:
 
     @property
     def sct(self):
-        if not hasattr(self._thread_local, 'sct'):
-            self._thread_local.sct = (getattr(mss, "MSS", None) or mss.mss)()   # mss 10+ renamed it
-        return self._thread_local.sct
+        g = getattr(self._thread_local, "grabber", None)
+        if g is None:
+            g = self._thread_local.grabber = _ThreadGrabber()
+        return g.sct
 
-    # ONE text reader for the whole app: loading the model takes seconds, and every page / macro used to
-    # load its own copy (the window froze each time). It's loaded once, in the background at startup.
+    def _grab(self, monitor):
+        l, t = int(monitor["left"]), int(monitor["top"])
+        r, b = l + int(monitor["width"]), t + int(monitor["height"])
+        if CAPTURE["mode"] == "window":
+            img = window_region(l, t, r, b)
+            if _not_blank(img):
+                return img
+        try:
+            img, err = np.array(self.sct.grab(monitor)), None
+        except Exception as e:
+            img, err = None, e
+        if _not_blank(img):
+            return img
+        alt = window_region(l, t, r, b)
+        if _not_blank(alt):
+            if CAPTURE["mode"] != "window":
+                CAPTURE["mode"] = "window"
+                print("Screenshots: the normal screen copy came back black - using the backup "
+                      "(Windows draws the Roblox window) from now on.")
+            return alt
+        if img is None:
+            if alt is not None:
+                return alt
+            raise err
+        return img
+
     _shared_ocr = None
     _ocr_lock = threading.Lock()
 
@@ -347,14 +712,10 @@ class SpatialUtils:
                 try:
                     from rapidocr_onnxruntime import RapidOCR
                     try:
-                        # The default blows every picture up until its SHORT side is 736 px: a 35 px tall
-                        # button became ~736 x 4900 and took 1.3 s (and read worse). 'Only shrink above
-                        # 2000 px' keeps big reads the same and makes one-line reads ~45x faster.
-                        # Game text is never rotated, so the rotation check is skipped too.
                         cls._shared_ocr = _SmallTextReader(RapidOCR(det_model_path=None, det_limit_type="max",
                                                                     det_limit_side_len=2000, use_angle_cls=False))
-                    except Exception:                    # another RapidOCR version: its own defaults
-                        cls._shared_ocr = RapidOCR()
+                    except Exception:
+                        cls._shared_ocr = _SmallTextReader(RapidOCR())
                     print("RapidOCR initialized")
                 except Exception as e:
                     print(f"OCR (RapidOCR) Initialization error: {e}")
@@ -366,8 +727,6 @@ class SpatialUtils:
 
     @classmethod
     def ocr_works(cls):
-        """Starting isn't enough: really read a test word once ('Clover Training' drawn like a dialogue
-        button). True / False; the result is kept. ocr_error says why when it fails."""
         if cls._ocr_tested is not None:
             return cls._ocr_tested
         reader = cls.load_ocr()
@@ -388,8 +747,6 @@ class SpatialUtils:
 
     @classmethod
     def ocr_read_screen(cls, img):
-        """Prove text reading works on a real screenshot: the lines with real words (4+ letters, not just
-        numbers like '10733'). 3+ such lines = it works (kept, like ocr_works). Returns (ok, worded, all)."""
         import re
         reader = cls.load_ocr()
         if not reader or img is None or not img.size:
@@ -406,7 +763,6 @@ class SpatialUtils:
 
     @classmethod
     def preload_ocr(cls):
-        """Start loading the text reader in the background (called when the app opens)."""
         threading.Thread(target=cls.ocr_works, daemon=True).start()
 
     def _init_ocr(self):
@@ -471,13 +827,16 @@ class SpatialUtils:
             except Exception:
                 monitor = self.sct.monitors[1]
         
-        screenshot = self.sct.grab(monitor)
-        img = np.array(screenshot)
+        img = self._grab(monitor)
         
         return cv2.cvtColor(img, cv2.COLOR_BGRA2RGB)
 
     def capture_screen_bgr(self, region=None):
         if region:
+            from overlay import take_frozen
+            frozen = take_frozen(region)
+            if frozen is not None:
+                return frozen
             monitor = {
                 "top": int(region[1]), 
                 "left": int(region[0]), 
@@ -501,8 +860,7 @@ class SpatialUtils:
             except Exception:
                 monitor = self.sct.monitors[1]
         
-        screenshot = self.sct.grab(monitor)
-        img = np.array(screenshot)
+        img = self._grab(monitor)
         
         return cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
 
@@ -583,17 +941,12 @@ class SpatialUtils:
         RobloxInputDriver.move_to(x, y)
 
     def send_key(self, key, duration=0.05):
-        """Send a keyboard key press with optional duration, thread‑safe."""
         with self._key_lock:
-            press_key(key, True)                         # by position: same key on every layout / language
+            press_key(key, True)
             time.sleep(duration)
             press_key(key, False)
 
     def find_color_hsv_x(self, region, target_rgb, hue_tol=10, sat_min=50, val_min=50, min_area=0):
-        """
-        Brightness-robust detection using HSV. 
-        Focuses on Hue (color) while being flexible with Value (brightness).
-        """
         img_rgb = self.capture_screen(region)
         img_hsv = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2HSV)
         
@@ -628,25 +981,21 @@ class SpatialUtils:
                 return tuple(int(target_color[i:i+2], 16) for i in (0, 2, 4))
         return target_color
 
-# ---------- Roblox started "as administrator" ----------
-# Windows blocks a normal program from sending keys / clicks to a program running as administrator,
-# so the macro would look like it runs but nothing happens in the game.
 def _process_elevated(pid):
-    """True / False for another process, None if it can't be told. Access denied = it's elevated."""
     import ctypes
     from ctypes import wintypes
     k32, adv = ctypes.windll.kernel32, ctypes.windll.advapi32
-    h = k32.OpenProcess(0x1000, False, int(pid))          # PROCESS_QUERY_LIMITED_INFORMATION
+    h = k32.OpenProcess(0x1000, False, int(pid))
     if not h:
         return None
     try:
         tok = wintypes.HANDLE()
-        if not adv.OpenProcessToken(h, 0x0008, ctypes.byref(tok)):   # TOKEN_QUERY
-            return True                                   # we may not look inside it: it runs as admin
+        if not adv.OpenProcessToken(h, 0x0008, ctypes.byref(tok)):
+            return True
         try:
             val, size = wintypes.DWORD(), wintypes.DWORD()
             if adv.GetTokenInformation(tok, 20, ctypes.byref(val), ctypes.sizeof(val), ctypes.byref(size)):
-                return bool(val.value)                    # TokenElevation
+                return bool(val.value)
             return None
         finally:
             k32.CloseHandle(tok)
@@ -655,11 +1004,10 @@ def _process_elevated(pid):
 
 
 def roblox_admin_problem():
-    """A message when Roblox runs as administrator but the macro doesn't (keys won't reach it), else ''."""
     try:
         import ctypes
         if ctypes.windll.shell32.IsUserAnAdmin():
-            return ""                                     # the macro is admin too: keys get through
+            return ""
         import pywinctl
         for w in pywinctl.getAllWindows():
             if is_roblox_title(w.title):
@@ -674,37 +1022,43 @@ def roblox_admin_problem():
         return ""
 
 
-# ---------- Roblox windows: which one is under a point / bringing one to the front ----------
 def is_roblox_title(title):
-    """The game window itself is called just 'Roblox' (not 'Roblox Account Manager' and the like)."""
     return (title or "").strip() == "Roblox"
 
 
 def _top_window_at(x, y):
-    """The top-level window under screen point (x, y) as (hwnd, title)."""
     import ctypes
     from ctypes import wintypes
     u = ctypes.windll.user32
     h = u.WindowFromPoint(wintypes.POINT(int(x), int(y)))
     if not h:
         return 0, ""
-    h = u.GetAncestor(h, 2) or h                         # GA_ROOT
+    h = u.GetAncestor(h, 2) or h
     buf = ctypes.create_unicode_buffer(256)
     u.GetWindowTextW(h, buf, 256)
     return h, buf.value
 
 
 def roblox_window_at(x, y):
-    """hwnd of the Roblox window under (x, y), or 0 when something else (e.g. the macro's own window) is there."""
     try:
         h, title = _top_window_at(x, y)
         return h if is_roblox_title(title) else 0
     except Exception:
-        return -1                                         # can't tell: don't block
+        return -1
+
+
+def window_center(hwnd):
+    import ctypes
+    from ctypes import wintypes
+    u = ctypes.windll.user32
+    box, corner = wintypes.RECT(), wintypes.POINT(0, 0)
+    if not hwnd or not u.GetClientRect(wintypes.HWND(hwnd), ctypes.byref(box)) or box.right < 2 or box.bottom < 2 \
+            or not u.ClientToScreen(wintypes.HWND(hwnd), ctypes.byref(corner)):
+        return None
+    return corner.x + box.right // 2, corner.y + box.bottom // 2
 
 
 def roblox_windows():
-    """[(hwnd, title)] of the open Roblox windows."""
     try:
         import pywinctl
         out = []
@@ -718,8 +1072,29 @@ def roblox_windows():
         return []
 
 
+def last_roblox():
+    import ctypes
+    from ctypes import wintypes
+    wins = {h for h, _ in roblox_windows()}
+    stack = []
+    walk = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)(lambda h, _: stack.append(h) or True)
+    ctypes.windll.user32.EnumWindows(walk, 0)
+    return next((h for h in stack if h in wins), 0)
+
+
+def go_to_roblox(log=print):
+    hwnd = last_roblox()
+    if not hwnd or not focus_roblox(hwnd):
+        log("Couldn't switch to Roblox - is it open?")
+        return 0
+    n = len(roblox_windows())
+    if n > 1:
+        log(f"{n} Roblox windows are open - using the one you clicked last.")
+    time.sleep(0.5)
+    return hwnd
+
+
 def focus_roblox(prefer=0):
-    """Bring a Roblox window to the front (the preferred one if it's still open). True when one is in front."""
     import ctypes
     u = ctypes.windll.user32
     wins = [h for h, _ in roblox_windows()]
@@ -728,7 +1103,7 @@ def focus_roblox(prefer=0):
     fg = u.GetForegroundWindow()
     if fg in wins and (not prefer or fg == prefer):
         return True
-    target = prefer if prefer in wins else wins[0]
+    target = prefer if prefer in wins else last_roblox() or wins[0]
     try:
         from logic_events import EventWatcher
         return bool(EventWatcher.focus_window(target, timeout=1.0))
@@ -736,10 +1111,10 @@ def focus_roblox(prefer=0):
         return False
 
 
-def on_hotkey(key, callback, debounce=0.4):
-    """Run callback when `key` is pressed - also while other keys are held. (keyboard.add_hotkey('f9') only fires
-    when F9 is the ONLY key down: F9 while still holding W did nothing.) 'ctrl+p' style: the last key, with its
-    modifiers checked. One call per press (held-key repeats ignored). Raises like keyboard does for unknown keys."""
+HOTKEYS_ROBLOX_ONLY = False
+
+
+def on_hotkey(key, callback, debounce=0.4, always=None):
     key = str(key or "").strip().lower()
     if not key:
         return None
@@ -747,16 +1122,70 @@ def on_hotkey(key, callback, debounce=0.4):
     last = [0.0]
 
     def fire(_e):
-        if any(not keyboard.is_pressed(m) for m in mods):
+        if any(not key_down(m) for m in mods):
+            return
+        if HOTKEYS_ROBLOX_ONLY and not foreground_roblox() and not (always and always()):
             return
         if time.time() - last[0] > debounce:
             last[0] = time.time()
             callback()
-    return keyboard.on_press_key(main, fire)
+    return on_key(main, fire)
 
 
 def foreground_roblox():
-    """hwnd of the Roblox window in front, or 0."""
     import ctypes
     fg = ctypes.windll.user32.GetForegroundWindow()
     return fg if fg in [h for h, _ in roblox_windows()] else 0
+
+
+def check_capture():
+    _RW_CACHE["t"] = 0.0
+    rects = _roblox_rects()
+    out = {"roblox": bool(rects), "screen_ok": False, "backup_ok": False, "mode": CAPTURE["mode"]}
+    if not rects:
+        return out
+    _, (l, t, r, b) = rects[0]
+    try:
+        with (getattr(mss, "MSS", None) or mss.mss)() as sct:
+            out["screen_ok"] = _not_blank(np.array(sct.grab({"left": l, "top": t, "width": r - l, "height": b - t})))
+    except Exception:
+        pass
+    out["backup_ok"] = _not_blank(window_region(l, t, r, b))
+    if not out["screen_ok"] and out["backup_ok"]:
+        CAPTURE["mode"] = out["mode"] = "window"
+    return out
+
+
+def check_keys(timeout=6.0):
+    got = {"hook": False, "backup": False}
+    first = []
+
+    def hooked(ev):
+        if ev.event_type == "down":
+            got["hook"] = True
+            first.append(time.time())
+    try:
+        h = keyboard.hook(hooked)
+    except Exception:
+        h = None
+    codes = [vk for vk in range(0x08, 0xFF) if vk not in (0x01, 0x02, 0x04, 0x05, 0x06)]
+    was = {vk: bool(_async_key_state(vk) & 0x8000) for vk in codes}
+    end = time.time() + timeout
+    try:
+        while time.time() < end:
+            time.sleep(0.02)
+            for vk in codes:
+                down = bool(_async_key_state(vk) & 0x8000)
+                if down and not was[vk]:
+                    got["backup"] = True
+                    first.append(time.time())
+                was[vk] = down
+            if first and time.time() - first[0] > 0.5:
+                break
+    finally:
+        if h is not None:
+            try:
+                keyboard.unhook(h)
+            except Exception:
+                pass
+    return {**got, "pressed": bool(first), "fired": KEY_BACKUP["fired"]}

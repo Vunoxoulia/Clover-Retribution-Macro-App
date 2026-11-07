@@ -14,27 +14,20 @@ DEFAULT_MINE_WAIT = 1.75
 
 
 class RouteNav(BaseLogic):
-    """Shared recorded-route navigation (used by the Mining and Library macros).
-
-    Record a walk once (Ctrl+P to start/stop), tapping E at each target. Playback
-    replays your keys, and with a locked top-down camera
-    (USE_ALIGNMENT) also lines up on snapshots at checkpoints and targets.
-    Routes live in <ROUTES_DIRNAME>/<name>/."""
 
     ROUTES_DIRNAME = "routes"
     ACTIVE_ROUTE_KEY = "active_route"
-    USE_ALIGNMENT = True     # False for free 3rd-person cameras: no snapshot walking
-    ROUTE_TARGET = "ore"     # what an E tap marks, for the recording messages ("wisp" in the Library)
+    USE_ALIGNMENT = True
+    ROUTE_TARGET = "ore"
 
     RECORD_KEYS = {"w", "a", "s", "d", "space", "shift", "left shift"}
-    E_MARKS_TARGET = True    # Mining: every E tap marks an ore. Library: E is just a recorded key (one walk)
-    CHECKPOINT_IDLE = 0.5   # stand still this long while recording -> checkpoint
-    MIN_TAP = 0.05          # playback: a key is held at least this long, or Roblox can miss a quick tap
+    E_MARKS_TARGET = True
+    CHECKPOINT_IDLE = 0.5
+    MIN_TAP = 0.05
 
-    # Snapshot matching (fractions of the window): skip top bar, HUD and minimap.
     SNAP_TEMPLATE = (0.29, 0.15, 0.71, 0.70)
     SNAP_SEARCH = (0.0, 0.06, 0.88, 0.83)
-    SNAP_MIN_SCORE = 0.52   # real matches score 0.58+; look-alike spots ~0.44
+    SNAP_MIN_SCORE = 0.52
 
     def __init__(self, app):
         super().__init__(app)
@@ -45,21 +38,17 @@ class RouteNav(BaseLogic):
         self._new_lap()
 
 
-    # ================= Routes (multiple recordings) =================
     def _routes_dir(self):
         from settings import get_base_path
         d = os.path.join(get_base_path(), self.ROUTES_DIRNAME)
         os.makedirs(d, exist_ok=True)
         return d
 
-    # A route that ships with the app (Library: VunVun's route). Always listed first, used by default,
-    # and locked: it can't be recorded over, renamed, deleted or edited. Make your own with New.
-    BUILTIN_ROUTE = None          # display name
-    BUILTIN_DIR = None            # folder inside the app (tracked in git, not user data)
-    EXTRA_BUILTINS = ()           # more built-in routes: ((name, folder), ...)
+    BUILTIN_ROUTE = None
+    BUILTIN_DIR = None
+    EXTRA_BUILTINS = ()
 
     def _builtins(self):
-        """{name: folder} of the built-in routes that are really there, in order."""
         from settings import get_app_path
         out = {}
         pairs = ([(self.BUILTIN_ROUTE, self.BUILTIN_DIR)] if self.BUILTIN_ROUTE else []) + list(self.EXTRA_BUILTINS)
@@ -106,7 +95,6 @@ class RouteNav(BaseLogic):
         return name[:40]
 
     def name_taken(self, name):
-        """A route with this name exists already - upper / lower case ignored, like Windows folders."""
         low = name.strip().lower()
         return any(n.lower() == low for n in list(self.list_routes()) + list(self._builtins()))
 
@@ -119,7 +107,6 @@ class RouteNav(BaseLogic):
         return name
 
     def free_route_name(self, base="My Route"):
-        """'My Route 1', 'My Route 2', ... - the first name not taken yet."""
         n = 1
         while self.name_taken(f"{base} {n}"):
             n += 1
@@ -144,9 +131,7 @@ class RouteNav(BaseLogic):
         if self.app.settings.get(self.ACTIVE_ROUTE_KEY) == name:
             self.set_active_route(self.active_route())
 
-    # ---------- sharing a route (one .zip: route.json + its snapshots) ----------
     def export_route(self, path, name=None):
-        """Save the route (built-in ones too) as one file someone else can Import."""
         import zipfile
         name = name or self.active_route()
         d = self.route_dir(name)
@@ -160,8 +145,6 @@ class RouteNav(BaseLogic):
         return True
 
     def import_route(self, path):
-        """Add a shared route as a NEW route (never overwrites yours; 'Cave' -> 'Cave 2' if taken) and select it.
-        Returns its name, or raises ValueError with what's wrong."""
         import zipfile
         try:
             z = zipfile.ZipFile(path)
@@ -184,39 +167,87 @@ class RouteNav(BaseLogic):
             d = os.path.join(self._routes_dir(), name)
             os.makedirs(d)
             for f in names:
-                b = os.path.basename(f)                  # names only - never paths from the file
+                b = os.path.basename(f)
                 if b == f and (b == "route.json" or b.endswith(".png")):
                     with z.open(f) as src, open(os.path.join(d, b), "wb") as out:
                         shutil.copyfileobj(src, out)
         self.set_active_route(name)
         return name
 
+    @staticmethod
+    def _read_route_file(path):
+        with open(path, encoding="utf-8") as f:
+            route = json.load(f)
+        if not (isinstance(route, dict) and isinstance(route.get("segments"), list)
+                and isinstance(route.get("return"), dict)):
+            raise ValueError("not a route file")
+        return route
+
+    def _route_note(self, key, msg):
+        seen = self.__dict__.setdefault("_route_notes", set())
+        if key not in seen:
+            seen.add(key)
+            self.app.log(msg)
+
     def load_route(self, name=None):
-        d = self.route_dir(name)
+        label = name or self.active_route()
+        path = os.path.join(self.route_dir(name), "route.json")
+        bak = path + ".bak"
+        own = not self.is_locked(name)
+        if not os.path.exists(path):
+            if own and os.path.exists(bak):
+                try:
+                    route = self._read_route_file(bak)
+                    shutil.copy2(bak, path)
+                    self._route_note(("restored", path), f"Route '{label}': its file was missing - restored the backup.")
+                    return route
+                except Exception:
+                    pass
+            return None
         try:
-            with open(os.path.join(d, "route.json"), encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
+            return self._read_route_file(path)
+        except Exception as e:
+            if not own:
+                self._route_note(("broken", path), f"Built-in route '{label}' couldn't be read ({e}) - "
+                                                   f"download the macro again.")
+                return None
+            try:
+                os.replace(path, path + ".broken")
+            except OSError:
+                pass
+            if os.path.exists(bak):
+                try:
+                    route = self._read_route_file(bak)
+                    shutil.copy2(bak, path)
+                    self._route_note(("restored", path), f"Route '{label}' was damaged - using its backup "
+                                                         f"(the damaged file is kept as route.json.broken).")
+                    return route
+                except Exception:
+                    pass
+            self._route_note(("broken", path), f"Route '{label}' is damaged and has no usable backup - record it "
+                                               f"again (the damaged file is kept as route.json.broken).")
             return None
 
     def save_route(self, route, name=None):
         if self.is_locked(name):
-            return                                       # the built-in route is never changed
+            return
         path = os.path.join(self.route_dir(name), "route.json")
         tmp = path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:     # written in full first: a crash can't leave half a file
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(route, f, indent=1)
+        if os.path.exists(path):
+            try:
+                shutil.copy2(path, path + ".bak")
+            except OSError:
+                pass
         os.replace(tmp, path)
+        self.__dict__.get("_route_notes", set()).clear()
 
 
-    # ================= Screen helpers =================
     def _screen(self):
         return self.utils.capture_screen_bgr(self.get_roblox_window_region())
 
     def game_view_clear(self):
-        """True if Roblox is what's actually on screen in the middle of its window.
-        Any window on top (this macro's log/settings, a browser...) gets into our
-        screenshots and breaks snapshot matching, so we check before trusting them."""
         try:
             import ctypes
             from ctypes import wintypes
@@ -231,7 +262,7 @@ class RouteNav(BaseLogic):
                     return False
             return True
         except Exception:
-            return True  # non-Windows / API unavailable: don't block
+            return True
 
     def wait_for_clear_view(self, alive=None, timeout=15.0):
         alive = alive or (lambda: self.running)
@@ -256,15 +287,10 @@ class RouteNav(BaseLogic):
         self.app.log(f"   !! {os.path.basename(path)} not saved: game was covered")
         return False
 
-    # ================= Walking =================
     def _ok_pause(self, held, alive):
-        """An OK popup is being clicked (it freezes the character): let go of the held keys, wait
-        until it's handled, then press them again. Returns the seconds spent, so the walk can resume
-        exactly where it was instead of losing that time."""
         if not self.ok_busy.is_set():
             return 0.0
         t0 = time.perf_counter()
-        # the character was already frozen a moment before the pop up was seen: give that time back too
         since = getattr(self, "_popup_since", None)
         before = min(1.0, max(0.0, t0 - since)) if since else 0.0
         for k in held:
@@ -272,14 +298,13 @@ class RouteNav(BaseLogic):
         self.app.log(f"   Pop up: route paused (frozen ~{before:.1f} s before it was seen - walking that again)")
         while self.ok_busy.is_set() and alive():
             time.sleep(0.05)
-        time.sleep(0.3)                                  # let the game take control back
+        time.sleep(0.3)
         for k in held:
             press_key(k, True)
         return time.perf_counter() - t0 + before
 
     def hold_key(self, key, seconds, alive=None):
-        """Hold a key for `seconds` (an 'Ok' popup pauses the clock while it's being clicked)."""
-        alive = alive or (lambda: self.running)         # pressed by position: WASD on AZERTY / QWERTZ too
+        alive = alive or (lambda: self.running)
         if seconds <= 0:
             return alive()
         self.walking = True
@@ -295,21 +320,16 @@ class RouteNav(BaseLogic):
         return alive()
 
     def _wait_still(self, max_wait=0.5, alive=None):
-        """Short pause so the character stops sliding before a snapshot is compared."""
         alive = alive or (lambda: self.running)
         end = time.perf_counter() + min(max_wait, 0.5)
         while alive() and time.perf_counter() < end:
             time.sleep(0.02)
 
-    # ================= Line-up checks =================
     def route_checks(self):
-        """Line-ups on snapshots (start spot, checkpoints). Mining can turn them off."""
         return True
 
-    # ================= Snapshot alignment =================
     @staticmethod
     def _edges(img_bgr):
-        """Outline map (wall edges, floor borders); robust to lighting changes."""
         g = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
         g = cv2.resize(g, (g.shape[1] // 2, g.shape[0] // 2), interpolation=cv2.INTER_AREA)
         g = cv2.GaussianBlur(g, (3, 3), 0)
@@ -318,8 +338,6 @@ class RouteNav(BaseLogic):
 
     @classmethod
     def measure_offset(cls, snap_bgr, cur_bgr):
-        """Returns (score, dx, dy): how well the snapshot was recognised, and how far
-        (px) the scene is shifted from it. Scene shifted right => we're left of it."""
         h, w = snap_bgr.shape[:2]
         if cur_bgr.shape[:2] != (h, w):
             cur_bgr = cv2.resize(cur_bgr, (w, h))
@@ -334,9 +352,6 @@ class RouteNav(BaseLogic):
         return float(score), (loc[0] + sx0 - tx0) * 2, (loc[1] + sy0 - ty0) * 2
 
     def align_to(self, snap_bgr, label, alive=None, max_tries=14):
-        """Walk until the screen lines up with a saved snapshot.
-        Returns 'ok', 'lost' (snapshot not recognised) or 'unsettled'.
-        Self-calibrating: learns how many px one second of walking moves the scene."""
         alive = alive or (lambda: self.running)
         pps = float(self.app.settings.get("home_px_per_sec", 300.0))
         tol = int(self.app.settings.get("home_tolerance", 30))
@@ -353,12 +368,10 @@ class RouteNav(BaseLogic):
             if err <= tol:
                 self.app.settings.set("home_px_per_sec", round(pps, 1))
                 return "ok"
-            # "Close enough": within 2x tolerance and the last push didn't help
             if prev_err is not None and err <= tol * 2 and err >= prev_err - 4:
                 self.app.log(f"   {label}: close enough ({dx}, {dy}) px, accepting")
                 return "ok"
             prev_err = err
-            # Fix the bigger error first; aim a little short so we don't overshoot
             if abs(dx) >= abs(dy):
                 key, axis, before = ("d" if dx > 0 else "a"), 0, dx
             else:
@@ -369,12 +382,11 @@ class RouteNav(BaseLogic):
             self.hold_key(key, secs, alive=alive)
             self._wait_still(alive=alive)
             s2, dx2, dy2 = self.measure_offset(snap_bgr, self._screen())
-            moved = abs(before - (dx2, dy2)[axis])   # actual distance travelled, even on overshoot
+            moved = abs(before - (dx2, dy2)[axis])
             if s2 >= self.SNAP_MIN_SCORE and moved > 8:
                 pps = min(2000.0, max(60.0, 0.5 * pps + 0.5 * (moved / secs)))
         return "unsettled"
 
-    # ----- Home (the route's start spot) -----
     def _home_path(self):
         return os.path.join(self.route_dir(), "home.png")
 
@@ -387,7 +399,7 @@ class RouteNav(BaseLogic):
             return alive()
         if not self.has_home():
             return True
-        if not self.USE_ALIGNMENT:   # free camera: just check we're roughly at the start
+        if not self.USE_ALIGNMENT:
             score, _, _ = self.measure_offset(cv2.imread(self._home_path()), self._screen())
             if score < self.SNAP_MIN_SCORE:
                 self.app.log(f"   ! start spot not recognised (match {score:.2f}) - continuing anyway")
@@ -395,43 +407,59 @@ class RouteNav(BaseLogic):
         result = self.align_to(cv2.imread(self._home_path()), "home", alive)
         if result == "lost":
             self.app.log("   start spot not recognised - continuing anyway")
-        return alive()                                   # never stops the macro by itself
+        return alive()
 
-    # ================= Recording (Ctrl+P) =================
     _VK = {"space": 0x20, "shift": 0x10, "left shift": 0xA0, "right shift": 0xA1}
 
     @classmethod
     def _key_is_down(cls, name):
-        """Is this key physically held right now (asks Windows, not the keyboard hook)?"""
         vk = cls._VK.get(name)
-        if vk is None and key_scan_code(name):           # by position: AZERTY's physical W is recorded as 'w'
+        if vk is None and key_scan_code(name):
             try:
                 import ctypes
-                vk = ctypes.windll.user32.MapVirtualKeyW(key_scan_code(name), 1) or None   # MAPVK_VSC_TO_VK
+                vk = ctypes.windll.user32.MapVirtualKeyW(key_scan_code(name), 1) or None
             except Exception:
                 vk = None
         if vk is None:
-            return True                                  # unknown key: trust the hook
+            return True
         try:
             import ctypes
             return bool(ctypes.windll.user32.GetAsyncKeyState(vk) & 0x8000)
         except Exception:
             return True
+    def _record_key_backup(self, watch, seen, on_event, stop):
+        from types import SimpleNamespace
+        from utils import key_down
+        state = {k: key_down(k) for k in watch}
+        pending, said = [], False
+        while not stop.is_set() and not self._rec_stop:
+            time.sleep(0.01)
+            now = time.perf_counter()
+            for k in watch:
+                d = key_down(k)
+                if d != state[k]:
+                    state[k] = d
+                    pending.append((now, k, "down" if d else "up"))
+            while pending and now - pending[0][0] >= 0.12:
+                t0, k, kind = pending.pop(0)
+                if seen.get(k, 0.0) < t0 - 0.25:
+                    if not said:
+                        said = True
+                        self.app.log("   (the key hook missed a key - the backup key check is recording it)")
+                    on_event(SimpleNamespace(name=k, scan_code=key_scan_code(k) or 0, event_type=kind,
+                                             is_keypad=False, _t=t0))
+
     def is_recording(self):
         return self._rec_thread is not None and self._rec_thread.is_alive()
 
     def rec_key(self):
-        """The record key as shown to people ('F9', 'Ctrl+P'); set in the Hotkeys tab (default F9)."""
         k = (self.app.settings.get("hotkeys", {}) or {}).get("record") or "f9"
         return "+".join(p.upper() if len(p) <= 3 and p[:1] in "fF" and p[1:].isdigit() or len(p) == 1 else p.capitalize()
                         for p in k.split("+"))
 
-    def toggle_recording(self):
-        """Record key (default F9): start recording into the selected route, or finish the recording."""
+    def toggle_recording(self, from_ore=None):
         if self.is_recording():
             if not getattr(self, "_rec_live", False):
-                # pressed again while it's still starting (the 3 s 'click into Roblox' wait): stopping now
-                # would save an empty route over your old one
                 self.app.log(f"Recording is still starting - walk once it says RECORDING, then {self.rec_key()} "
                              "to finish.")
                 return
@@ -441,7 +469,6 @@ class RouteNav(BaseLogic):
             self.app.log("Stop the macro before recording.")
             return
         if self.is_locked() or not self.active_route():
-            # a built-in route can't be recorded over: record into a new route of your own instead
             old = self.active_route()
             new = self.create_route(self.free_route_name())
             if old:
@@ -450,11 +477,11 @@ class RouteNav(BaseLogic):
                 self.app.root.after(0, self.app.refresh_routes)
         self._rec_stop = False
         self._rec_live = False
+        self._rerecord_from = from_ore if from_ore and from_ore > 1 else None
         self._rec_thread = threading.Thread(target=self._record_safe, daemon=True)
         self._rec_thread.start()
 
     def _record_safe(self):
-        """The recording thread: an error is shown instead of the recording just vanishing."""
         try:
             self._record()
         except Exception as e:
@@ -479,19 +506,29 @@ class RouteNav(BaseLogic):
                 return
         old = self.load_route(name) or {}
         old_timers = [(s.get("mine_hold"), s.get("mine_wait")) for s in old.get("segments", [])]
-        # Snapshots go into a side folder; the old recording is only replaced once the new one is saved
+        from_ore = getattr(self, "_rerecord_from", None)
+        keep = list(old.get("segments", []))[:from_ore - 1] if from_ore else []
+        if from_ore and len(keep) < from_ore - 1:
+            self.app.log(f"!! The route has only {len(keep)} ore(s) - can't re-record from ore {from_ore}. "
+                         f"Nothing was changed.")
+            return
+        offset = len(keep)
         folder = os.path.join(home_dir, "_recording")
         shutil.rmtree(folder, ignore_errors=True)
         os.makedirs(folder, exist_ok=True)
-        self.save_snapshot(os.path.join(folder, "home.png"))
-        self._rec_stop = False                           # an early press during the start is forgotten
+        if not keep:
+            self.save_snapshot(os.path.join(folder, "home.png"))
+        self._rec_stop = False
         self._rec_live = True
 
         st = {"seg_start": time.perf_counter(), "last_mark": 0.0,
               "idle_since": time.perf_counter(), "idle_t": 0.0, "cp_taken": True}
         segments, events, checkpoints, held = [], [], [], set()
         lock = threading.Lock()
-        if self.ROUTE_TARGET == "ore":
+        if keep:
+            self.app.log(f"● RE-RECORDING '{name}' from ore {offset + 1} ({'ore 1 is' if offset == 1 else f'ores 1-{offset} are'} kept). Walk on from "
+                         f"here, TAP E at each ore, walk back to the start and press {self.rec_key()}.")
+        elif self.ROUTE_TARGET == "ore":
             self.app.log(f"● RECORDING '{name}'. Walk the route, TAP E at each ore (as many as you like), then walk "
                          f"back to the start and press {self.rec_key()}. Everything after the last E = the walk back.")
         else:
@@ -501,28 +538,27 @@ class RouteNav(BaseLogic):
             self.app.root.after(0, lambda: self.app.set_recording_ui(True))
 
         def close_segment(now):
-            for k in list(held):  # anything still held is released here
+            for k in list(held):
                 events.append([round(now - st["seg_start"], 3), k, "up"])
             dur = round(now - st["seg_start"], 3)
-            cps = [c for c in checkpoints if dur - c["t"] > 1.0]  # right before an ore = redundant
+            cps = [c for c in checkpoints if dur - c["t"] > 1.0]
             seg = {"events": list(events), "duration": dur, "checkpoints": cps}
             events.clear(); checkpoints.clear()
             st["seg_start"] = now
-            for k in held:  # still held: keep holding in the next segment
+            for k in held:
                 events.append([0.0, k, "down"])
             return seg
 
-        turns = self.turn_keys()                         # hotkey -> degrees (Umbral camera turns), else {}
+        turns = self.turn_keys()
 
         def on_event(ev):
             raw = (ev.name or "").lower()
-            name_ = position_name(ev)                    # by position: AZERTY's Z key (physical W) is 'w
-            now = time.perf_counter()
+            name_ = position_name(ev)
+            now = getattr(ev, "_t", None) or time.perf_counter()
             with lock:
                 if raw in turns:
                     name_ = raw
                 if name_ in turns:
-                    # a camera-turn hotkey: saved as an exact turn step (the hotkey turns the camera live too)
                     if ev.event_type == "down" and not st.get("turn_held_" + name_):
                         st["turn_held_" + name_] = True
                         events.append([round(now - st["seg_start"], 3), f"turn:{turns[name_]}", "turn"])
@@ -531,18 +567,17 @@ class RouteNav(BaseLogic):
                         st["turn_held_" + name_] = False
                     return
                 if name_ == "e" and not self.E_MARKS_TARGET:
-                    pass                                 # recorded like any other key below
+                    pass
                 elif name_ == "e" and ev.event_type == "up":
                     st["e_held"] = False
                     return
                 elif name_ == "e" and ev.event_type == "down":
-                    # Holding E makes Windows repeat 'down'; a real new tap has an 'up' first
                     if st.get("e_held") or now - st["last_mark"] < 0.3:
                         return
                     st["e_held"] = True
                     st["last_mark"] = now
                     seg = close_segment(now)
-                    idx = len(segments) + 1
+                    idx = offset + len(segments) + 1
                     hold, wait = old_timers[idx - 1] if idx <= len(old_timers) else (None, None)
                     seg["mine_hold"] = hold or DEFAULT_MINE_HOLD
                     seg["mine_wait"] = wait or DEFAULT_MINE_WAIT
@@ -566,13 +601,20 @@ class RouteNav(BaseLogic):
                         if not held:
                             st["idle_since"], st["idle_t"] = now, t
 
-        hook = keyboard.hook(on_event)
+        seen = {}
+
+        def hooked(ev):
+            seen[position_name(ev)] = seen[(ev.name or "").lower()] = time.perf_counter()
+            on_event(ev)
+        hook = keyboard.hook(hooked)
+        watch = sorted((set(self.RECORD_KEYS) - {"left shift"}) | {"e"} | set(turns))
+        stop_backup = threading.Event()
+        threading.Thread(target=self._record_key_backup, args=(watch, seen, on_event, stop_backup),
+                         daemon=True).start()
         try:
             while not self._rec_stop:
                 time.sleep(0.05)
                 with lock:
-                    # A key-up the hook missed would leave the key 'held' forever, and every later tap of it
-                    # (10 jumps -> 2) would be ignored. Ask Windows for the real state and close it here.
                     now = time.perf_counter()
                     for k in [k for k in held if not self._key_is_down(k)]:
                         held.discard(k)
@@ -583,7 +625,7 @@ class RouteNav(BaseLogic):
                              and time.perf_counter() - st["idle_since"] >= self.CHECKPOINT_IDLE)
                     if ready:
                         st["cp_taken"] = True
-                        seg_no, cp_no, t = len(segments) + 1, len(checkpoints) + 1, st["idle_t"]
+                        seg_no, cp_no, t = offset + len(segments) + 1, len(checkpoints) + 1, st["idle_t"]
                 if ready:
                     fname = f"cp_{seg_no}_{cp_no}.png"
                     if self.save_snapshot(os.path.join(folder, fname)):
@@ -592,19 +634,29 @@ class RouteNav(BaseLogic):
                         self.app.log(f"   checkpoint {seg_no}.{cp_no} saved")
         finally:
             keyboard.unhook(hook)
+            stop_backup.set()
             if hasattr(self.app, "set_recording_ui"):
                 self.app.root.after(0, lambda: self.app.set_recording_ui(False))
         with lock:
             ret = close_segment(time.perf_counter())
+        segments = keep + segments
         route = {"ores": len(segments), "segments": segments, "return": ret}
         moved = sum(1 for sg in segments + [ret] for e in sg["events"] if e[2] in ("down", "turn"))
-        if not segments and not moved:
+        if len(segments) == len(keep) and not moved:
             shutil.rmtree(folder, ignore_errors=True)
             self.app.log(f"Recording of '{name}' had no key presses - NOT saved, your previous recording is kept.")
             return
-        time.sleep(0.5)                                  # an ore snapshot taken right before the stop finishes
-        for f in os.listdir(home_dir):                   # now replace the previous recording
-            if f.endswith(".png") or f == "route.json":
+        time.sleep(0.5)
+        def replaced(f):
+            if not keep:
+                return True
+            import re
+            m = re.match(r"(?:ore|cp)_(\d+)", f)
+            return bool(m) and int(m.group(1)) > offset
+        for f in os.listdir(home_dir):
+            if f == "route.json":
+                os.replace(os.path.join(home_dir, f), os.path.join(home_dir, "route.json.bak"))
+            elif f.endswith(".png") and replaced(f):
                 os.remove(os.path.join(home_dir, f))
         for f in os.listdir(folder):
             shutil.move(os.path.join(folder, f), os.path.join(home_dir, f))
@@ -613,7 +665,10 @@ class RouteNav(BaseLogic):
         if not self.load_route(name):
             raise IOError(f"route.json couldn't be read back from {home_dir}")
         n_cp = sum(len(sg["checkpoints"]) for sg in segments) + len(ret["checkpoints"])
-        if self.ROUTE_TARGET == "ore":
+        if keep:
+            self.app.log(f"Route '{name}' saved: {'ore 1' if offset == 1 else f'ores 1-{offset}'} kept, re-recorded from ore {offset + 1} - "
+                         f"{len(segments)} ores in all + the walk back ({ret['duration']:.1f}s).")
+        elif self.ROUTE_TARGET == "ore":
             self.app.log(f"Route '{name}' saved: {len(segments)} ore{'s' if len(segments) != 1 else ''} "
                          f"+ the walk back to the start ({ret['duration']:.1f}s), {n_cp} checkpoints.")
         elif not self.E_MARKS_TARGET:
@@ -630,16 +685,12 @@ class RouteNav(BaseLogic):
             self.app.root.after(0, self.app.refresh_routes)
 
     def turn_keys(self):
-        """{hotkey: degrees} recorded as camera turns while recording a route. None here (Umbral has F1-F5)."""
         return {}
 
     def rotate_camera(self, degrees):
         pass
 
-    # ================= Playback =================
     def play_segment(self, seg, label="", alive=None):
-        """Replay recorded key presses with their original timing.
-        At each checkpoint it lines up on the checkpoint snapshot, then continues."""
         alive = alive or (lambda: self.running)
         events = sorted(seg["events"], key=lambda e: e[0])
         cps = (sorted(seg.get("checkpoints", []), key=lambda c: c["t"])
@@ -648,7 +699,7 @@ class RouteNav(BaseLogic):
         start = time.perf_counter()
         shift = 0.0
         down, ei, ci = set(), 0, 0
-        pressed_at = {}                                  # key -> when it went down (for the minimum tap)
+        pressed_at = {}
         self.walking = True
         try:
             while alive():
@@ -662,18 +713,16 @@ class RouteNav(BaseLogic):
                     _, key, kind = events[ei]
                     ei += 1
                     if kind == "turn":
-                        # exact camera turn, alongside the walk (keys held while turning stay held, as recorded)
                         deg = int(key.split(":", 1)[1])
                         threading.Thread(target=self.rotate_camera, args=(deg,), daemon=True).start()
                         continue
                     if kind == "down":
-                        if key in down:                  # pressed again without a release: re-tap it
+                        if key in down:
                             press_key(key, False)
                             time.sleep(0.02)
                         press_key(key, True); down.add(key)
                         pressed_at[key] = time.perf_counter()
                     else:
-                        # quick taps (jumps): keep the key down long enough for Roblox to see it
                         held_for = time.perf_counter() - pressed_at.get(key, 0)
                         if held_for < self.MIN_TAP:
                             time.sleep(self.MIN_TAP - held_for)
@@ -709,6 +758,5 @@ class RouteNav(BaseLogic):
                     "misses": 0, "corrections": 0}
 
 
-    # ================= Tests =================
 
 

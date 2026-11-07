@@ -1,6 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
-title VunVun's Macro Loader - V6.4
+title VunVun's Macro Loader - V6.5
 REM Always work from the folder this launcher is in ("Run as administrator" starts in System32)
 cd /d "%~dp0"
 
@@ -66,6 +66,8 @@ if "!NEED_INSTALL!"=="0" (
     echo up to date
 ) else (
     echo installing / updating - this takes a minute the first time...
+    REM  pip missing or broken in this Python: put it back first (comes with Python itself, no download)
+    call "!PY_EXE!" -m pip --version >nul 2>&1 || call "!PY_EXE!" -m ensurepip --upgrade >nul 2>&1
     call "!PY_EXE!" -m pip install -r "app\requirements.txt" --disable-pip-version-check --no-warn-script-location -q
     if errorlevel 1 (
         echo.
@@ -122,7 +124,8 @@ REM  ok (errorlevel 0) when %1 runs and is Python 3.11 - 3.14: the versions the 
 REM  (onnxruntime 1.27.0) has builds for. 3.10 is too old for it, 3.15 too new (pip finds nothing).
 REM  It must also be the normal Windows Python ("MSC" build): MSYS2 / MinGW / Cygwin ones refuse pip
 REM  ("externally-managed-environment") and can't use the Windows packages anyway.
-call "%~1" -c "import sys; sys.exit(0 if (3, 11) <= sys.version_info[:2] <= (3, 14) and 'MSC v.' in sys.version else 1)" >nul 2>&1
+REM  And it must be 64-bit: the text reader has no 32-bit Windows build.
+call "%~1" -c "import sys; sys.exit(0 if (3, 11) <= sys.version_info[:2] <= (3, 14) and 'MSC v.' in sys.version and sys.maxsize > 2**32 else 1)" >nul 2>&1
 exit /b %errorlevel%
 
 :find_python
@@ -187,9 +190,15 @@ exit /b 1
 set "OTHER_PY="
 for /f "tokens=2 delims= " %%V in ('python --version 2^>nul') do set "OTHER_PY=%%V"
 if not defined OTHER_PY for /f "tokens=2 delims= " %%V in ('py --version 2^>nul') do set "OTHER_PY=%%V"
+set "OTHER_BITS="
+if defined OTHER_PY for /f %%B in ('python -c "import struct; print(struct.calcsize('P')*8)" 2^>nul') do set "OTHER_BITS=%%B"
 if defined OTHER_PY (echo Python !OTHER_PY! - not supported) else (echo not found)
 echo.
-if defined OTHER_PY (
+if "!OTHER_BITS!"=="32" (
+    echo   [NOTE] You have Python !OTHER_PY! 32-bit, but the macro needs the 64-bit Python 3.11 - 3.14.
+    echo       Its text reader, onnxruntime, has no 32-bit version. On python.org pick
+    echo       "Windows installer (64-bit)". It installs NEXT TO your current Python.
+) else if defined OTHER_PY (
     echo   [NOTE] You have Python !OTHER_PY!, but the macro needs Python 3.11 - 3.14 from python.org.
     echo       Its text reader, onnxruntime, isn't available for other versions, and the Python that
     echo       comes with MSYS2 / Git tools / Cygwin can't install the macro's packages.
@@ -204,9 +213,20 @@ set "PY_URL=https://www.python.org/ftp/python/3.12.3/python-3.12.3-amd64.exe"
 set "PY_INST=!TEMP!\python_installer_vunvun.exe"
 echo.
 echo   Downloading Python 3.12 ...
-curl -L -s -o "!PY_INST!" "!PY_URL!" || powershell -NoProfile -Command "Invoke-WebRequest -Uri '!PY_URL!' -OutFile '!PY_INST!'"
+if exist "!PY_INST!" del /f /q "!PY_INST!" >nul 2>&1
+curl -L -s -f -o "!PY_INST!" "!PY_URL!" || powershell -NoProfile -Command "Invoke-WebRequest -Uri '!PY_URL!' -OutFile '!PY_INST!'"
 if not exist "!PY_INST!" (
     echo   [ERROR] Download failed. Install Python from python.org, then run this again.
+    pause
+    exit /b 1
+)
+REM  Only run it if it really is Python's installer: signed by the Python Software Foundation and not
+REM  cut off (a broken download or an error page would otherwise be started as the installer)
+powershell -NoProfile -Command "$s = Get-AuthenticodeSignature '!PY_INST!'; if ($s.Status -eq 'Valid' -and $s.SignerCertificate.Subject -like '*Python Software Foundation*') { exit 0 } else { exit 1 }" >nul 2>&1
+if errorlevel 1 (
+    del /f /q "!PY_INST!" >nul 2>&1
+    echo   [ERROR] The download is incomplete or isn't the real Python installer - it was deleted.
+    echo     Install Python 3.12 (64-bit^) from python.org yourself, then run this again.
     pause
     exit /b 1
 )

@@ -1,6 +1,89 @@
 HOW TO RUN SPATIAL MACRO
 ========================
 
+WHAT'S NEW IN V6.5
+==================
+
+New look
+- Every macro has the same sidebar: Setup, Status, Options and Shared (fold it with ☰)
+- Setup is a checklist: ✓ done, ✗ missing - press Open on a step to set it up
+- The main menu shows which macros are ready; "Continue" opens the one you used last
+- Start checks your setup first; "Go there" opens the missing step
+- Options have a search box and Reset buttons; settings for every macro are on the General page
+- Pick your own colours: Theme -> Edit custom
+- Log button: open the log or save a debug report for bug reports
+- Pages open about twice as fast; scrolling, resizing and Back to Menu are smooth
+- Fits small screens and Windows scaling (125% / 150%); Esc closes pop-up windows
+
+Library
+- The minigame is spotted by its SCORE, and it's over once your hotbar is back - no minigame picture needed
+- Clovers are clicked anywhere in the game below Roblox's top bar; Ctrl+1 after each minigame
+- Waits 1 s after picking the move (Options -> Timing), and only plays once the minigame's SCORE is on screen
+- New: train in order (1 -> 2 -> 3 ->... -> repeat, skips gold moves)
+- Wisp dialogue: Auto is gone (it broke too often). Used Auto? Capture the button pictures in Setup
+- One built-in route; Setup shows where to stand and which way to face
+- Gold Statistics: "Lifetime used" and "Current sum of spells"
+
+Skill Macro
+- New Logs page; Timers and Skill Combo steps open like drop-downs
+- New Target page: only casts while a creature is on screen - press Teach and drag a box around it, and it learns the creature itself - with keys to press when it shows up and when it's gone
+- Moves can aim "At target": the mouse goes onto that creature before every cast, wherever it moves
+- Pop ups are clicked while meditating too
+
+Pop Ups
+- Clicked within about a second (was up to 10 s)
+- The OK button and your own pop ups are in one list, each with Edit and Test
+
+Event Notifier
+- Warns you when a chat can't be read or a Roblox window closes / minimizes (optional Discord post that pings who you pick)
+- A failed Discord post is tried again, and posting no longer slows the other macros
+
+Fixes
+- Skill Macro: no longer meditates with high mana - using the same move a lot counted as "stuck", and a skill's flash over the mana bar read as empty
+- Skill Macro: the stuck fix no longer puts your weapon away right after meditating
+- Skill Macro: the OK pop up darkening the screen no longer makes it spam one move
+- Event Notifier: an event could be posted twice
+- A macro that hits an error now really stops (it kept showing Running)
+- Pressing Stop then Start quickly can't run a macro twice
+- Keys are always let go when a macro stops
+- Fixed a slow leak that could break screenshots after many hours of AFK
+- Settings are saved with a backup, so a crash can't wipe them
+- Black screenshots or hotkeys that don't react: a backup way is used by itself (General -> Screenshots and keys)
+- Captures use what was on screen when you started dragging
+
+WHAT'S NEW IN V6.4
+==================
+- New Pop Up page (was OK Popup): add other pop ups like Delayed Packages and the macro closes them for you
+- Fixed recorded routes not saving
+- Fixed clicks happening before the mouse got there (Click delay on the Main page)
+- Library: pop ups showing up mid-walk don't throw the route off anymore
+- Library: Full Auto Setup works on more screens (4K, no black bars)
+- Text reading is way faster, so the Library dialogue and Auto setup are quicker
+- Routes work on any keyboard layout now - AZERTY players, record your routes again
+- Pressing Start tells you if something in your setup is missing, with a button that takes you to it
+- Updates can't break your install anymore if the download gets cut off
+
+WHAT'S NEW IN V6.3.7.3
+======================
+- Library (fix): when reopening the dialogue it keeps pressing space + E every 0.2 s until the Clover Training option shows, then stops - also when it first walks up to the wisp
+
+WHAT'S NEW IN V6.3.7.2
+======================
+- Library (fix): fixed a crash when the dialogue box was found at the edge of the window
+- Library (fix): Apply + Set up minigame keeps jumping + pressing E until the dialogue really opens
+
+WHAT'S NEW IN V6.3.7.1
+======================
+- Library (fix): when reopening the wisp dialogue (after Apply + Set up minigame, or when it closed/cant detect), E is now pressed every 0.2 s the whole time.
+
+
+WHAT'S NEW IN V6.3.7
+====================
+- Mining: pressing ',' at the start is now optional (Settings -> Press ',' when starting)
+- Mining: new 'Wait for Interact at the start' option - waits at the start spot until the ore's Interact prompt is back, then walks the route; Set area to box the prompt (replaces Line-up checks)
+- OK popup: with no Scan Area set it now looks over the whole screen, so the popup is found wherever it appears
+- Mining: Export route / Import route to share a recorded path (imports as a new route, never overwrites yours)
+
 WHAT'S NEW IN V6.3.6
 ====================
 - Library: Full Auto Setup now shows the Apply window right after reading the moves; the minigame detector is set up on the first Start after it (it picks the move, catches the minigame and saves its snapshot by itself, then plays it - only ONE try, so no moves are wasted; if it isn't caught and there's no older snapshot, the macro stops and asks you to capture it in Areas). 'Apply + Set up minigame' does it right there at the wisp (no walking the route) and then stops - it's only the setup, not a training cycle; press Start to train

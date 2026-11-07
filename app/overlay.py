@@ -1,15 +1,41 @@
+import time
 import tkinter as tk
+
+LAST_SHOT = None
+
+
+def take_frozen(region):
+    global LAST_SHOT
+    import threading
+    if LAST_SHOT is None or threading.current_thread() is not threading.main_thread():
+        return None
+    shot, when = LAST_SHOT
+    x1, y1, x2, y2 = (int(v) for v in region)
+    if time.time() - when > 5 or x1 < 0 or y1 < 0 or x2 > shot.width or y2 > shot.height or x2 <= x1 or y2 <= y1:
+        return None
+    LAST_SHOT = None
+    import numpy as np
+    return np.ascontiguousarray(np.array(shot.crop((x1, y1, x2, y2)))[:, :, ::-1])
+
+
+def clip_to_shot(region):
+    if LAST_SHOT is None:
+        return list(region)
+    shot = LAST_SHOT[0]
+    l, t, r, b = region
+    return [max(0, l), max(0, t), min(shot.width, r), min(shot.height, b)]
 
 
 class _FrozenScreen:
-    """Fullscreen picker that shows a clean screenshot instead of a see-through tint.
-    Colours read from it are the real on-screen colours (no grey/white wash)."""
     HINT = ""
 
     def __init__(self, cursor="cross"):
         import PIL.ImageGrab
         from PIL import ImageTk
-        self.shot = PIL.ImageGrab.grab().convert("RGB")  # taken before our window appears
+        self.shot = PIL.ImageGrab.grab().convert("RGB")
+        if self.shot.getextrema() == ((0, 0), (0, 0), (0, 0)):
+            from utils import backup_screen_image
+            self.shot = backup_screen_image(self.shot.size) or self.shot
         self.root = tk.Toplevel()
         self.root.attributes('-topmost', True)
         self.root.attributes('-fullscreen', True)
@@ -21,12 +47,10 @@ class _FrozenScreen:
         if self.HINT:
             self._label(self.shot.width // 2, 24, self.HINT + "   (Esc to cancel)")
         self.root.bind("<Escape>", lambda e: self.cancel())
-        self.root.protocol("WM_DELETE_WINDOW", self.cancel)     # Alt+F4 counts as cancel too
+        self.root.protocol("WM_DELETE_WINDOW", self.cancel)
         self.root.focus_force()
 
     def cancel(self):
-        """Close without picking. The macro window was hidden for the pick and normally comes back in
-        the pick callback, which never runs on cancel - so bring it back here."""
         app_window = self.root.master
         self.root.destroy()
         try:
@@ -78,6 +102,8 @@ class Overlay(_FrozenScreen):
         x2 = max(self.start_x, end_x)
         y2 = max(self.start_y, end_y)
         self.root.destroy()
+        global LAST_SHOT
+        LAST_SHOT = (self.shot, time.time())
         self.callback(x1, y1, x2, y2)
 
 
@@ -101,7 +127,6 @@ class PersistentOverlay:
             import sys
             import ctypes
 
-            # Only apply Windows-specific overlay settings on Windows
             if sys.platform.startswith('win'):
                 hwnd = ctypes.windll.user32.GetParent(self.root.winfo_id())
                 if hwnd == 0:
@@ -121,10 +146,14 @@ class PersistentOverlay:
             pass
 
 
+def outline_box(x1, y1, x2, y2, color="#00ff66", thick=3):
+    return [PersistentOverlay(x1 - thick, y1 - thick, x2 + thick, y1, color=color, alpha=1.0),
+            PersistentOverlay(x1 - thick, y2, x2 + thick, y2 + thick, color=color, alpha=1.0),
+            PersistentOverlay(x1 - thick, y1, x1, y2, color=color, alpha=1.0),
+            PersistentOverlay(x2, y1, x2 + thick, y2, color=color, alpha=1.0)]
+
+
 class RecordingBadge:
-    """A small red '● REC 0:12 · Ctrl+P to stop' badge on top of the game while a route is recorded.
-    It NEVER takes keyboard focus (or the keys you press would stop reaching Roblox / the recording),
-    clicks go straight through it, and it isn't in the taskbar."""
 
     def __init__(self, x, y, key="F9"):
         import time as _t
@@ -132,7 +161,7 @@ class RecordingBadge:
         self._t0 = _t.time()
         self._time = _t.time
         self.root = tk.Toplevel()
-        self.root.withdraw()                              # never shown the normal (focus-taking) way
+        self.root.withdraw()
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
         self.root.config(bg="#b02a37")
@@ -152,12 +181,11 @@ class RecordingBadge:
                 self.root.deiconify(); return
             u = ctypes.windll.user32
             hwnd = int(self.root.wm_frame(), 16) or u.GetParent(self.root.winfo_id()) or self.root.winfo_id()
-            # LAYERED | TRANSPARENT (click-through) | TOOLWINDOW (no taskbar) | TOPMOST | NOACTIVATE
             ex = u.GetWindowLongW(hwnd, -20) | 0x80000 | 0x20 | 0x80 | 0x8 | 0x08000000
             u.SetWindowLongW(hwnd, -20, ex)
-            u.SetLayeredWindowAttributes(hwnd, 0, 235, 2)            # slightly see-through
-            u.ShowWindow(hwnd, 4)                                     # SW_SHOWNOACTIVATE
-            u.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x1 | 0x2 | 0x10)   # topmost, no move/size, NO activate
+            u.SetLayeredWindowAttributes(hwnd, 0, 235, 2)
+            u.ShowWindow(hwnd, 4)
+            u.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x1 | 0x2 | 0x10)
             self.hwnd = hwnd
         except Exception as e:
             print(f"Recording badge error: {e}")
@@ -193,7 +221,7 @@ class PointSelector(_FrozenScreen):
 
 class ColorPicker(_FrozenScreen):
     HINT = "Click the colour to pick"
-    ZOOM, GRID = 10, 11  # magnifier: 11x11 pixels shown 10x larger
+    ZOOM, GRID = 10, 11
 
     def __init__(self, callback):
         super().__init__("crosshair")
@@ -204,7 +232,6 @@ class ColorPicker(_FrozenScreen):
         self.root.bind("<Button-1>", self.on_click)
 
     def on_motion(self, event):
-        """Live magnifier + swatch next to the cursor so you can hit the exact pixel."""
         from PIL import Image, ImageTk
         for item in self._mag_items:
             self.canvas.delete(item)
@@ -233,9 +260,6 @@ class ColorPicker(_FrozenScreen):
 
 
 class ActionBadge(RecordingBadge):
-    """A small dark bar on top of the game that shows what the macro is doing right now
-    ('Casting slot 3', 'Clicking OK', 'Anti screen-shake: pressing ,'...), so you can always see where
-    it is and where something goes wrong. Like the REC badge it never takes focus and clicks go through."""
 
     def __init__(self, x, y, text=""):
         self._cx, self._y = x, y
@@ -266,8 +290,6 @@ class ActionBadge(RecordingBadge):
 
 
 def show_action(app, text, running):
-    """Update (or hide) the app's action bar. Call on the window's thread.
-    Shown only while a macro runs and 'Show what the macro is doing' is on."""
     badge = getattr(app, "_action_badge", None)
     try:
         on = bool(app.settings.get("show_action_badge", True))
@@ -284,7 +306,7 @@ def show_action(app, text, running):
     import time as _t
     pos = getattr(app, "_badge_pos", None)
     if pos is not None and _t.time() - getattr(app, "_badge_pos_t", 0) < 1.5:
-        a = None                                          # recent enough: don't ask Windows again
+        a = None
     else:
         pos = None
     try:
@@ -295,7 +317,7 @@ def show_action(app, text, running):
         w = next((w for w in pywinctl.getAllWindows() if is_roblox_title(w.title)), None)
         a = pywinctl.getActiveWindow()
         if a is not None and is_roblox_title(a.title):
-            w = a                                         # the Roblox window in front (multi-window)
+            w = a
         if w is not None:
             pos = (w.left + w.width / 2, w.top + 70)
             app._badge_pos, app._badge_pos_t = pos, _t.time()

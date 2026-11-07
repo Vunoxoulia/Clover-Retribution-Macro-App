@@ -1,30 +1,61 @@
+import atexit
 import json
 import os
 import shutil
 import sys
 import threading
 
-_SAVE_LOCK = threading.RLock()     # the window and the macro's threads save the same file
+_SAVE_LOCK = threading.RLock()
+SAVE_DELAY = 0.5
+_PENDING = {}
+_FLUSHERS = {}
 
-# Folder layout (only the launcher sits in the main folder):
-#   Windows_Launcher.bat
-#   app/   the program (code, icon, built-in routes, links.txt)  - replaced by updates
-#   data/  YOUR stuff (settings, routes, pictures, sounds)       - never touched by updates
-#   docs/  patch notes and guides
+
+def flush_all():
+    with _SAVE_LOCK:
+        waiting = [f for f, t in _PENDING.items() if t is not None]
+        for f in waiting:
+            _PENDING.pop(f).cancel()
+    for f in waiting:
+        try:
+            _FLUSHERS[f]()
+        except Exception as e:
+            print(f"Error saving settings: {e}")
+
+
+atexit.register(flush_all)
+
+
+SETTINGS_VERSION = 1
+
+
+def fill_defaults(s):
+    hk = s.setdefault("hotkeys", {})
+    for action, key in (("test_path", "f3"), ("test_find", "f4"), ("test_full", "f5"),
+                        ("test_open", "f7"), ("record", "f9")):
+        hk.setdefault(action, key)
+
+
+def _migrate_1(s):
+    hk = s.setdefault("hotkeys", {})
+    if hk.get("stop") == "f7":
+        hk.pop("stop")
+        hk["test_open"] = "f7"
+
+
+MIGRATIONS = {1: _migrate_1}
+
 
 def get_app_path():
-    """The program folder (app/)."""
     if hasattr(sys, '_MEIPASS'):
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.abspath(__file__))
 
 
 def get_root_path():
-    """The main folder - the one with Windows_Launcher.bat."""
     return os.path.dirname(get_app_path())
 
 
-# Everything the user saved. Older versions kept these next to the launcher; they're moved into data/.
 USER_DATA_NAMES = ("settings.json", "settings.json.bak", "settings.json.broken", "settings.json.tmp",
                    "links_cache.txt", "ok_template.png", "event_roles_import.json",
                    "routes", "routes_library", "smart_templates", "library_templates", "sounds",
@@ -32,7 +63,6 @@ USER_DATA_NAMES = ("settings.json", "settings.json.bak", "settings.json.broken",
 
 
 def get_base_path():
-    """Where the user's data lives (data/). Made on first use; old data from the main folder is moved in."""
     d = os.path.join(get_root_path(), "data")
     if not os.path.isdir(d):
         os.makedirs(d, exist_ok=True)
@@ -43,7 +73,6 @@ def get_base_path():
 
 
 def migrate_old_data(root, data):
-    """One-time: move the user's files from the main folder (old layout) into data/ - nothing is lost."""
     import shutil
     for name in USER_DATA_NAMES:
         old, new = os.path.join(root, name), os.path.join(data, name)
@@ -53,7 +82,7 @@ def migrate_old_data(root, data):
             if not os.path.exists(new):
                 shutil.move(old, new)
             elif os.path.isdir(old) and os.path.isdir(new):
-                for r, _, files in os.walk(old):          # merge: only add what data/ doesn't have yet
+                for r, _, files in os.walk(old):
                     rel = os.path.relpath(r, old)
                     os.makedirs(os.path.join(new, rel), exist_ok=True)
                     for f in files:
@@ -64,8 +93,6 @@ def migrate_old_data(root, data):
         except Exception as e:
             print(f"Couldn't move {name} into data/: {e}")
 
-# Every part of the app (hub, each macro, Skill Macro, Event Notifier) gets the SAME settings dict.
-# Before, each had its own copy and saving an older copy wiped newer changes (e.g. Skill Macro loadouts).
 _SHARED = {}
 
 
@@ -77,6 +104,7 @@ class SpatialSettings:
             self.settings = _SHARED[self.filename]
             return
         self.settings = {
+            "settings_version": SETTINGS_VERSION,
             "use_ocr": False,
             "move_names": ["", "", ""],
             "clover_colors": {
@@ -87,7 +115,6 @@ class SpatialSettings:
             "color_tolerance": 25,
             "hotkeys": {
                 "start": "f6",
-                "pause": "f8",
                 "test_btn": "f1",
                 "test_color": "f2",
                 "test_movement": "f2",
@@ -178,13 +205,9 @@ class SpatialSettings:
             return json.load(f)
 
     def load(self):
-        """Read settings.json into the shared dict (in place, so every part of the app sees it).
-        If the file is broken (e.g. the PC shut down mid-save), use the backup instead of starting
-        empty - an empty start would overwrite everything on the next save."""
         if not os.path.exists(self.filename):
             if not os.path.exists(self.filename + ".bak"):
-                return                                   # first start: defaults
-            # the main file is missing but its backup is there (an old save was cut off): use the backup
+                return
             try:
                 shutil.copy2(self.filename + ".bak", self.filename)
                 print("settings.json was missing - restored it from settings.json.bak.")
@@ -196,7 +219,7 @@ class SpatialSettings:
             print(f"Error loading settings: {e}")
             data = None
             try:
-                os.replace(self.filename, self.filename + ".broken")      # keep it, don't overwrite it
+                os.replace(self.filename, self.filename + ".broken")
             except OSError:
                 pass
             if os.path.exists(self.filename + ".bak"):
@@ -207,24 +230,54 @@ class SpatialSettings:
                     print(f"Backup couldn't be read either: {e2}")
         if data:
             self.settings.update(data)
-            # hotkeys are replaced as a whole on load: re-add actions added since that file was saved
-            self.settings["hotkeys"].setdefault("test_path", "f3")
-            self.settings["hotkeys"].setdefault("test_find", "f4")
-            self.settings["hotkeys"].setdefault("test_full", "f5")
-            if self.settings["hotkeys"].get("stop") == "f7":
-                self.settings["hotkeys"].pop("stop")      # old entry, never used: F7 is Test opening now
-            self.settings["hotkeys"].setdefault("test_open", "f7")
-            self.settings["hotkeys"].setdefault("record", "f9")
+            self._migrate(int(data.get("settings_version") or 0))
+        fill_defaults(self.settings)
+
+    def _migrate(self, from_version):
+        if from_version >= SETTINGS_VERSION:
+            return
+        try:
+            if os.path.exists(self.filename):
+                shutil.copy2(self.filename, f"{self.filename}.v{from_version}.bak")
+        except OSError:
+            pass
+        for v in range(from_version + 1, SETTINGS_VERSION + 1):
+            step = MIGRATIONS.get(v)
+            if step:
+                try:
+                    step(self.settings)
+                except Exception as e:
+                    print(f"Settings upgrade step {v} failed: {e}")
+        self.settings["settings_version"] = SETTINGS_VERSION
+        print(f"Settings upgraded from version {from_version} to {SETTINGS_VERSION}.")
+        self.save()
 
     def save(self):
-        """Write to a temp file, then swap it in: a crash can't leave a half-written settings.json.
-        The previous good file is COPIED to settings.json.bak first, so settings.json is never missing.
-        One save at a time (the window and the macro save the same file)."""
         with _SAVE_LOCK:
+            t = _PENDING.get(self.filename)
+            if t is not None and t.is_alive():
+                return
+            t = threading.Timer(SAVE_DELAY, self._write)
+            t.daemon = True
+            _PENDING[self.filename] = t
+            _FLUSHERS[self.filename] = self._write
+            t.start()
+
+    def flush(self):
+        with _SAVE_LOCK:
+            t = _PENDING.pop(self.filename, None)
+            if t is None:
+                return
+            t.cancel()
+        self._write()
+
+    def _write(self):
+        with _SAVE_LOCK:
+            _PENDING.pop(self.filename, None)
             tmp = f"{self.filename}.{threading.get_ident()}.tmp"
             try:
                 text = None
-                for _ in range(3):                       # another thread may change a setting mid-way: retry
+                for _ in range(3):
                     try:
                         text = json.dumps(self.settings, indent=4)
                         break

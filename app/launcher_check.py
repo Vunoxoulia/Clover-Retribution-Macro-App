@@ -1,15 +1,8 @@
-"""Run by Windows_Launcher.bat before the macro starts: are the files OK?
-
-Exit 0 = fine. Exit 2 = the macro's own files are damaged (re-download). Exit 3 = an installed package is
-damaged / won't load (the launcher reinstalls them). The problems are printed, one per line.
-Damage usually means null bytes: a download / unzip / install that was cut off, antivirus, or a cloud-sync
-placeholder. Python then only says "source code string cannot contain null bytes" at the import line."""
 import glob
 import importlib
 import os
 import sys
 
-# the packages the macro imports when it starts (the text reader loads later and has its own message)
 PACKAGES = ["customtkinter", "mss", "numpy", "cv2", "keyboard", "pynput", "pywinctl", "screeninfo", "PIL", "requests"]
 
 
@@ -20,7 +13,6 @@ def damaged_app_files():
         try:
             with open(p, "rb") as f:
                 src = f.read()
-            # null bytes = damaged; not readable as Python = cut off part way (download / unzip stopped early)
             if b"\0" in src:
                 bad.append(os.path.relpath(p, os.path.dirname(here)))
             else:

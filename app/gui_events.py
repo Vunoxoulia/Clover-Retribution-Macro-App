@@ -5,17 +5,15 @@ import customtkinter as ctk
 from overlay import Overlay, PointSelector
 from logic_events import WATCHER, roblox_windows
 from logic_base import BaseLogic
-from ui_style import big_toggle, style_toggle, save_while_typing, sound_picker, fast_scroll_frame, seconds_combo, help_box
+from ui_style import dialog_keys, FONT, big_toggle, style_toggle, save_while_typing, sound_picker, fast_scroll_frame, seconds_combo, help_box, SmoothScrollFrame
 
-CARD = dict(fg_color="#212529", border_color="#343a40", border_width=1, corner_radius=8)
-BTN = dict(height=28, font=("Arial", 12), fg_color="#495057", hover_color="#343a40")
-BLUE = dict(fg_color="#0d6efd", hover_color="#0b5ed7")
-RED = dict(fg_color="#842029", hover_color="#6a1a21")
+CARD = dict(fg_color="#15201b", border_color="#2a3a33", border_width=1, corner_radius=8)
+BTN = dict(height=28, font=(FONT, 12), fg_color="#34463d", hover_color="#2a3a33")
+BLUE = dict(fg_color="#1c8f52", hover_color="#16743f")
+RED = dict(fg_color="#7a2620", hover_color="#5e1d18")
 
 
 class EventsPage:
-    """The Events page. Lives in every macro (like OK Popup) and in the standalone Event Notifier.
-    The watcher itself is shared, so the ON toggle keeps working when you switch macros."""
 
     def __init__(self, parent, root, settings):
         self.root = root
@@ -23,19 +21,18 @@ class EventsPage:
         WATCHER.on_log = self._log
         self.cfg = WATCHER.cfg
         self.sf = fast_scroll_frame(parent, padx=4, pady=4)
-        # Always OFF when the app opens; you turn it on yourself. Once on, it stays on while you switch macros.
         self._seen_windows = None
         self.build()
-        self.root.after(3000, self._watch_windows)
 
-    # ---------- helpers ----------
     def _log(self, msg):
+        self._last_msg = msg
+
         def show():
             try:
                 if self.status.winfo_exists():
                     self.status.configure(text=msg)
             except Exception:
-                pass                             # this macro's window was closed; the watcher keeps going
+                pass
         try:
             self.root.after(0, show)
         except Exception:
@@ -45,8 +42,6 @@ class EventsPage:
         WATCHER.save()
 
     def _time_combo(self, parent, key, values, default_secs, minimum=0, stored_in_min=False):
-        """A seconds box (every time in the app is in seconds): pick from the list or type any number.
-        0 = never (where the list offers it)."""
         div = 60 if stored_in_min else 1
         cur = self.cfg.get(key)
         cur = default_secs if cur is None else float(cur) * div
@@ -56,14 +51,14 @@ class EventsPage:
             try:
                 secs = 0.0 if t == "never" else float(t)
             except ValueError:
-                return                                   # not a number yet: keep the old value
+                return
             secs = max(minimum, secs) if secs else (0 if "0" in values else minimum)
             self.cfg[key] = round(secs / div, 2) if stored_in_min else int(round(secs))
             self._save()
         return seconds_combo(parent, values, cur, save)
 
     def _entry(self, parent, d, key, width, placeholder="", show=None, on_save=None):
-        e = ctk.CTkEntry(parent, width=width, font=("Arial", 12), placeholder_text=placeholder, show=show)
+        e = ctk.CTkEntry(parent, width=width, font=(FONT, 12), placeholder_text=placeholder, show=show)
         if d.get(key):
             e.insert(0, str(d[key]))
 
@@ -77,20 +72,19 @@ class EventsPage:
                 on_save(d[key])
         e.bind("<FocusOut>", commit)
         e.bind("<Return>", commit)
-        save_while_typing(e, store)                  # saved while you type, no click-away needed
+        save_while_typing(e, store)
         return e
 
-    # ---------- layout ----------
     def build(self):
         cfg, p = self.cfg, self.sf
         top = ctk.CTkFrame(p, **CARD); top.pack(fill="x", pady=4)
         head = ctk.CTkFrame(top, fg_color="transparent"); head.pack(fill="x", padx=10, pady=(8, 0))
-        t = ctk.CTkLabel(head, text="Event Notifier", font=("Arial", 16, "bold"), text_color="#0d6efd")
+        t = ctk.CTkLabel(head, text="Event Notifier", font=(FONT, 16, "bold"), text_color="#1c8f52")
         t.pack(side="left")
         help_box(top, "Posts the [Event] / [Leak] lines from every Roblox window's chat to Discord. "
                       "Keeps running in every macro.", t)
-        ctk.CTkButton(head, text="▶ Video", width=64, height=24, font=("Arial", 11, "bold"), fg_color="#343a40",
-                      hover_color="#495057", text_color="#ff6b6b",
+        ctk.CTkButton(head, text="▶ Video", width=64, height=24, font=(FONT, 11, "bold"), fg_color="#2a3a33",
+                      hover_color="#34463d", text_color="#ff6b6b",
                       command=lambda: links.open_link("video_events")).pack(side="right")
         self.toggle = big_toggle(top, self.flip)
         self.toggle.pack(fill="x", padx=10, pady=(8, 4))
@@ -98,43 +92,72 @@ class EventsPage:
 
         ctk.CTkLabel(top, text="", height=2).pack()
 
-        # ---- what happened lately ----
         rc = self._section(p, "Last events")
-        self.recent_box = ctk.CTkLabel(rc, text="", font=("Consolas", 11), text_color="#ced4da",
+        self.recent_box = ctk.CTkLabel(rc, text="", font=("Consolas", 11), text_color="#cfc6ab",
                                        justify="left", anchor="w")
         self.recent_box.pack(fill="x", padx=10, pady=(0, 8))
         self._recent_tick()
 
-        # ---- Discord ----
+        tabs = ["1. Discord", "2. Roblox & chat", "3. Events"]
+        holder = ctk.CTkFrame(p, fg_color="transparent")
+        frames = {n: ctk.CTkFrame(holder, fg_color="transparent") for n in tabs}
+
+        builders = {tabs[0]: self._tab_discord, tabs[1]: self._tab_roblox, tabs[2]: self._tab_events}
+        built = set()
+
+        def show_tab(name):
+            if name not in built:
+                built.add(name)
+                builders[name](frames[name])
+            for n, fr in frames.items():
+                fr.pack_forget()
+            frames[name].pack(fill="x")
+            EventsPage._last_tab = name
+        seg = ctk.CTkSegmentedButton(p, values=tabs, height=32, font=(FONT, 13, "bold"), command=show_tab)
+        seg.pack(fill="x", pady=(6, 2))
+        holder.pack(fill="x")
+        first = getattr(EventsPage, "_last_tab", None) or (tabs[2] if cfg.get("webhook") else tabs[0])
+        seg.set(first)
+
+        show_tab(first)
+
+
+    def _tab_discord(self, p):
+        cfg = self.cfg
         dc = self._section(p, "Discord")
         row = ctk.CTkFrame(dc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(2, 2))
-        ctk.CTkLabel(row, text="Webhook", width=70, anchor="w", font=("Arial", 12, "bold")).pack(side="left")
+        ctk.CTkLabel(row, text="Webhook", width=70, anchor="w", font=(FONT, 12, "bold")).pack(side="left")
         ctk.CTkButton(row, text="Send test", width=80, command=self.send_test, **BTN).pack(side="right", padx=(6, 0))
         self._entry(row, cfg, "webhook", 200, "https://discord.com/api/webhooks/...", show="•").pack(side="left", fill="x", expand=True)
         row = ctk.CTkFrame(dc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=2)
-        ctk.CTkLabel(row, text="Ping", width=70, anchor="w", font=("Arial", 12, "bold")).pack(side="left")
+        ctk.CTkLabel(row, text="Ping", width=70, anchor="w", font=(FONT, 12, "bold")).pack(side="left")
         self._people_button(row, cfg, "mention", "every alert", wide=True).pack(side="left", fill="x", expand=True)
         self.mention_hint = ctk.CTkLabel(dc, text="",
-                                         font=("Arial", 12), text_color="#ced4da", wraplength=340, justify="left",
+                                         font=(FONT, 12), text_color="#cfc6ab", wraplength=340, justify="left",
                                          anchor="w")
         self.mention_hint.pack(fill="x", padx=(86, 8), pady=(0, 4))
 
-        # ---- Checking ----
+        ctk.CTkLabel(p, text="Next: tell it which Roblox windows to read (tab 2), then pick your events (tab 3).",
+                     font=(FONT, 12), text_color="#a39d86").pack(anchor="w", padx=8, pady=(2, 6))
+
+
+    def _tab_roblox(self, p):
+        cfg = self.cfg
         ck = self._section(p, "Checking the chat")
         row = ctk.CTkFrame(ck, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(2, 2))
-        ctk.CTkLabel(row, text="Check every (s)", font=("Arial", 12)).pack(side="left")
+        ctk.CTkLabel(row, text="Check every (s)", font=(FONT, 12)).pack(side="left")
         self._time_combo(row, "interval", ["15", "30", "60", "120", "300"], 60,
-                         minimum=15).pack(side="left", padx=(4, 12))   # under 15 s lags the game
-        ctk.CTkLabel(row, text="Same event again after (s)", font=("Arial", 12)).pack(side="left")
+                         minimum=15).pack(side="left", padx=(4, 12))
+        ctk.CTkLabel(row, text="Same event again after (s)", font=(FONT, 12)).pack(side="left")
         self._time_combo(row, "cooldown", ["60", "120", "300", "600"], 120).pack(
             side="left", padx=(4, 0))
-        only = ctk.CTkCheckBox(ck, text="Only [Event] / [Leak] lines (ignore player chat)", font=("Arial", 12),
+        only = ctk.CTkCheckBox(ck, text="Only [Event] / [Leak] lines (ignore player chat)", font=(FONT, 12),
                                command=lambda: (self.cfg.__setitem__("event_lines_only", bool(only.get())), self._save()))
         if cfg.get("event_lines_only", True):
             only.select()
         only.pack(anchor="w", padx=10, pady=(6, 2))
-        hov = ctk.CTkCheckBox(ck, text="Move the mouse onto the chat before reading (it fades out otherwise)",
-                              font=("Arial", 12),
+        hov = ctk.CTkCheckBox(ck, text="Hover the chat before reading (it fades out otherwise)",
+                              font=(FONT, 12),
                               command=lambda: (self.cfg.__setitem__("hover_chat", bool(hov.get())), self._save()))
         if cfg.get("hover_chat", True):
             hov.select()
@@ -144,7 +167,7 @@ class EventsPage:
         def flip_sound():
             self.cfg["sound_on_alert"] = bool(snd.get()); self._save()
             sound_row.pack(anchor="w", padx=38, pady=(0, 2), after=snd) if snd.get() else sound_row.pack_forget()
-        snd = ctk.CTkCheckBox(ck, text="Play a sound when an event is posted", font=("Arial", 12), command=flip_sound)
+        snd = ctk.CTkCheckBox(ck, text="Play a sound when an event is posted", font=(FONT, 12), command=flip_sound)
         if cfg.get("sound_on_alert", False):
             snd.select()
         snd.pack(anchor="w", padx=10, pady=2)
@@ -152,21 +175,39 @@ class EventsPage:
         if snd.get():
             sound_row.pack(anchor="w", padx=38, pady=(0, 2), after=snd)
         row = ctk.CTkFrame(ck, fg_color="transparent"); row.pack(fill="x", padx=8, pady=2)
-        ctk.CTkLabel(row, text="Warn when a window's chat can't be read for (s, 0 = never)",
-                     font=("Arial", 12)).pack(side="left")
-        self._time_combo(row, "unreadable_warn", ["0", "180", "300", "600", "900"], 600,
-                         stored_in_min=True).pack(side="left", padx=4)
+        ping_lbl = ctk.CTkLabel(row, text="Warn if a chat can't be read or doesn't change for (s, 0 = never)",
+                                font=(FONT, 12))
+        ping_lbl.pack(side="left")
+        self._time_combo(row, "chat_ping", ["0", "120", "300", "600", "900"], 300).pack(side="left", padx=4)
+        help_box(ck, "Each check, every window's chat must be readable (or, right after /clear, its Here / Global "
+                     "tabs) and its text must change now and then. If not for this long - two checks in a row - "
+                     "you get a warning (and 'OK again' when it's fixed). A closed or minimized Roblox window is "
+                     "reported too. Checks only happen every 'Check every' seconds, or between rounds while "
+                     "Library / Mining / Fishing run, so keep this longer than that.", ping_lbl)
+        ping_post = ctk.CTkCheckBox(ck, text="Also post chat warnings to Discord", font=(FONT, 12),
+                                    command=lambda: (self.cfg.__setitem__("chat_ping_post", bool(ping_post.get())),
+                                                     self._save()))
+        if cfg.get("chat_ping_post", True):
+            ping_post.select()
+        ping_post.pack(anchor="w", padx=10, pady=2)
+        row = ctk.CTkFrame(ck, fg_color="transparent"); row.pack(fill="x", padx=8, pady=2)
+        who_lbl = ctk.CTkLabel(row, text="Ping on chat warnings", font=(FONT, 12))
+        who_lbl.pack(side="left", padx=(30, 6))
+        self._people_button(row, cfg, "chat_ping_mention", "chat warnings", wide=True).pack(side="left", fill="x",
+                                                                                           expand=True)
+        help_box(ck, "Who a chat warning posted to Discord pings (a window's chat unreadable / unchanged, or a Roblox "
+                     "window closed). Nobody picked here = whoever is pinged on every alert (Discord tab). 'OK "
+                     "again' messages don't ping.", who_lbl)
         row = ctk.CTkFrame(ck, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(6, 2))
         ctk.CTkButton(row, text="Test read", width=80, command=self.test_read, **BTN).pack(side="left")
-        self.win_lbl = ctk.CTkLabel(row, text="", font=("Arial", 12), text_color="#ced4da")
+        self.win_lbl = ctk.CTkLabel(row, text="", font=(FONT, 12), text_color="#cfc6ab")
         self.win_lbl.pack(side="left", padx=8)
         self._refresh_area()
         ctk.CTkLabel(ck, text="", height=4).pack()
 
-        # ---- Clear chat ----
         cc = self._section(p, "Clear the chat after an alert")
         row = ctk.CTkFrame(cc, fg_color="transparent"); row.pack(fill="x", padx=8, pady=(2, 2))
-        clr = ctk.CTkCheckBox(row, text="Clear it, using", font=("Arial", 12),
+        clr = ctk.CTkCheckBox(row, text="Clear it, using", font=(FONT, 12),
                               command=lambda: (self.cfg.__setitem__("clear_chat", bool(clr.get())), self._save(),
                                                self._show_clear_options()))
         if cfg.get("clear_chat"):
@@ -176,48 +217,52 @@ class EventsPage:
                                 command=lambda v: (self.cfg.__setitem__("clear_cmd", v), self._save()))
         cmd.set(cfg.get("clear_cmd", "/clear"))
         cmd.pack(side="left", padx=6)
-        # only shown while clearing is on
         self._clear_opts = ctk.CTkFrame(cc, fg_color="transparent")
-        glb = ctk.CTkCheckBox(self._clear_opts, text="Type it in the Global tab, then go back to Here", font=("Arial", 12),
+        glb = ctk.CTkCheckBox(self._clear_opts, text="Type it in the Global tab, then go back to Here", font=(FONT, 12),
                               command=lambda: (self.cfg.__setitem__("clear_in_global", bool(glb.get())), self._save(),
                                                self._show_clear_options()))
         if cfg.get("clear_in_global", True):
             glb.select()
         glb.pack(anchor="w", padx=2, pady=(4, 2))
         self._tabs_hint = ctk.CTkLabel(self._clear_opts, text="Set each window's tabs below (Here / Global tabs).",
-                                       font=("Arial", 12), text_color="#adb5bd")
+                                       font=(FONT, 12), text_color="#a39d86")
         ctk.CTkLabel(cc, text="", height=4).pack(side="bottom")
 
-        # ---- one PS code per Roblox window ----
-        wc = ctk.CTkFrame(p, **CARD); wc.pack(fill="x", pady=4)
+        wc = ctk.CTkFrame(p, **CARD); wc.pack(fill="x", pady=4, before=ck)
         wh = ctk.CTkFrame(wc, fg_color="transparent"); wh.pack(fill="x", padx=10, pady=(8, 0))
-        t = ctk.CTkLabel(wh, text="Roblox windows", font=("Arial", 13, "bold"))
+        t = ctk.CTkLabel(wh, text="Roblox windows", font=(FONT, 13, "bold"))
         t.pack(side="left")
         help_box(wc, "Numbered top-left first. Show = which window is which.", t)
         ctk.CTkButton(wh, text="↻ Refresh", width=80, command=self.build_windows, **BTN).pack(side="right")
         ctk.CTkButton(wh, text="Show all", width=90, command=self.show_all_windows,
                       **{**BTN, **BLUE}).pack(side="right", padx=6)
         self.win_box = ctk.CTkFrame(wc, fg_color="transparent"); self.win_box.pack(fill="x", padx=8, pady=(4, 8))
-        self._show_clear_options()                       # also builds the window list
+        self._show_clear_options()
 
-        self.status = ctk.CTkLabel(p, text="", font=("Arial", 12, "bold"), text_color="#75b798", anchor="w",
+        self._watch_gen = getattr(self, "_watch_gen", 0) + 1
+        gen = self._watch_gen
+        self.root.after(3000, lambda: self._watch_windows(gen))
+
+    def _tab_events(self, p):
+        self.status = ctk.CTkLabel(p, text="", font=(FONT, 12, "bold"), text_color="#7ee0a6", anchor="w",
                                    wraplength=420, justify="left")
         self.status.pack(fill="x", padx=8, pady=(2, 2))
+        if getattr(self, "_last_msg", None):
+            self.status.configure(text=self._last_msg)
 
         lh = ctk.CTkFrame(p, fg_color="transparent"); lh.pack(fill="x", padx=4, pady=(6, 2))
-        ctk.CTkLabel(lh, text="Events", font=("Arial", 14, "bold")).pack(side="left", padx=4)
+        ctk.CTkLabel(lh, text="Events", font=(FONT, 14, "bold")).pack(side="left", padx=4)
         ctk.CTkButton(lh, text="+ Add event", width=100, command=self.add_event, **{**BTN, **BLUE}).pack(side="right")
         ctk.CTkLabel(p, text="name · chat words · ping · role ID · Test",
-                     font=("Arial", 12), text_color="#adb5bd").pack(anchor="w", padx=8)
+                     font=(FONT, 12), text_color="#a39d86").pack(anchor="w", padx=8)
         bulk = ctk.CTkFrame(p, fg_color="transparent"); bulk.pack(fill="x", padx=4, pady=(2, 0))
         ctk.CTkButton(bulk, text="Tick shown", width=84, command=lambda: self._tick_shown(True), **BTN).pack(side="left", padx=2)
         ctk.CTkButton(bulk, text="Untick shown", width=94, command=lambda: self._tick_shown(False), **BTN).pack(side="left", padx=2)
         ctk.CTkButton(bulk, text="Import list", width=84, command=self.import_events, **BTN).pack(side="right", padx=2)
         ctk.CTkButton(bulk, text="Export list", width=84, command=self.export_events, **BTN).pack(side="right", padx=2)
-        # search + pages, so a long list doesn't mean scrolling forever
         sr = ctk.CTkFrame(p, fg_color="transparent"); sr.pack(fill="x", padx=4, pady=(4, 2))
         self._search = ctk.CTkEntry(sr, placeholder_text="Search events (name or words)...", height=28,
-                                    font=("Arial", 12))
+                                    font=(FONT, 12))
         self._search.pack(side="left", fill="x", expand=True, padx=(4, 6))
         self._search.bind("<KeyRelease>", lambda e: (setattr(self, "_page_no", 0), self.render_events()))
         ctk.CTkButton(sr, text="Clear", width=56, command=lambda: (self._search.delete(0, "end"),
@@ -227,7 +272,7 @@ class EventsPage:
         pg = ctk.CTkFrame(p, fg_color="transparent"); pg.pack(fill="x", pady=(4, 2))
         self._prev = ctk.CTkButton(pg, text="Prev", width=60, command=lambda: self._turn(-1), **BTN)
         self._prev.pack(side="left", padx=(4, 4))
-        self._page_lbl = ctk.CTkLabel(pg, text="", font=("Arial", 12))
+        self._page_lbl = ctk.CTkLabel(pg, text="", font=(FONT, 12))
         self._page_lbl.pack(side="left", padx=6)
         self._next = ctk.CTkButton(pg, text="Next", width=60, command=lambda: self._turn(1), **BTN)
         self._next.pack(side="left", padx=4)
@@ -244,7 +289,6 @@ class EventsPage:
         return [e for e in evs if q in (e.get("name") or "").lower() or q in (e.get("keyword") or "").lower()]
 
     def render_events(self):
-        """Show one page of (matching) events."""
         for w in self.list_box.winfo_children():
             w.destroy()
         evs = self._matching_events()
@@ -254,8 +298,8 @@ class EventsPage:
         for ev in evs[start:start + self.PER_PAGE]:
             self._event_row(ev)
         if not evs:
-            ctk.CTkLabel(self.list_box, text="No event matches that search.", font=("Arial", 12),
-                         text_color="#adb5bd").pack(pady=8)
+            ctk.CTkLabel(self.list_box, text="No event matches that search.", font=(FONT, 12),
+                         text_color="#a39d86").pack(pady=8)
         total = len(self.cfg["events"])
         self._page_lbl.configure(text=f"Page {self._page_no + 1} of {pages}   ·   "
                                       + (f"{len(evs)} of {total} events" if len(evs) != total else f"{total} events"))
@@ -267,7 +311,6 @@ class EventsPage:
         self.render_events()
 
     def _show_clear_options(self):
-        """Global-tab option + tab buttons only make sense while 'Clear it' is ticked."""
         on = bool(self.cfg.get("clear_chat"))
         if on:
             self._clear_opts.pack(fill="x", padx=8)
@@ -281,9 +324,8 @@ class EventsPage:
             self.build_windows()
 
     def _section(self, parent, title):
-        """One card with a bold title: Discord / Checking / Clear chat."""
         card = ctk.CTkFrame(parent, **CARD); card.pack(fill="x", pady=4)
-        ctk.CTkLabel(card, text=title, font=("Arial", 13, "bold")).pack(anchor="w", padx=10, pady=(8, 2))
+        ctk.CTkLabel(card, text=title, font=(FONT, 13, "bold")).pack(anchor="w", padx=10, pady=(8, 2))
         return card
 
     def _event_row(self, ev):
@@ -292,8 +334,8 @@ class EventsPage:
         if ev.get("enabled", True):
             cb.select()
         cb.pack(side="left", padx=(8, 2), pady=5)
-        self._entry(r, ev, "name", 88, "Event name").pack(side="left", padx=2)
-        self._entry(r, ev, "keyword", 88, "keyword").pack(side="left", padx=2)
+        self._entry(r, ev, "name", 84, "Event name").pack(side="left", padx=2)
+        self._entry(r, ev, "keyword", 84, "keyword").pack(side="left", padx=2)
 
         def remove():
             lst = self.cfg["events"]
@@ -304,7 +346,7 @@ class EventsPage:
         ctk.CTkButton(r, text="Test", width=40, command=lambda: self.test_event(ev),
                       **BTN).pack(side="right", padx=2)
         self._people_button(r, ev, "mention", ev.get("name") or "this event").pack(side="left", padx=2)
-        self._entry(r, ev, "role", 90, "role ID",
+        self._entry(r, ev, "role", 76, "role ID",
                     on_save=lambda v, n=ev: self._check_role(v, n.get("name") or "this event")
                     ).pack(side="left", padx=2, fill="x", expand=True)
 
@@ -317,7 +359,6 @@ class EventsPage:
         elif value:
             self._log(f"{where} will ping {len(value.replace(',', ' ').split())} role(s).")
 
-    # ---------- actions ----------
     def _style_toggle(self):
         style_toggle(self.toggle, WATCHER.running, "Event alerts", icon_on="", icon_off="")
 
@@ -335,7 +376,6 @@ class EventsPage:
         self._style_toggle()
 
     def test_event(self, ev):
-        """Test one event: uses the real chat line if its words are in a chat now, else posts a test message."""
         self._log(f"Testing '{ev.get('name') or 'event'}'... (reading the chat first)")
 
         def run():
@@ -348,8 +388,6 @@ class EventsPage:
         threading.Thread(target=run, daemon=True).start()
 
     def _tick_shown(self, on):
-        """Tick / untick every event the search shows (all of them when there's no search) - e.g. search
-        'wisp' then Tick shown = all Wisps on."""
         evs = self._matching_events()
         for ev in evs:
             ev["enabled"] = on
@@ -361,23 +399,24 @@ class EventsPage:
                     ("mention", "Pings (people)", False), ("enabled", "Which events are ticked", False))
 
     def export_events(self):
-        """Ask what goes in the file (names always do), then save it. Roles and people are off by default:
-        they're your server's, so only share them on purpose."""
         win = ctk.CTkToplevel(self.root)
         win.title("Export event list")
+        dialog_keys(win)
         win.transient(self.root); win.resizable(False, False); win.after(150, win.lift)
-        ctk.CTkLabel(win, text="What to include", font=("Arial", 14, "bold")).pack(anchor="w", padx=14, pady=(12, 2))
-        ctk.CTkLabel(win, text="Event names are always included.", font=("Arial", 12),
-                     text_color="#adb5bd").pack(anchor="w", padx=14, pady=(0, 6))
+        ctk.CTkLabel(win, text="What to include", font=(FONT, 14, "bold")).pack(anchor="w", padx=14, pady=(12, 2))
+        ctk.CTkLabel(win, text="Event names are always included.", font=(FONT, 12),
+                     text_color="#a39d86").pack(anchor="w", padx=14, pady=(0, 6))
         picks = {}
         for key, label, default in self.EXPORT_PARTS:
             picks[key] = ctk.BooleanVar(value=default)
-            ctk.CTkCheckBox(win, text=label, variable=picks[key], font=("Arial", 12)).pack(anchor="w", padx=18, pady=3)
+            ctk.CTkCheckBox(win, text=label, variable=picks[key], font=(FONT, 12)).pack(anchor="w", padx=18, pady=3)
         row = ctk.CTkFrame(win, fg_color="transparent"); row.pack(fill="x", padx=14, pady=(10, 12))
         ctk.CTkButton(row, text="Cancel", width=80, command=win.destroy, **BTN).pack(side="right")
-        ctk.CTkButton(row, text="Export", width=90, **{**BTN, **BLUE},
-                      command=lambda: (win.destroy(), self._write_events(
-                          ["name"] + [k for k, v in picks.items() if v.get()]))).pack(side="right", padx=6)
+        export = ctk.CTkButton(row, text="Export", width=90, **{**BTN, **BLUE},
+                               command=lambda: (win.destroy(), self._write_events(
+                                   ["name"] + [k for k, v in picks.items() if v.get()])))
+        export.pack(side="right", padx=6)
+        dialog_keys(win, ok=export.invoke)
         win.grab_set()
 
     def _write_events(self, keep):
@@ -396,7 +435,6 @@ class EventsPage:
                   + " - share the file, others use Import list.")
 
     def import_events(self):
-        """Add the file's events; ones with the same name are updated (your webhook / windows aren't touched)."""
         import json
         from tkinter import filedialog, messagebox
         path = filedialog.askopenfilename(parent=self.root, title="Import event list", filetypes=[("Event list", "*.json")])
@@ -415,7 +453,6 @@ class EventsPage:
         for it in items:
             if not isinstance(it, dict) or not (it.get("name") or "").strip():
                 continue
-            # whatever the exporter chose to include (roles / people only if they ticked them)
             clean = {k: it[k] for k in ("name", "keyword", "role", "mention", "enabled") if k in it}
             cur = by_name.get(clean["name"].strip().lower())
             if cur is not None:
@@ -428,7 +465,6 @@ class EventsPage:
         self._log(f"Imported: {added} new, {updated} updated.")
 
     def _refresh_recent(self):
-        """The 'Last events' list (newest first)."""
         def show():
             try:
                 if not self.recent_box.winfo_exists():
@@ -457,11 +493,10 @@ class EventsPage:
         self.cfg["events"].append(ev)
         self._save()
         if hasattr(self, "_search"):
-            self._search.delete(0, "end")                 # show it: no filter, last page
+            self._search.delete(0, "end")
         self._page_no = 10 ** 6
         self.render_events()
 
-    # ---------- people (saved Discord users to ping) ----------
     def _people(self):
         return self.cfg.setdefault("people", [])
 
@@ -477,14 +512,13 @@ class EventsPage:
 
     def _people_button(self, parent, d, key, where, wide=False):
         btn = ctk.CTkButton(parent, text=self._people_label(d.get(key), wide), width=200 if wide else 52, height=28,
-                            anchor="w" if wide else "center", font=("Arial", 12), fg_color="#343638",
-                            hover_color="#495057", border_width=1, border_color="#565b5e")
+                            anchor="w" if wide else "center", font=(FONT, 12), fg_color="#1d2a24",
+                            hover_color="#34463d", border_width=1, border_color="#3c4d44")
         btn.configure(command=lambda: PeoplePicker(self, d, key, where,
                                                    lambda: btn.configure(text=self._people_label(d.get(key), wide))))
         return btn
 
     def pick_window_chat(self, n):
-        """Drag the chat box of ONE window."""
         self.root.withdraw(); self.root.update(); time.sleep(0.2)
 
         def done(x1, y1, x2, y2):
@@ -497,8 +531,6 @@ class EventsPage:
         Overlay(done)
 
     def pick_window_tabs(self, n):
-        """Click this window's chat 'Here' tab, then its 'Global' tab (used by /clear in Global).
-        Saved per window, relative to the window, so moving it doesn't break them."""
         wins = roblox_windows()
         if not 1 <= n <= len(wins):
             self._log(f"Window {n} isn't open any more — press ↻ Refresh.")
@@ -526,17 +558,17 @@ class EventsPage:
         except Exception:
             return ()
 
-    def _watch_windows(self):
-        """Every 3 s: if Roblox windows opened/closed/were re-ordered, rebuild the list by itself
-        (only when something changed, so typing a PS code isn't interrupted)."""
+    def _watch_windows(self, gen=None):
+        if gen is not None and gen != getattr(self, "_watch_gen", None):
+            return
         try:
             if not self.win_box.winfo_exists():
-                return                                   # this page was closed
+                return
         except Exception:
             return
         if self._window_key() != self._seen_windows:
             self.build_windows()
-        self.root.after(3000, self._watch_windows)
+        self.root.after(3000, lambda: self._watch_windows(gen))
 
     def build_windows(self):
         for w in self.win_box.winfo_children():
@@ -545,15 +577,15 @@ class EventsPage:
         self._seen_windows = tuple(w.getHandle() for w in wins)
         if not wins:
             ctk.CTkLabel(self.win_box, text="No Roblox window found yet — it shows up here a few seconds after Roblox opens.",
-                         font=("Arial", 12), text_color="#ea868f", wraplength=400, justify="left").pack(anchor="w", padx=4)
+                         font=(FONT, 12), text_color="#f08a7e", wraplength=400, justify="left").pack(anchor="w", padx=4)
             return
         ps = self.cfg.setdefault("window_ps", {})
         for i, w in enumerate(wins, start=1):
-            card = ctk.CTkFrame(self.win_box, fg_color="#1a1d20", corner_radius=6); card.pack(fill="x", pady=3)
+            card = ctk.CTkFrame(self.win_box, fg_color="#101814", corner_radius=6); card.pack(fill="x", pady=3)
             r = ctk.CTkFrame(card, fg_color="transparent"); r.pack(fill="x", padx=6, pady=(5, 2))
-            ctk.CTkLabel(r, text=f"Window {i}", width=72, anchor="w", font=("Arial", 12, "bold")).pack(side="left")
+            ctk.CTkLabel(r, text=f"Window {i}", width=72, anchor="w", font=(FONT, 12, "bold")).pack(side="left")
             self.cfg.setdefault("window_world", {})
-            seg = ctk.CTkSegmentedButton(r, values=list(WATCHER.WORLDS), height=26, font=("Arial", 12),
+            seg = ctk.CTkSegmentedButton(r, values=list(WATCHER.WORLDS), height=26, font=(FONT, 12),
                                          command=lambda v, n=i: (self.cfg["window_world"].__setitem__(str(n), v),
                                                                  self._save()))
             seg.set(WATCHER.world_for(i))
@@ -561,16 +593,16 @@ class EventsPage:
             ctk.CTkButton(r, text="Show", width=70, command=lambda win=w, n=i: self.show_window(win, n),
                           **BTN).pack(side="right", padx=(6, 0))
             r2 = ctk.CTkFrame(card, fg_color="transparent"); r2.pack(fill="x", padx=6, pady=(0, 2))
-            ctk.CTkLabel(r2, text="PS code", width=72, anchor="w", font=("Arial", 12)).pack(side="left")
+            ctk.CTkLabel(r2, text="PS code", width=72, anchor="w", font=(FONT, 12)).pack(side="left")
             self._entry(r2, ps, str(i), 140, f"PS code for window {i}").pack(side="left", fill="x", expand=True)
             r3 = ctk.CTkFrame(card, fg_color="transparent"); r3.pack(fill="x", padx=6, pady=(2, 6))
             ctk.CTkLabel(r3, text="", width=72).pack(side="left")
-            green = {"fg_color": "#198754", "hover_color": "#157347"}
+            green = {"fg_color": "#1f9d55", "hover_color": "#187a43"}
             own = str(i) in self.cfg.get("window_chat", {})
             ctk.CTkButton(r3, text="Chat box" if own else "Drag chat box", width=130,
                           command=lambda n=i: self.pick_window_chat(n),
                           **{**BTN, **(green if own else BLUE)}).pack(side="left")
-            if self.cfg.get("clear_chat") and self.cfg.get("clear_in_global", True):   # only used by /clear in Global
+            if self.cfg.get("clear_chat") and self.cfg.get("clear_in_global", True):
                 tabs = self.cfg.get("window_tabs", {}).get(str(i), {})
                 has_tabs = "here" in tabs and "global" in tabs
                 ctk.CTkButton(r3, text="Here / Global tabs" if has_tabs else "Set Here / Global tabs", width=160,
@@ -580,27 +612,25 @@ class EventsPage:
             self._refresh_area()
 
     def _label_window(self, w, n, secs=3.0):
-        """Big 'WINDOW n' tag in the middle of that Roblox window, plus a cyan frame around it."""
         import tkinter as tk
         tops = []
-        # frame: four thin cyan bars along the window's edges
         for x, y, ww, hh in ((w.left, w.top, w.width, 6), (w.left, w.top + w.height - 6, w.width, 6),
                              (w.left, w.top, 6, w.height), (w.left + w.width - 6, w.top, 6, w.height)):
             t = tk.Toplevel(self.root); t.overrideredirect(True); t.attributes("-topmost", True)
-            t.configure(bg="#0dcaf0"); t.geometry(f"{max(1, ww)}x{max(1, hh)}+{x}+{y}")
+            t.configure(bg="#4fd1c5"); t.geometry(f"{max(1, ww)}x{max(1, hh)}+{x}+{y}")
             tops.append(t)
         region = WATCHER.chat_region(w)
-        if region:                                       # the chat box this window is read from (yellow)
+        if region:
             x1, y1, x2, y2 = region
             for x, y, ww, hh in ((x1, y1, x2 - x1, 3), (x1, y2 - 3, x2 - x1, 3), (x1, y1, 3, y2 - y1), (x2 - 3, y1, 3, y2 - y1)):
                 b = tk.Toplevel(self.root); b.overrideredirect(True); b.attributes("-topmost", True)
-                b.configure(bg="#ffc107"); b.geometry(f"{max(1, ww)}x{max(1, hh)}+{x}+{y}")
+                b.configure(bg="#e6b84f"); b.geometry(f"{max(1, ww)}x{max(1, hh)}+{x}+{y}")
                 tops.append(b)
         t = tk.Toplevel(self.root); t.overrideredirect(True); t.attributes("-topmost", True)
-        t.configure(bg="#0d6efd")
-        tk.Label(t, text=f"WINDOW {n}", font=("Arial", 40, "bold"), fg="white", bg="#0d6efd", padx=30, pady=14).pack()
+        t.configure(bg="#1c8f52")
+        tk.Label(t, text=f"WINDOW {n}", font=(FONT, 40, "bold"), fg="white", bg="#1c8f52", padx=30, pady=14).pack()
         tk.Label(t, text=self.cfg.get("window_ps", {}).get(str(n), "") or "(no PS code yet)",
-                 font=("Arial", 14), fg="white", bg="#0d6efd", pady=(0)).pack(pady=(0, 10))
+                 font=(FONT, 14), fg="white", bg="#1c8f52", pady=(0)).pack(pady=(0, 10))
         t.update_idletasks()
         t.geometry(f"+{w.left + (w.width - t.winfo_width()) // 2}+{w.top + (w.height - t.winfo_height()) // 2}")
         tops.append(t)
@@ -643,7 +673,6 @@ class EventsPage:
         threading.Thread(target=run, daemon=True).start()
 
     def send_test(self):
-        """Read the chat of every Roblox window NOW and send what it really finds (marked [TEST])."""
         if not self.cfg.get("webhook", "").strip():
             self._log("Paste the Discord webhook first."); return
         self._log("Reading chat and sending a test…")
@@ -668,7 +697,7 @@ class EventsPage:
                 else:
                     why = (f"read {total_lines} [Event] / [Leak] line(s) in {len(wins)} window(s), "
                            f"none match your event list right now")
-                self._log(f"Nothing sent — {why}.")      # only shown here, not posted to Discord
+                self._log(f"Nothing sent — {why}.")
                 return
             sent = sum(1 for m in msgs if WATCHER.post(m))
             if sent == len(msgs):
@@ -680,21 +709,21 @@ class EventsPage:
 
 
 class PeoplePicker(ctk.CTkToplevel):
-    """Tick who to ping. People are saved once (name + Discord ID) and shared by every event."""
 
     def __init__(self, page, d, key, where, on_done):
         super().__init__(page.root)
         self.page, self.d, self.key, self.on_done = page, d, key, on_done
         self.title(f"Who to ping — {where}")
+        dialog_keys(self)
         self.geometry("380x440")
         self.attributes("-topmost", True)
-        self.configure(fg_color="#1e2124")
+        self.configure(fg_color="#121b17")
         self.chosen = set((d.get(key) or "").split())
-        ctk.CTkLabel(self, text=f"Ping for: {where}", font=("Arial", 14, "bold"), text_color=BLUE["fg_color"]
+        ctk.CTkLabel(self, text=f"Ping for: {where}", font=(FONT, 14, "bold"), text_color=BLUE["fg_color"]
                      ).pack(anchor="w", padx=14, pady=(12, 2))
-        ctk.CTkLabel(self, text="Tick everyone who should be pinged.", font=("Arial", 12),
-                     text_color="#ced4da").pack(anchor="w", padx=14)
-        self.box = ctk.CTkScrollableFrame(self, fg_color="#212529", height=200)
+        ctk.CTkLabel(self, text="Tick everyone who should be pinged.", font=(FONT, 12),
+                     text_color="#cfc6ab").pack(anchor="w", padx=14)
+        self.box = SmoothScrollFrame(self, fg_color="#15201b", height=200)
         self.box.pack(fill="both", expand=True, padx=12, pady=8)
         add = ctk.CTkFrame(self, fg_color="transparent"); add.pack(fill="x", padx=12)
         self.name_e = ctk.CTkEntry(add, width=110, placeholder_text="Name")
@@ -703,7 +732,7 @@ class PeoplePicker(ctk.CTkToplevel):
         self.id_e.pack(side="left", padx=6)
         ctk.CTkButton(add, text="+ Add", width=60, command=self.add, **{**BTN, **BLUE}).pack(side="left")
         self.msg = ctk.CTkLabel(self, text="ID: Discord → Developer Mode on → right-click the person → Copy User ID",
-                                font=("Arial", 11), text_color="#ced4da", wraplength=350, justify="left")
+                                font=(FONT, 11), text_color="#cfc6ab", wraplength=350, justify="left")
         self.msg.pack(anchor="w", padx=14, pady=(4, 0))
         ctk.CTkButton(self, text="Done", width=100, command=self.done, **{**BTN, **BLUE}).pack(pady=10)
         self.fill()
@@ -714,32 +743,32 @@ class PeoplePicker(ctk.CTkToplevel):
             w.destroy()
         people = self.page._people()
         if not people:
-            ctk.CTkLabel(self.box, text="No one saved yet — add someone below.", font=("Arial", 12),
-                         text_color="#ced4da").pack(pady=10)
+            ctk.CTkLabel(self.box, text="No one saved yet — add someone below.", font=(FONT, 12),
+                         text_color="#cfc6ab").pack(pady=10)
         for p in people:
             r = ctk.CTkFrame(self.box, fg_color="transparent"); r.pack(fill="x", pady=1)
             var = ctk.BooleanVar(value=p["id"] in self.chosen)
-            ctk.CTkCheckBox(r, text=f"{p['name']}", variable=var, font=("Arial", 12),
+            ctk.CTkCheckBox(r, text=f"{p['name']}", variable=var, font=(FONT, 12),
                             command=lambda pid=p["id"], v=var: (self.chosen.add(pid) if v.get() else self.chosen.discard(pid))
                             ).pack(side="left")
-            ctk.CTkLabel(r, text=p["id"], font=("Arial", 11), text_color="#ced4da").pack(side="left", padx=6)
+            ctk.CTkLabel(r, text=p["id"], font=(FONT, 11), text_color="#cfc6ab").pack(side="left", padx=6)
             ctk.CTkButton(r, text="X", width=26, height=24, command=lambda pp=p: self.remove(pp), **RED).pack(side="right")
 
     def add(self):
         name, pid = self.name_e.get().strip(), self.id_e.get().strip().strip("<@!>")
         if not pid.isdigit() or len(pid) < 15:
             self.msg.configure(text="That's not a user ID (a long number). Usernames like rushe7201 can't be pinged.",
-                               text_color="#ffc107")
+                               text_color="#e6b84f")
             return
         people = self.page._people()
         if any(p["id"] == pid for p in people):
-            self.msg.configure(text="Already in the list.", text_color="#ffc107")
+            self.msg.configure(text="Already in the list.", text_color="#e6b84f")
             return
         people.append({"name": name or pid[-4:], "id": pid})
         self.chosen.add(pid)
         self.page._save()
         self.name_e.delete(0, "end"); self.id_e.delete(0, "end")
-        self.msg.configure(text=f"Added {name or pid} (ticked).", text_color="#75b798")
+        self.msg.configure(text=f"Added {name or pid} (ticked).", text_color="#7ee0a6")
         self.fill()
 
     def remove(self, p):
@@ -751,7 +780,7 @@ class PeoplePicker(ctk.CTkToplevel):
 
     def done(self):
         order = [p["id"] for p in self.page._people() if p["id"] in self.chosen]
-        extra = [i for i in self.chosen if i not in order]          # IDs typed in before the list existed
+        extra = [i for i in self.chosen if i not in order]
         self.d[self.key] = " ".join(order + extra)
         self.page._save()
         self.on_done()
@@ -759,8 +788,6 @@ class PeoplePicker(ctk.CTkToplevel):
 
 
 class EventsOnlyLogic(BaseLogic):
-    """Logic for the Event Notifier hub card. There's nothing to automate besides the OK popup
-    clicker, so it reuses the normal macro window with just the Events + Pop Up pages."""
 
     def main_loop(self):
         self.app.log("Nothing to start here: use Event alerts on the Events page "

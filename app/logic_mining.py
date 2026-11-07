@@ -7,19 +7,21 @@ from route_nav import RouteNav, DEFAULT_MINE_HOLD, DEFAULT_MINE_WAIT
 
 
 class MiningLogic(RouteNav):
-    """Mining by recorded route.
 
-    You walk a route once (Ctrl+P to start/stop recording), tapping E at each ore.
-    Playback replays your keys, lines up on a snapshot at every ore and at every
-    spot you paused while recording, then mines.
-    Routes are stored per name in routes/<name>/, so one macro covers any area."""
+    RECORD_KEYS = RouteNav.RECORD_KEYS | {"b"}
 
     def __init__(self, app):
         super().__init__(app)
         self._migrate_old_tundra_route()
 
+    def setup_problems(self):
+        if self.load_route():
+            return []
+        return [{"id": "mining_route", "block": False, "short": "No route recorded", "go": ("Setup", "route_menu"),
+                 "text": f"No recorded route yet - pick or record one in Setup -> step 1 Route "
+                         f"({self.rec_key()} to start and stop recording)."}]
+
     def _migrate_old_tundra_route(self):
-        """One-time: move the pre-routes Tundra recording into routes/Tundra."""
         from settings import get_base_path
         base = get_base_path()
         old = os.path.join(base, "tundra_route.json")
@@ -66,7 +68,6 @@ class MiningLogic(RouteNav):
 
 
     def route_checks(self):
-        """Mining just follows the recorded path and presses E (no snapshot line-ups)."""
         return False
 
     def _mine_here(self, ore_idx, seg):
@@ -74,21 +75,53 @@ class MiningLogic(RouteNav):
         self._wait_still()
         self.mine(ore_idx, seg)
         self.lap["mined"] += 1
+        if seg.get("wait_popup") and not getattr(self, "_dry_run", False):
+            self.wait_for_popup(ore_idx)
         return True
 
-    # ----- Wait for Interact (start spot) -----
+    def popup_wait_max(self):
+        try:
+            return max(1.0, float(self.app.settings.get("mining_popup_wait", 30)))
+        except (TypeError, ValueError):
+            return 30.0
+
+    def wait_for_popup(self, ore_idx):
+        limit = self.popup_wait_max()
+        self.app.log(f"   ore {ore_idx}: waiting for the pop up (up to {limit:.0f} s)...")
+        before, end = getattr(self, "popups_clicked", 0), time.time() + limit
+        while self.running and time.time() < end:
+            if getattr(self, "popups_clicked", 0) > before:
+                break
+            if self._ok_scanner_lock.acquire(blocking=False):
+                try:
+                    if self.handle_ok_popup():
+                        break
+                finally:
+                    self._ok_scanner_lock.release()
+            time.sleep(0.3)
+        else:
+            if self.running:
+                self.app.log(f"   ore {ore_idx}: no pop up after {limit:.0f} s - walking on.")
+            return
+        self.app.log(f"   ore {ore_idx}: pop up clicked - walking on.")
+        time.sleep(0.5)
+
+    def lap_delay(self):
+        try:
+            return max(0.0, float(self.app.settings.get("mining_lap_delay", 0)))
+        except (TypeError, ValueError):
+            return 0.0
+
     def wait_interact_on(self):
         return bool(self.app.settings.get("mining_wait_interact", False))
 
     def interact_visible(self):
-        """The 'E Interact' prompt is on screen: read in your box (Set area), else the lower middle of the window."""
         area = self.app.settings.get("regions", {}).get("mining_interact") or [0, 0, 0, 0]
         if not (area[2] > area[0] and area[3] > area[1]):
             l, t, r, b = self.get_roblox_window_region()
             W, H = r - l, b - t
             area = [int(l + W * 0.3), int(t + H * 0.5), int(l + W * 0.7), int(t + H * 0.85)]
         img = self.utils.capture_screen_bgr(area)
-        # The prompt's text is white: no white pixels = no prompt, so the (heavy) text reader isn't run at all
         if img is None or not img.size or int((img.min(axis=2) > 200).sum()) < 80:
             return False
         from utils import SpatialUtils
@@ -100,7 +133,6 @@ class MiningLogic(RouteNav):
         return any("interact" in (r[1] or "").lower() for r in (res or []))
 
     def wait_for_interact(self):
-        """At the start spot: wait until the Interact prompt shows (the ore has respawned). Stop = False."""
         if self.interact_visible():
             return True
         self.app.log("Waiting for the Interact prompt at the start...")
@@ -128,9 +160,8 @@ class MiningLogic(RouteNav):
         self.play_segment(route["return"], label="home")
         self._end_lap()
         if self.has_home():
-            self.align_home()                            # small line-up on the start spot, never stops the lap
+            self.align_home()
 
-    # ----- Lap statistics -----
 
     def _end_lap(self):
         self.lap_no += 1
@@ -141,9 +172,8 @@ class MiningLogic(RouteNav):
 
 
     def test_movement(self):
-        """Test Path: one lap of the selected route without mining."""
         if self.running:
-            self.app.log("Stop the macro before Test Path.")      # it would stop the running macro when done
+            self.app.log("Stop the macro before Test Path.")
             return
         route = self.load_route()
         if not route:
@@ -153,7 +183,7 @@ class MiningLogic(RouteNav):
             return
         self.app.log(f"--- Test Path [{self.active_route()}]: one lap, no mining ---")
         self._dry_run = True
-        self.running = True   # the lap code runs while this is set; Stop clears it
+        self.running = True
         self._probe_region = None
         try:
             if self.align_home():
@@ -168,7 +198,7 @@ class MiningLogic(RouteNav):
 
     def main_loop(self):
         from logic_events import WATCHER
-        WATCHER.hold("Mining")              # event checks only between laps (see checkpoint below)
+        WATCHER.hold("Mining")
         try:
             self._mining_loop()
         finally:
@@ -191,7 +221,6 @@ class MiningLogic(RouteNav):
             self.lap_no = 0
             self.app.log(f"Starting route '{self.active_route()}' ({route['ores']} ores)...")
 
-            # ',' locks the camera top-down and facing the same way
             for i in ((1, 2) if self.app.settings.get("mining_press_comma", True) else ()):
                 self.app.log(f"Initialization: Pressing ',' ({i}/2)")
                 self.utils.send_key(',')
@@ -203,12 +232,19 @@ class MiningLogic(RouteNav):
             while self.running:
                 if not self.check_focus() and not self.wait_for_roblox_focus():
                     break
-                route = self.load_route() or route       # edits made while running apply from the next lap
+                route = self.load_route() or route
+                if self.lap_no and self.lap_delay():
+                    self.app.log(f"Waiting {self.lap_delay():g} s before the next lap...")
+                    end = time.time() + self.lap_delay()
+                    while self.running and time.time() < end:
+                        time.sleep(0.1)
+                    if not self.running:
+                        break
                 if self.wait_interact_on() and not self.wait_for_interact():
                     break
                 self.run_lap(route)
                 if self.running:
-                    WATCHER.checkpoint("Mining")   # one full lap done: safe moment to check chat
+                    WATCHER.checkpoint("Mining")
         except Exception as e:
             self.app.log(f"Mining Logic Error: {e}")
 

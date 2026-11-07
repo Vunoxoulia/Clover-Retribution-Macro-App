@@ -1,6 +1,5 @@
 import os
 import sys
-import requests
 import zipfile
 import tempfile
 import shutil
@@ -15,13 +14,13 @@ class SpatialUpdater:
         self.api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases/latest"
         
     def download_icon_from_github(self):
-        """Downloads the application icon from GitHub if missing locally."""
         from settings import get_app_path
         icon_path = os.path.join(get_app_path(), "Vunoxoulia.ico")
         if os.path.exists(icon_path):
             return icon_path
 
         try:
+            import requests
             icon_url = f"https://raw.githubusercontent.com/{self.repo_owner}/{self.repo_name}/main/app/Vunoxoulia.ico"
             response = requests.get(icon_url, timeout=5)
             if response.status_code == 200:
@@ -33,6 +32,7 @@ class SpatialUpdater:
         return None
 
     def check_for_updates(self, silent=False):
+        import requests
         try:
             response = requests.get(self.api_url, timeout=10)
             if response.status_code == 200:
@@ -72,10 +72,8 @@ class SpatialUpdater:
         except:
             return latest != current
 
-    # ---------- installing an update: download -> check -> install, never leaving half a program ----------
     def _download(self, url, path, tries=3):
-        """Download to `path` and make sure it's a complete, undamaged zip (every file's checksum is tested).
-        Retries a cut-off / damaged download. Returns None when fine, else what went wrong."""
+        import requests
         why = "unknown error"
         for attempt in range(1, tries + 1):
             try:
@@ -94,7 +92,7 @@ class SpatialUpdater:
                     why = f"download cut off ({got} of {expected} bytes)"
                     continue
                 with zipfile.ZipFile(path) as z:
-                    bad = z.testzip()                    # reads every file and checks its checksum
+                    bad = z.testzip()
                     if bad:
                         why = f"damaged file in the download: {bad}"
                         continue
@@ -105,7 +103,6 @@ class SpatialUpdater:
 
     @staticmethod
     def _program_ok(folder):
-        """The new app/ folder looks complete: main.py there, and every .py file readable as Python."""
         if not os.path.exists(os.path.join(folder, "main.py")):
             return "main.py is missing"
         for root, _, files in os.walk(folder):
@@ -124,7 +121,7 @@ class SpatialUpdater:
 
     def install_update(self, download_url):
         from settings import get_root_path
-        dest_dir = get_root_path()                       # the main folder (launcher + app/ + data/ + docs/)
+        dest_dir = get_root_path()
         try:
             with tempfile.TemporaryDirectory() as temp_dir:
                 zip_path = os.path.join(temp_dir, "update.zip")
@@ -145,8 +142,6 @@ class SpatialUpdater:
                     messagebox.showerror("Update", f"The update looks incomplete ({why}).\n\nNothing was changed.")
                     return
 
-                # 1. the program folder: put the new one next to the old one, then swap (old one kept until
-                #    the swap worked, put back if anything fails) - never a half-copied app/
                 app_dir = os.path.join(dest_dir, "app")
                 staged, old = app_dir + ".new", app_dir + ".old"
                 for d in (staged, old):
@@ -162,20 +157,17 @@ class SpatialUpdater:
                     try:
                         os.replace(staged, app_dir)
                     except OSError:
-                        os.replace(old, app_dir)          # put the old program back
+                        os.replace(old, app_dir)
                         raise
                 except OSError:
-                    # a file is locked (antivirus scanning it...): copy over the old files one by one instead
                     shutil.copytree(staged, app_dir, dirs_exist_ok=True)
                     shutil.rmtree(staged, ignore_errors=True)
                 shutil.rmtree(old, ignore_errors=True)
 
-                # 2. docs / readme: replaced. The launcher only when it really changed - it's running right now,
-                #    and Windows reads a running .bat as it goes, so rewriting it for nothing confuses it.
                 for item in os.listdir(src_root):
                     src, dst = os.path.join(src_root, item), os.path.join(dest_dir, item)
                     if item in ("app", "data", ".launcher", ".git") or item.startswith("."):
-                        continue                         # data/ = the player's own: never touched
+                        continue
                     if os.path.isdir(src):
                         shutil.copytree(src, dst, dirs_exist_ok=True)
                     else:
@@ -193,11 +185,17 @@ class SpatialUpdater:
 
     def restart_app(self):
         try:
+            from settings import flush_all
+            flush_all()
             if getattr(sys, 'frozen', False):
                 subprocess.Popen([sys.executable])
             else:
                 from settings import get_app_path, get_root_path
-                subprocess.Popen([sys.executable, os.path.join(get_app_path(), "main.py")], cwd=get_root_path())
+                launcher = os.path.join(get_root_path(), "Windows_Launcher.bat")
+                if os.path.exists(launcher):
+                    subprocess.Popen(["cmd", "/c", "start", "", launcher], cwd=get_root_path())
+                else:
+                    subprocess.Popen([sys.executable, os.path.join(get_app_path(), "main.py")], cwd=get_root_path())
             os._exit(0)
         except:
             os._exit(0)
