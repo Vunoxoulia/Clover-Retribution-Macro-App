@@ -5,7 +5,7 @@ video_library  = https://youtu.be/8ibqaMuTdzI
 video_mining   = https://youtu.be/sFeGaw_UmiY
 video_fishing  = https://youtu.be/xcZ_vrPrG-g
 video_skill    = https://youtu.be/XGNc0d6DkFo
-video_events   = https://youtu.be/Ye4gGTp7fzE
+video_events   = https://youtu.be/ZiA91l1VGxc
 
 # --- main menu buttons ---
 youtube        = https://www.youtube.com/@Vunoxoulia
