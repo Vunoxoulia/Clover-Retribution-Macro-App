@@ -264,7 +264,8 @@ def on_key(name, callback, suppress=False):
                 return
             en["armed"] = True
         handled = en["backup_fired"] >= en["pressed_at"] > 0
-        if handled and (en["down"] or now - en["backup_fired"] < 0.3):
+        if handled and (en["down"] or now - en["backup_fired"] < 0.3
+                        or getattr(e, "time", now) <= en["backup_fired"] + 0.05):
             return
         callback(e)
     en["hooked"] = hooked

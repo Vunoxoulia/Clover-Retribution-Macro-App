@@ -11,6 +11,7 @@ from logic_base import BaseLogic
 
 DEFAULT_MINE_HOLD = 3.0
 DEFAULT_MINE_WAIT = 1.75
+_ROUTE_FILES = threading.RLock()
 
 
 class RouteNav(BaseLogic):
@@ -189,7 +190,42 @@ class RouteNav(BaseLogic):
             seen.add(key)
             self.app.log(msg)
 
+    @classmethod
+    def _read_settled(cls, path):
+        err = None
+        for wait in (0.0, 0.15, 0.4, 0.8):
+            if wait:
+                time.sleep(wait)
+            try:
+                return cls._read_route_file(path), None
+            except FileNotFoundError:
+                raise
+            except Exception as e:
+                err = e
+        return None, err
+
+    @staticmethod
+    def _write_atomic(path, data):
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        for wait in (0.0, 0.1, 0.3, 0.6, 1.0):
+            if wait:
+                time.sleep(wait)
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                continue
+        os.replace(tmp, path)
+
     def load_route(self, name=None):
+        with _ROUTE_FILES:
+            return self._load_route(name)
+
+    def _load_route(self, name=None):
         label = name or self.active_route()
         path = os.path.join(self.route_dir(name), "route.json")
         bak = path + ".bak"
@@ -198,49 +234,56 @@ class RouteNav(BaseLogic):
             if own and os.path.exists(bak):
                 try:
                     route = self._read_route_file(bak)
-                    shutil.copy2(bak, path)
+                    self._write_atomic(path, json.dumps(route, indent=1))
                     self._route_note(("restored", path), f"Route '{label}': its file was missing - restored the backup.")
                     return route
                 except Exception:
                     pass
             return None
         try:
-            return self._read_route_file(path)
-        except Exception as e:
-            if not own:
-                self._route_note(("broken", path), f"Built-in route '{label}' couldn't be read ({e}) - "
-                                                   f"download the macro again.")
-                return None
-            try:
-                os.replace(path, path + ".broken")
-            except OSError:
-                pass
-            if os.path.exists(bak):
-                try:
-                    route = self._read_route_file(bak)
-                    shutil.copy2(bak, path)
-                    self._route_note(("restored", path), f"Route '{label}' was damaged - using its backup "
-                                                         f"(the damaged file is kept as route.json.broken).")
-                    return route
-                except Exception:
-                    pass
-            self._route_note(("broken", path), f"Route '{label}' is damaged and has no usable backup - record it "
-                                               f"again (the damaged file is kept as route.json.broken).")
+            route, e = self._read_settled(path)
+        except FileNotFoundError:
             return None
+        if route is not None:
+            return route
+        if isinstance(e, OSError) and not isinstance(e, ValueError):
+            self._route_note(("locked", path), f"Route '{label}' couldn't be opened right now ({e}) - "
+                                               f"is another program using it?")
+            return None
+        if not own:
+            self._route_note(("broken", path), f"Built-in route '{label}' couldn't be read ({e}) - "
+                                               f"download the macro again.")
+            return None
+        try:
+            os.replace(path, path + ".broken")
+        except OSError:
+            pass
+        if os.path.exists(bak):
+            try:
+                route = self._read_route_file(bak)
+                self._write_atomic(path, json.dumps(route, indent=1))
+                self._route_note(("restored", path), f"Route '{label}' was damaged - using its backup "
+                                                     f"(the damaged file is kept as route.json.broken).")
+                return route
+            except Exception:
+                pass
+        self._route_note(("broken", path), f"Route '{label}' is damaged and has no usable backup - record it "
+                                           f"again (the damaged file is kept as route.json.broken).")
+        return None
 
     def save_route(self, route, name=None):
         if self.is_locked(name):
             return
         path = os.path.join(self.route_dir(name), "route.json")
-        tmp = path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(route, f, indent=1)
-        if os.path.exists(path):
-            try:
-                shutil.copy2(path, path + ".bak")
-            except OSError:
-                pass
-        os.replace(tmp, path)
+        data = json.dumps(route, indent=1)
+        with _ROUTE_FILES:
+            if os.path.exists(path):
+                try:
+                    old = self._read_route_file(path)
+                    self._write_atomic(path + ".bak", json.dumps(old, indent=1))
+                except Exception:
+                    pass
+            self._write_atomic(path, data)
         self.__dict__.get("_route_notes", set()).clear()
 
 
@@ -442,7 +485,7 @@ class RouteNav(BaseLogic):
                     pending.append((now, k, "down" if d else "up"))
             while pending and now - pending[0][0] >= 0.12:
                 t0, k, kind = pending.pop(0)
-                if seen.get(k, 0.0) < t0 - 0.25:
+                if seen.get((k, kind), 0.0) < t0 - 0.06:
                     if not said:
                         said = True
                         self.app.log("   (the key hook missed a key - the backup key check is recording it)")
@@ -468,6 +511,8 @@ class RouteNav(BaseLogic):
         if self.running:
             self.app.log("Stop the macro before recording.")
             return
+        if time.perf_counter() - getattr(self, "_rec_ended", -99.0) < 2.0:
+            return
         if self.is_locked() or not self.active_route():
             old = self.active_route()
             new = self.create_route(self.free_route_name())
@@ -491,6 +536,7 @@ class RouteNav(BaseLogic):
                 self.app.root.after(0, lambda: self.app.set_recording_ui(False))
         finally:
             self._rec_live = False
+            self._rec_ended = time.perf_counter()
 
     def _record(self):
         name = self.active_route()
@@ -523,6 +569,7 @@ class RouteNav(BaseLogic):
 
         st = {"seg_start": time.perf_counter(), "last_mark": 0.0,
               "idle_since": time.perf_counter(), "idle_t": 0.0, "cp_taken": True}
+        self._rec_started = st["seg_start"]
         segments, events, checkpoints, held = [], [], [], set()
         lock = threading.Lock()
         if keep:
@@ -544,6 +591,7 @@ class RouteNav(BaseLogic):
             cps = [c for c in checkpoints if dur - c["t"] > 1.0]
             seg = {"events": list(events), "duration": dur, "checkpoints": cps}
             events.clear(); checkpoints.clear()
+            st["turn_pending"] = None
             st["seg_start"] = now
             for k in held:
                 events.append([0.0, k, "down"])
@@ -562,6 +610,7 @@ class RouteNav(BaseLogic):
                     if ev.event_type == "down" and not st.get("turn_held_" + name_):
                         st["turn_held_" + name_] = True
                         events.append([round(now - st["seg_start"], 3), f"turn:{turns[name_]}", "turn"])
+                        st["turn_pending"] = (len(events) - 1, now)
                         self.app.log(f"   camera turn {turns[name_]:+d} degrees recorded")
                     elif ev.event_type == "up":
                         st["turn_held_" + name_] = False
@@ -604,7 +653,8 @@ class RouteNav(BaseLogic):
         seen = {}
 
         def hooked(ev):
-            seen[position_name(ev)] = seen[(ev.name or "").lower()] = time.perf_counter()
+            t, kind = time.perf_counter(), ev.event_type
+            seen[(position_name(ev), kind)] = seen[((ev.name or "").lower(), kind)] = t
             on_event(ev)
         hook = keyboard.hook(hooked)
         watch = sorted((set(self.RECORD_KEYS) - {"left shift"}) | {"e"} | set(turns))
@@ -616,6 +666,13 @@ class RouteNav(BaseLogic):
                 time.sleep(0.05)
                 with lock:
                     now = time.perf_counter()
+                    pend, began = st.get("turn_pending"), getattr(self, "_turn_started", 0.0)
+                    if pend and began >= pend[1]:
+                        st["turn_pending"] = None
+                        if pend[0] < len(events) and events[pend[0]][2] == "turn":
+                            events[pend[0]][0] = round(began - st["seg_start"], 3)
+                    elif pend and now - pend[1] > 3.0:
+                        st["turn_pending"] = None
                     for k in [k for k in held if not self._key_is_down(k)]:
                         held.discard(k)
                         events.append([round(now - st["seg_start"], 3), k, "up"])
@@ -646,6 +703,7 @@ class RouteNav(BaseLogic):
             shutil.rmtree(folder, ignore_errors=True)
             self.app.log(f"Recording of '{name}' had no key presses - NOT saved, your previous recording is kept.")
             return
+        self.before_route_save(route)
         time.sleep(0.5)
         def replaced(f):
             if not keep:
@@ -653,16 +711,16 @@ class RouteNav(BaseLogic):
             import re
             m = re.match(r"(?:ore|cp)_(\d+)", f)
             return bool(m) and int(m.group(1)) > offset
-        for f in os.listdir(home_dir):
-            if f == "route.json":
-                os.replace(os.path.join(home_dir, f), os.path.join(home_dir, "route.json.bak"))
-            elif f.endswith(".png") and replaced(f):
-                os.remove(os.path.join(home_dir, f))
-        for f in os.listdir(folder):
-            shutil.move(os.path.join(folder, f), os.path.join(home_dir, f))
-        shutil.rmtree(folder, ignore_errors=True)
-        self.save_route(route, name)
-        if not self.load_route(name):
+        with _ROUTE_FILES:
+            for f in os.listdir(home_dir):
+                if f.endswith(".png") and replaced(f):
+                    os.remove(os.path.join(home_dir, f))
+            for f in os.listdir(folder):
+                shutil.move(os.path.join(folder, f), os.path.join(home_dir, f))
+            shutil.rmtree(folder, ignore_errors=True)
+            self.save_route(route, name)
+            back = self.load_route(name)
+        if not back or len(json.dumps(back)) != len(json.dumps(route)):
             raise IOError(f"route.json couldn't be read back from {home_dir}")
         n_cp = sum(len(sg["checkpoints"]) for sg in segments) + len(ret["checkpoints"])
         if keep:
@@ -683,6 +741,9 @@ class RouteNav(BaseLogic):
                          f"({ret['duration']:.1f}s) will be used to reach the {self.ROUTE_TARGET}.")
         if hasattr(self.app, "refresh_routes"):
             self.app.root.after(0, self.app.refresh_routes)
+
+    def before_route_save(self, route):
+        pass
 
     def turn_keys(self):
         return {}
@@ -709,6 +770,7 @@ class RouteNav(BaseLogic):
                     continue
                 now = time.perf_counter()
                 t = now - start - shift
+                self._route_clock = t
                 while ei < len(events) and events[ei][0] <= t:
                     _, key, kind = events[ei]
                     ei += 1

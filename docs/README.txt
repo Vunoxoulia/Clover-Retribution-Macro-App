@@ -1,6 +1,13 @@
 HOW TO RUN SPATIAL MACRO
 ========================
 
+WHAT'S NEW IN V6.5.2
+====================
+
+- Fixed recorded routes (like Mining's walk back) sometimes saving cut short, or being swapped for an older recording
+- Fixed the record key sometimes starting a second recording right after stopping
+- Camera turns in recordings now line up with when the turn really starts
+
 WHAT'S NEW IN V6.5.1
 ====================
 
